@@ -164,7 +164,13 @@
     const t = token(); if (!t) { const e = new Error("auth"); e.code = "auth"; throw e; }
     const r = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: "Bearer " + t } });
     if (r.status === 401) { ls.del("ldg_token"); const e = new Error("auth"); e.code = "auth"; throw e; }
-    if (!r.ok) { const e = new Error("http " + r.status); e.code = "http" + r.status; throw e; }
+    if (!r.ok) {
+      let reason = "", msg = "";
+      try { const j = await r.json(); const er = (j && j.error) || {}; msg = er.message || ""; reason = ((er.errors || [])[0] || {}).reason || er.status || ""; } catch (_) {}
+      const e = new Error(msg || "http " + r.status); e.code = "http" + r.status; e.reason = reason; e.detail = msg;
+      if (r.status === 403 && /insufficient|scope/i.test(reason + " " + msg)) { ls.del("ldg_token"); e.code = "scope"; }
+      throw e;
+    }
     return r;
   }
   const fname = (path) => "doc__" + path.replace(/\//g, "~") + ".json";
@@ -231,8 +237,9 @@
       status.last = Date.now(); ls.set("ldg_last_sync", String(status.last));
       status.state = "synced"; status.error = "";
     } catch (e) {
-      status.state = e.code === "auth" ? "expired" : navigator.onLine ? "error" : "offline";
-      status.error = e.code || String(e);
+      status.state = e.code === "auth" || e.code === "scope" ? "expired" : navigator.onLine ? "error" : "offline";
+      status.error = [e.code, e.reason, e.detail].filter(Boolean).join(" · ") || String(e);
+      console.warn("sync failed", status.error);
     } finally {
       syncing = false;
       status.pending = [...mem.values()].filter((r) => r.dirty).length;

@@ -70,10 +70,10 @@
     if (ds) {
       ds.innerHTML = !window.LedgerSync.hasConfig()
         ? "구글 로그인 키가 아직 설정되지 않아 이 기기에만 저장합니다."
-        : `상태: <b>${esc(txt)}</b><br>마지막 동기화: ${esc(fmtT(s.last))}<br>기록은 먼저 이 기기에 저장되고, 인터넷이 연결되면 구글 드라이브의 앱 전용 숨김 폴더와 맞춰집니다.`;
+        : `상태: <b>${esc(txt)}</b><br>마지막 동기화: ${esc(fmtT(s.last))}${s.state === "error" && s.error ? `<br><span style="color:var(--warn)">오류 내용: ${esc(s.error)}</span>` : ""}<br>기록은 먼저 이 기기에 저장되고, 인터넷이 연결되면 구글 드라이브의 앱 전용 숨김 폴더와 맞춰집니다.`;
       $("devLogin").hidden = !window.LedgerSync.hasConfig();
       $("devLogout").hidden = !(ls.get("ldg_signed_in"));
-      $("devLogin").textContent = s.state === "synced" || s.state === "syncing" ? "지금 동기화" : "구글 로그인";
+      $("devLogin").textContent = s.state === "synced" || s.state === "syncing" || s.state === "error" ? "지금 동기화" : "구글 로그인";
     }
   }
   window.LedgerSync.onStatus(paint);
