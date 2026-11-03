@@ -431,6 +431,10 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="f"><label for="iTo">받은 계좌</label><select id="iTo"></select></div>
       </div>
       <div class="f" id="methodRow"><span class="lbl" id="mLbl">결제수단</span><div class="methods" id="iMethods" role="group" aria-labelledby="mLbl"></div></div>
+      <div class="two" id="otherRow" hidden>
+        <div class="f"><label for="iMx">수단 이름</label><input id="iMx" placeholder="예: 알리페이, 현지 현금"></div>
+        <div class="f"><label for="iVia">실제로 돈이 나간 곳</label><select id="iVia"></select></div>
+      </div>
       <div class="f" id="entRow"><span class="lbl">귀속</span><span class="seg" id="entInSeg"><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="true">개인</button></span></div>
       <div class="hint" id="flowHint"></div>
       <label class="check" id="settleRow"><input type="checkbox" id="iSettle"> 법인에서 아직 정산받지 않음</label>
@@ -477,7 +481,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <h3><span id="accTitle">계좌 편집</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
       <p class="hint" style="margin:0">결제수단 설정의 ‘출금·입금 계좌’ 이름과 같아야 기록이 연결됩니다. <b>가용자금</b>에 체크한 계좌만 여유자금 계산에 들어갑니다.</p>
-      <div class="scroll-x"><table class="cfg" id="aTable"><thead><tr><th>계좌 이름</th><th style="width:110px">종류</th><th style="width:70px">가용자금</th><th style="width:140px">만기일 (적금)</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
+      <div class="scroll-x"><table class="cfg" id="aTable"><thead><tr><th>계좌 이름</th><th>금융기관·메모</th><th style="width:56px">주 통장</th><th style="width:110px">종류</th><th style="width:70px">가용자금</th><th style="width:140px">만기일 (적금)</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
       <button class="btn small" id="addA" style="justify-self:start">계좌 추가</button>
       <div class="two"><div class="f"><label for="aBuf">비상금으로 남겨 둘 생활비 (개월)</label><input id="aBuf" inputmode="numeric"></div></div>
       <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveAcc">저장</button></div></div>
@@ -577,6 +581,9 @@ const DEFAULT_ACCOUNTS = { buffer:3, list:[
   {name:"법인통장", kind:"corp", liquid:false}
 ], snaps:{} };
 const KIND = {cma:"CMA", bank:"입출금", saving:"적금·예금", cash:"현금", corp:"법인"};
+const DEFAULT_INST = {"저수지통장":"한국투자증권 CMA", "아내 저수지통장":"MH · 미래에셋증권 CMA"};
+const instOf = a => a.inst!=null && a.inst!=="" ? a.inst : (DEFAULT_INST[a.name]||"");
+const mainAcct = () => (accounts.list.find(a=>a.main) || accounts.list.find(a=>a.name==="저수지통장") || accounts.list[0] || {}).name || "저수지통장";
 const ALIAS = {"지대카":"지무카","KB":"국카","HD":"현카","지발":"지카"};
 const won = n => (Math.round(n)||0).toLocaleString("ko-KR") + "원";
 const pad = n => String(n).padStart(2,"0");
@@ -601,9 +608,13 @@ let budgets = {items:[]}; let budRef = null;
 const loaded = {months:false, bud:false}; let budPending = false, schedRunning = false;
 let plans = {}; let plansRef = null;   // ym -> {out:{cat:amt}, inc:{cat:amt}}
 
-const methodOf = code => config.methods.find(x=>x.code===code);
+const OTHER_M = {code:"기타", name:"기타 수단", kind:"other", acct:"미정", own:"me"};
+const methodOf = code => config.methods.find(x=>x.code===code) || (code==="기타" ? OTHER_M : undefined);
+/* 기타 수단(알리페이 등)은 via에 실제로 돈이 나간 결제수단·계좌를 둡니다 */
+const payCode = t => t.m==="기타" ? (t.via||"") : t.m;
 /* 결제수단 종류: card(카드, 결제일에 출금) · pay(네이버·카카오페이 등, 연결된 카드나 계좌로 결제) · bank(계좌이체) · cash(현금) */
 const KINDS=[["card","카드"],["pay","간편결제"],["bank","계좌이체"],["cash","현금"]];
+const KIND_LBL={card:"카드",pay:"간편결제",bank:"계좌이체",cash:"현금",other:"기타"};
 function kindOf(m){ if(!m) return "bank"; if(m.kind) return m.kind; if(+m.pay) return "card"; if(m.code==="현금"||/현금/.test(m.name||"")) return "cash"; if(/페이|pay/i.test((m.name||"")+m.code)||["카페","네페"].includes(m.code)) return "pay"; if(/카드/.test(m.name||"")) return "card"; return "bank"; }
 function resolve(code, depth){
   const m=methodOf(code); if(!m) return null; const k=kindOf(m);
@@ -613,10 +624,10 @@ function resolve(code, depth){
 const acctOf = code => { const r=resolve(code); return r ? (r.acct||"미정") : (code ? "미정" : "미지정"); };
 function chainTxt(code){ const r=resolve(code); if(!r) return esc(code||""); return r.chain.map((m,i)=>i?esc(m.name||m.code):`${esc(m.code)}${m.name&&m.name!==m.code?" · "+esc(m.name):""}`).join(" → "); }
 const NOT_ACCT = a => !a || a==="미정" || a==="미지정";
-function txAcct(t){ return t.ac || acctOf(t.m); }
+function txAcct(t){ return t.ac || acctOf(payCode(t)); }
 function lastDay(y,m){ return new Date(y,m,0).getDate(); }
 function effDate(t){
-  if(t.t!=="out") return t.d; const r=resolve(t.m); const pay=+((r&&r.pay)||0); if(!pay||t.ac) return t.d;
+  if(t.t!=="out") return t.d; const r=resolve(payCode(t)); const pay=+((r&&r.pay)||0); if(!pay||t.ac) return t.d;
   let [y,mo]=t.d.split("-").map(Number); mo+=1; if(mo>12){mo=1;y++;} return y+"-"+pad(mo)+"-"+pad(Math.min(pay,lastDay(y,mo)));
 }
 function effects(t){
@@ -630,7 +641,8 @@ function effects(t){
 function allTx(){ return [].concat(...Object.keys(months).map(monthTx)); }
 const isCorpCat = cat => /^지발연/.test(cat||"");
 const groupOf = cat => { const s=(cat||"기타").split(/\s*-\s*/)[0].trim(); return s||"기타"; };
-function needsSettle(tx){ if(tx.t!=="out"||tx.ent!=="corp") return false; const r=resolve(tx.m); return !!r && r.own!=="corp"; }
+function needsSettle(tx){ if(tx.t!=="out"||tx.ent!=="corp") return false; if(tx.m==="기타") return !(resolve(tx.via)||{}).own || (resolve(tx.via)||{}).own!=="corp"; const r=resolve(tx.m); return !!r && r.own!=="corp"; }
+function txMethodTxt(t){ if(t.m!=="기타") return chainTxt(t.m); const v=resolve(t.via); return `기타 · ${esc(t.mx||"이름 없음")}`+(v?" → "+v.chain.map(m=>esc(m.name||m.code)).join(" → "):""); }
 
 /* ---------- 저장소 ---------- */
 const writeQ = {}, pendingLocal = {};
@@ -763,7 +775,7 @@ function renderLedger(tx){
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
     const st = t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "";
     const mv = t.t==="move" ? effects(t) : null;
-    const flow = t.t==="move" ? `<span class="flow">${esc((mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc((mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.m ? `<span class="flow">${chainTxt(t.m)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
+    const flow = t.t==="move" ? `<span class="flow">${esc((mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc((mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
     const cls = t.t==="in"?"in":t.t==="move"?"move":"";
     html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num"><b>${day}</b>${["일","월","화","수","목","금","토"][new Date((t.d||"")+"T00:00").getDay()]||""}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${cls}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${entChip}${st}<span>${esc(t.cat||"미분류")}</span><span>·</span>${flow}</div></button>`;
   });
@@ -868,7 +880,7 @@ function renderDash(){
     cs.map(([k,v],i)=>{ const pv=pc[k]||0; const d=pv?pct(v-pv,pv):null; return `<tr><td class="num" style="color:var(--muted)">${i+1}</td><td>${esc(k)}</td><td>${isCorpCat(k)?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}</td><td class="r num">${won(v)}</td><td>${pbar(pct(v,A.out),maxP)}</td><td class="r num">${won(v/nMon)}</td><td class="r num">${d==null?'<span style="color:var(--muted)">새 항목</span>':`<span class="${d>0?"bad":"good"}">${d>0?"▲":"▼"} ${pctTxt(Math.abs(d))}</span>`}</td></tr>`; }).join("")+`</tbody>` : `<tbody><tr><td style="color:var(--muted)">이 기간에는 지출 기록이 없습니다.</td></tr></tbody>`;
 
   $("acctTbl").innerHTML=shareTable(sumBy(A.outs,t=>txAcct(t)),A.out,"계좌");
-  $("methTbl").innerHTML=shareTable(sumBy(A.outs,t=>t.m?(t.m+" · "+((methodOf(t.m)||{}).name||"")):"미지정"),A.out,"결제수단");
+  $("methTbl").innerHTML=shareTable(sumBy(A.outs,t=>t.m==="기타"?"기타 수단 (알리페이 등)":t.m?(t.m+" · "+((methodOf(t.m)||{}).name||"")):"미지정"),A.out,"결제수단");
 }
 segBind("perSeg", v=>{ perMode=v; renderDash(); });
 function route(){
@@ -1184,7 +1196,7 @@ function renderBudEdit(){
   box.querySelectorAll("[data-del]").forEach(btn=>btn.onclick=()=>{ bDraft.items.splice(+btn.dataset.del,1); renderBudEdit(); });
 }
 $("budEdit").onclick=openBudEdit;
-$("addB").onclick=()=>{ bDraft.items.unshift({id:uid(),key:"c:"+(bTargets()[0]||""),period:"month",amount:0,mode:"spread",month:1}); renderBudEdit(); $("bList").scrollTop=0; };
+$("addB").onclick=()=>{ bDraft.items.unshift({id:uid(),key:"c:"+(bTargets()[0]||""),period:"month",amount:0,mode:"spread",month:1,acct:mainAcct()}); renderBudEdit(); $("bList").scrollTop=0; };
 $("fromPlanB").onclick=()=>{
   const pk=Object.keys(plans).sort(); if(!pk.length){ return; }
   const latest=pk[pk.length-1]; const cats=new Set(); pk.forEach(k=>Object.keys(plans[k].out).forEach(c=>cats.add(c)));
@@ -1234,7 +1246,7 @@ function renderAcc(){
     const tr=tracked(a.name, today); const up=cardUpcoming(a.name); const ss=snapsOf(a.name);
     if(a.liquid){ if(tr){ liquid+=tr.bal; upcoming+=up; } else missing.push(a.name); }
     const hist=ss.slice(-6).reverse().map(s=>`<li><span>${s.d.slice(5).replace("-","/")}</span><span class="num">${won(s.bal)}</span></li>`).join("");
-    return `<div class="acc ${tr?"":"need"}"><div class="top"><span class="nm">${esc(a.name)}</span><span class="chip ${a.kind==="corp"?"corp":a.liquid?"in":"plain"}">${esc(KIND[a.kind]||a.kind)}${a.liquid?" · 가용":""}</span></div>`+
+    return `<div class="acc ${tr?"":"need"}"><div class="top"><span class="nm">${esc(a.name)}${a.name===mainAcct()?' <span class="tag">주 통장</span>':""}${instOf(a)?`<span style="display:block;font-size:12px;font-weight:400;color:var(--muted)">${esc(instOf(a))}</span>`:""}</span><span class="chip ${a.kind==="corp"?"corp":a.liquid?"in":"plain"}">${esc(KIND[a.kind]||a.kind)}${a.liquid?" · 가용":""}</span></div>`+
       (tr ? `<div class="bal num">${won(tr.bal)}</div><div class="meta"><span>${tr.snap.d.slice(5).replace("-","/")} 입력 <b class="num">${won(tr.snap.bal)}</b> 이후 입금 <b class="num">${won(tr.flow.inn)}</b> · 출금 <b class="num">${won(tr.flow.out)}</b></span>${up?`<span>카드 결제 예정 <b class="num">${won(up)}</b></span>`:""}${a.maturity?`<span>만기 ${esc(a.maturity)}</span>`:""}</div>`
           : `<div class="meta"><span>아직 잔액을 입력하지 않았습니다.</span></div>`)+
       (ss.length?`<details><summary>입력한 잔액 ${ss.length}건</summary><ul>${hist}</ul></details>`:"")+
@@ -1316,7 +1328,7 @@ $("settleBtn").onclick=async()=>{
   const d=todayISO(), ym=d.slice(0,7), total=sumOf(pend);
   const touched=new Set([ym]);
   pend.forEach(t=>{ const k=t.d.slice(0,7); months[k]=monthTx(k).map(x=>x.id===t.id?{...x,st:"done",settledOn:d}:x); touched.add(k); });
-  const to=(config.methods.find(m=>m.code==="저수")||{}).acct||"저수지통장";
+  const to=mainAcct();
   months[ym]=monthTx(ym).concat([{id:uid(), d, t:"move", amt:total, desc:`법인 정산 입금 (${pend.length}건)`, cat:"법인 정산", m:"", from:"법인통장", to, ent:"me", src:"manual", ts:Date.now()}]);
   render();
   for(const k of touched){ try{ await saveMonth(k); }catch(_){} }
@@ -1325,10 +1337,11 @@ $("settleBtn").onclick=async()=>{
 /* 계좌 편집 */
 let aDraft=null;
 $("accEditBtn").onclick=()=>{ aDraft=JSON.parse(JSON.stringify(accounts)); renderAccEdit(); openOv("accOv"); };
+function mainAcct2(d){ return (d.list.find(a=>a.main) || d.list.find(a=>a.name==="저수지통장") || d.list[0] || {}).name; }
 function renderAccEdit(){
   const tb=$("aTable").querySelector("tbody");
-  tb.innerHTML=aDraft.list.map((a,i)=>`<tr><td><input data-i="${i}" data-k="name" value="${esc(a.name)}" aria-label="계좌 이름"></td><td><select data-i="${i}" data-k="kind" aria-label="종류">${Object.entries(KIND).map(([k,v])=>`<option value="${k}"${a.kind===k?" selected":""}>${v}</option>`).join("")}</select></td><td style="text-align:center"><input type="checkbox" data-i="${i}" data-k="liquid" ${a.liquid?"checked":""} aria-label="가용자금" style="width:auto"></td><td><input type="date" data-i="${i}" data-k="maturity" value="${esc(a.maturity||"")}" aria-label="만기일"></td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`).join("");
-  tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const a=aDraft.list[+el.dataset.i]; a[el.dataset.k]= el.type==="checkbox" ? el.checked : el.value.trim(); });
+  tb.innerHTML=aDraft.list.map((a,i)=>`<tr><td><input data-i="${i}" data-k="name" value="${esc(a.name)}" aria-label="계좌 이름"></td><td><input data-i="${i}" data-k="inst" value="${esc(instOf(a))}" placeholder="예: 한국투자증권 CMA" aria-label="금융기관"></td><td style="text-align:center"><input type="radio" name="mainA" data-i="${i}" data-k="main" ${a.name===mainAcct2(aDraft)?"checked":""} aria-label="주 통장" style="width:auto"></td><td><select data-i="${i}" data-k="kind" aria-label="종류">${Object.entries(KIND).map(([k,v])=>`<option value="${k}"${a.kind===k?" selected":""}>${v}</option>`).join("")}</select></td><td style="text-align:center"><input type="checkbox" data-i="${i}" data-k="liquid" ${a.liquid?"checked":""} aria-label="가용자금" style="width:auto"></td><td><input type="date" data-i="${i}" data-k="maturity" value="${esc(a.maturity||"")}" aria-label="만기일"></td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`).join("");
+  tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const a=aDraft.list[+el.dataset.i]; if(el.dataset.k==="main"){ aDraft.list.forEach(x=>delete x.main); a.main=true; return; } a[el.dataset.k]= el.type==="checkbox" ? el.checked : el.value.trim(); });
   tb.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ aDraft.list.splice(+b.dataset.del,1); renderAccEdit(); });
   $("aBuf").value=aDraft.buffer;
 }
@@ -1371,9 +1384,15 @@ function fillCatSelect(type, val){
 }
 function fillMethods(){
   const box=$("iMethods");
-  box.innerHTML=KINDS.map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k); return ms.length?`<span class="mgrp">${lbl}</span>`+ms.map(m=>`<button type="button" data-v="${esc(m.code)}" aria-pressed="${m.code===form.m?"true":"false"}">${esc(m.code)}<small>${esc(m.name)}</small></button>`).join(""):""; }).join("");
+  box.innerHTML=KINDS.map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k); return ms.length?`<span class="mgrp">${lbl}</span>`+ms.map(m=>`<button type="button" data-v="${esc(m.code)}" aria-pressed="${m.code===form.m?"true":"false"}">${esc(m.code)}<small>${esc(m.name)}</small></button>`).join(""):""; }).join("")
+    + (config.methods.some(m=>m.code==="기타") ? "" : `<span class="mgrp">기타</span><button type="button" data-v="기타" aria-pressed="${form.m==="기타"?"true":"false"}">기타<small>목록에 없는 수단</small></button>`);
   box.querySelectorAll("button").forEach(b=>b.onclick=()=>{ form.m=b.dataset.v; fillMethods(); updateHint(true); });
 }
+function viaOptions(sel,val){
+  sel.innerHTML=`<option value="">정하지 않음 (잔액 계산에서 뺌)</option>`+KINDS.filter(([k])=>k!=="pay").map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k); return ms.length?`<optgroup label="${lbl}">`+ms.map(m=>`<option value="${esc(m.code)}">${esc(m.code)} · ${esc(m.name)} → ${esc(acctOf(m.code))}</option>`).join("")+`</optgroup>`:""; }).join("");
+  sel.value=val||"";
+}
+$("iVia").onchange=()=>updateHint(true); $("iMx").oninput=()=>updateHint(false);
 function acctOptions(sel,val){ const names=[...new Set(accounts.list.map(a=>a.name).concat(config.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))]; sel.innerHTML=`<option value="">외부 (추적 안 함)</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(""); sel.value=val||""; }
 function updateHint(autoSettle){
   const t=form.t, m=methodOf(form.m);
@@ -1382,16 +1401,21 @@ function updateHint(autoSettle){
   $("mLbl").textContent = t==="in" ? "입금 수단" : "결제수단";
   $("iCat").previousElementSibling.textContent = t==="in" ? "계정 (수입 항목)" : t==="move" ? "구분" : "계정 (지출 항목)";
   const amt=+($("iAmt").value.replace(/[^\d]/g,""))||0;
-  const rv=resolve(form.m);
+  const isOther = form.m==="기타" && t!=="move";
+  $("otherRow").hidden = !isOther;
+  if(isOther && !$("iVia").options.length) viaOptions($("iVia"), "");
+  const code = isOther ? $("iVia").value : form.m;
+  const rv=resolve(code);
+  if(isOther && !rv){ const h=$("flowHint"); h.className="hint warn"; $("settleRow").hidden = !(t==="out"&&form.ent==="corp"); if(autoSettle) $("iSettle").checked = t==="out"&&form.ent==="corp"; h.innerHTML=`<b>${esc($("iMx").value||"기타 수단")}</b>으로 기록합니다. 실제로 돈이 나간 곳을 고르지 않으면 통장 잔액 계산에서는 빠집니다.`; return; }
   const corpByMe = t==="out" && form.ent==="corp" && rv && rv.own!=="corp";
   $("settleRow").hidden = !corpByMe;
   if(autoSettle) $("iSettle").checked = corpByMe;
   const h=$("flowHint"); h.className="hint";
   if(!m){ h.innerHTML = "결제수단을 고르면 어느 계좌에서 돈이 나가는지 함께 기록됩니다."; return; }
-  const ac=esc(rv.acct), via = rv.chain.length>1 ? `${chainTxt(form.m)} 경로로 ` : "", when = rv.pay ? ` (다음 달 ${rv.pay}일 카드 결제일에)` : "";
+  const ac=esc(rv.acct), via = isOther ? `${esc($("iMx").value||"기타 수단")} → ${rv.chain.map(m=>esc(m.name||m.code)).join(" → ")} 경로로 ` : rv.chain.length>1 ? `${chainTxt(form.m)} 경로로 ` : "", when = rv.pay ? ` (다음 달 ${rv.pay}일 카드 결제일에)` : "";
   if(t==="in") h.innerHTML=`<b>${ac}</b>으로 들어온 돈으로 기록합니다.`;
   else if(t==="move") h.innerHTML=`<b>${esc(m.acct)}</b> 기준 이체·정산입니다. 수입·지출 합계에는 넣지 않습니다.`;
-  else if(corpByMe){ h.className="hint warn"; h.innerHTML=`개인 수단(<b>${esc(m.name)}</b>)으로 낸 법인 비용입니다. ${via}<b>${ac}</b>에서 ${amt?won(amt)+"이 ":""}나가고${when}, 법인에서 정산받을 돈으로 잡힙니다.`; }
+  else if(corpByMe){ h.className="hint warn"; h.innerHTML=`개인 수단(<b>${esc(isOther?($("iMx").value||"기타 수단"):m.name)}</b>)으로 낸 법인 비용입니다. ${via}<b>${ac}</b>에서 ${amt?won(amt)+"이 ":""}나가고${when}, 법인에서 정산받을 돈으로 잡힙니다.`; }
   else if(NOT_ACCT(rv.acct)) { h.className="hint warn"; h.innerHTML=`<b>${esc(m.name)}</b>이(가) 어느 계좌에서 나가는지 아직 연결되지 않았습니다. 결제수단·계정 설정에서 연결해 주세요.`; }
   else h.innerHTML=`${via}<b>${ac}</b>에서 ${amt?won(amt)+"이 ":""}빠져나갑니다${when}.`;
 }
@@ -1418,6 +1442,7 @@ function openTx(ym, id){
   segSet("typeSeg", form.t); fillCatSelect(form.t, t ? t.cat : ""); segSet("entInSeg", form.ent);
   { const ef = t && t.t==="move" ? effects(t) : []; acctOptions($("iFrom"), (ef.find(e=>e.v<0)||{}).acct || ""); acctOptions($("iTo"), (ef.find(e=>e.v>0)||{}).acct || ""); }
   if(!t) autoEnt();
+  $("iMx").value = t&&t.m==="기타" ? (t.mx||"") : ""; viaOptions($("iVia"), t&&t.m==="기타" ? (t.via||"") : "");
   fillMethods(); updateHint(!t);
   if(t) $("iSettle").checked = t.st==="pending";
   openOv("txOv"); setTimeout(()=>$(t?"iDesc":"iAmt").focus(),30);
@@ -1433,6 +1458,7 @@ $("txForm").onsubmit=async e=>{
   const base = editing ? monthTx(editing.ym).find(x=>x.id===editing.id) : null;
   const tx = {...(base||{}), id: base?base.id:uid(), d, t:form.t, amt, desc:$("iDesc").value.trim(), cat:$("iCat").value, m: form.t==="move"?"":form.m, ent: form.t==="move"?"me":form.ent, src: base?base.src:"manual", ts: base&&base.ts?base.ts:Date.now()};
   if(form.t==="move"){ tx.from=$("iFrom").value; tx.to=$("iTo").value; delete tx.io; } else { delete tx.from; delete tx.to; delete tx.io; }
+  if(form.t!=="move" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; } else { delete tx.mx; delete tx.via; }
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
   if(eligible && !$("iSettle").checked && !(base&&base.settledOn)) tx.settledOn = todayISO();
