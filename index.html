@@ -1530,14 +1530,15 @@ function renderSettings(){
       : `<input data-i="${i}" data-k="acct" value="${esc(m.acct||"")}" list="acctList" placeholder="${k==="cash"?"현금":"계좌 이름"}" aria-label="계좌">`;
     return `<tr><td><input data-i="${i}" data-k="code" value="${esc(m.code)}" aria-label="약어"></td><td><input data-i="${i}" data-k="name" value="${esc(m.name)}" aria-label="이름"></td><td>${kindSel}</td><td>${where}</td><td><select data-i="${i}" data-k="own" aria-label="소유"><option value="corp"${m.own==="corp"?" selected":""}>법인</option><option value="me"${m.own!=="corp"?" selected":""}>개인</option></select></td><td>${k==="card"?`<input data-i="${i}" data-k="pay" value="${esc(m.pay||"")}" inputmode="numeric" placeholder="예: 14" aria-label="카드 결제일">`:`<span style="color:var(--muted);font-size:12px">—</span>`}</td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`;
   }).join("") + `<datalist id="acctList">${[...new Set(accounts.list.map(a=>a.name).concat(draft.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))].map(a=>`<option value="${esc(a)}">`).join("")}</datalist>`;
-  tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const m=draft.methods[+el.dataset.i], k=el.dataset.k; m[k]=el.value.trim(); if(k==="kind"&&m.kind!=="pay") delete m.link; if(k==="kind"&&m.kind!=="card") delete m.pay; if(el.dataset.re) renderSettings(); });
+  tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const m=draft.methods[+el.dataset.i], k=el.dataset.k; m[k]=el.value.trim(); if(k==="own"){ const corpA=(config.methods.find(x=>x.code==="지통")||{}).acct||"법인통장"; if(m.own==="corp"&&m.acct===mainAcct()) m.acct=corpA; else if(m.own!=="corp"&&m.acct===corpA) m.acct=mainAcct(); renderSettings(); return; } if(k==="kind"&&m.kind!=="pay") delete m.link; if(k==="kind"&&m.kind!=="card") delete m.pay; if(el.dataset.re) renderSettings(); });
   tb.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ draft.methods.splice(+b.dataset.del,1); renderSettings(); });
   const cat=(arr,key,cls)=>arr.map((c,i)=>`<span class="chip ${cls(c)}">${esc(c)}<button data-k="${key}" data-i="${i}" aria-label="${esc(c)} 삭제">×</button></span>`).join("");
   $("outCats").innerHTML=cat(draft.outCats,"outCats",c=>isCorpCat(c)?"corp":"me");
   $("inCats").innerHTML=cat(draft.inCats,"inCats",()=>"in");
   document.querySelectorAll("#outCats button,#inCats button").forEach(b=>b.onclick=()=>{ draft[b.dataset.k].splice(+b.dataset.i,1); renderSettings(); });
 }
-$("addM").onclick=()=>{ draft.methods.push({code:"",name:"",acct:"",own:"me",kind:"card"}); renderSettings(); };
+$("addM").onclick=()=>{ draft.methods.push({code:"",name:"",acct:mainAcct(),own:"me",kind:"card"}); renderSettings(); };
+/* 소유를 법인으로 바꾸면 돈이 나가는 곳을 법인통장으로 맞춥니다 */
 $("addOutCat").onclick=()=>{ const v=$("newOutCat").value.trim(); if(v&&!draft.outCats.includes(v)) draft.outCats.push(v); $("newOutCat").value=""; renderSettings(); };
 $("addInCat").onclick=()=>{ const v=$("newInCat").value.trim(); if(v&&!draft.inCats.includes(v)) draft.inCats.push(v); $("newInCat").value=""; renderSettings(); };
 $("saveSet").onclick=async()=>{ draft.methods=draft.methods.filter(m=>m.code); config=draft; closeOv("setOv"); render(); await saveConfig(); };
