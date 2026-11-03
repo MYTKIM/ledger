@@ -875,15 +875,30 @@ function occurrences(b, from, to){
   let y=+lo.slice(0,4), m=+lo.slice(5,7); const ey=+hi.slice(0,4), em=+hi.slice(5,7);
   while(y<ey || (y===ey && m<=em)){
     const hit = b.period==="month" || b.mode!=="lump" || (+b.month||1)===m;
-    if(hit){ const d=y+"-"+pad(m)+"-"+pad(Math.min(+b.day||1, lastDay(y,m))); if(d>=lo&&d<=hi) out.push({d,amt}); }
+    if(hit){ const d=y+"-"+pad(m)+"-"+pad(dayFor(b,y,m)); if(d>=lo&&d<=hi) out.push({d,amt}); }
     m++; if(m>12){m=1;y++;}
   }
   return out;
 }
 function itemAlloc(b, ym){ if(!b) return 0; const y=+ym.slice(0,4), m=+ym.slice(5,7); return occurrences(b, ym+"-01", ym+"-"+pad(lastDay(y,m))).reduce((a,o)=>a+o.amt,0); }
-function hasDay(b){ return b.period==="dates" ? (b.dates||[]).length>0 : !!(+b.day); }
+/* 집행일 규칙: date(며칠) · last(마지막 날) · lastBiz(마지막 평일) · firstBiz(첫 평일) · nth(몇 번째 무슨 요일) */
+const WD=["일","월","화","수","목","금","토"], NTH={1:"첫째",2:"둘째",3:"셋째",4:"넷째","-1":"마지막"};
+function dow(y,m,d){ return new Date(y,m-1,d).getDay(); }
+function dayFor(b,y,m){
+  const L=lastDay(y,m), r=b.dayRule||"date";
+  if(r==="last") return L;
+  if(r==="lastBiz"){ let d=L; while([0,6].includes(dow(y,m,d))) d--; return d; }
+  if(r==="firstBiz"){ let d=1; while([0,6].includes(dow(y,m,d))) d++; return d; }
+  if(r==="nth"){ const w=+(b.wd??1), n=+(b.nth||1);
+    if(n<0){ let d=L; while(dow(y,m,d)!==w) d--; return d; }
+    let d=1; while(dow(y,m,d)!==w) d++; d+=7*(n-1); while(d>L) d-=7; return d; }
+  return Math.min(+b.day||1, L);
+}
+function ruleTxt(b){ const r=b.dayRule||"date"; if(r==="last") return "마지막 날"; if(r==="lastBiz") return "마지막 평일"; if(r==="firstBiz") return "첫 평일"; if(r==="nth") return `${NTH[b.nth||1]} ${WD[+(b.wd??1)]}요일`; return +b.day?`${+b.day}일`:""; }
+function hasDay(b){ return b.period==="dates" ? (b.dates||[]).length>0 : ((b.dayRule&&b.dayRule!=="date") || !!(+b.day)); }
 function schedTxt(b){
-  let t = b.period==="month" ? `매달${+b.day?` ${+b.day}일`:""}` : b.period==="dates" ? `지정일 ${(b.dates||[]).length}회` : b.mode==="lump" ? `연 1회 · ${+b.month||1}월${+b.day?` ${+b.day}일`:""}` : `연 예산 12분할${+b.day?` · 매달 ${+b.day}일`:""}`;
+  const rt=ruleTxt(b);
+  let t = b.period==="month" ? `매달${rt?` ${rt}`:""}` : b.period==="dates" ? `지정일 ${(b.dates||[]).length}회` : b.mode==="lump" ? `연 1회 · ${+b.month||1}월${rt?` ${rt}`:""}` : `연 예산 12분할${rt?` · 매달 ${rt}`:""}`;
   if(b.start) t+=` · ${b.start}부터`; if(b.end) t+=` · ${b.end}까지`; if(b.auto) t+=" · 자동 기록"; return t;
 }
 function hasPlan(ym){ return !!plans[ym]; }
@@ -1079,8 +1094,12 @@ function renderBudEdit(){
     const cur=b.key.slice(2); const list=cats.includes(cur)||!cur?cats:[cur,...cats];
     const amtLbl = b.period==="month" ? "월 금액" : b.period==="year" ? "연 금액" : "1회 금액";
     let when="";
-    if(b.period==="month" || (b.period==="year"&&b.mode!=="lump")) when=`<label class="fld narrow">매달 집행일<input data-i="${i}" data-k="day" inputmode="numeric" value="${+b.day||""}" placeholder="예: 25"></label>`;
-    else if(b.period==="year") when=`<label class="fld narrow">${+b.month||1}월 며칠<input data-i="${i}" data-k="day" inputmode="numeric" value="${+b.day||""}" placeholder="예: 15"></label>`;
+    if(b.period==="month" || b.period==="year"){
+      const r=b.dayRule||"date", lbl = b.period==="year"&&b.mode==="lump" ? `${+b.month||1}월 집행일` : "매달 집행일";
+      when=`<label class="fld">${lbl}<select data-i="${i}" data-k="dayRule" data-re="1">${[["date","날짜 지정"],["last","마지막 날"],["lastBiz","마지막 평일"],["firstBiz","첫 평일"],["nth","몇 번째 무슨 요일"]].map(([v,t])=>`<option value="${v}"${r===v?" selected":""}>${t}</option>`).join("")}</select></label>`
+        + (r==="date" ? `<label class="fld narrow">며칠<input data-i="${i}" data-k="day" inputmode="numeric" value="${+b.day||""}" placeholder="예: 25"></label>` : "")
+        + (r==="nth" ? `<label class="fld narrow">몇 번째<select data-i="${i}" data-k="nth">${[1,2,3,4,-1].map(n=>`<option value="${n}"${+(b.nth||1)===n?" selected":""}>${NTH[n]}</option>`).join("")}</select></label><label class="fld narrow">요일<select data-i="${i}" data-k="wd">${[1,2,3,4,5,6,0].map(w=>`<option value="${w}"${+(b.wd??1)===w?" selected":""}>${WD[w]}요일</option>`).join("")}</select></label>` : "");
+    }
     else when=`<label class="fld">집행일 추가<input type="date" id="nd${i}" data-i="${i}" data-k="newdate"></label><button type="button" class="btn small" data-adddate="${i}">추가</button><div class="dchips">${(b.dates||[]).slice().sort().map(d=>`<span class="chip plain">${d}<button type="button" data-rmdate="${i}" data-d="${d}" aria-label="${d} 삭제">×</button></span>`).join("")}</div>`;
     return `<div class="bitem">
       <div class="brow">
@@ -1107,6 +1126,7 @@ function renderBudEdit(){
     const h=()=>{ const b=bDraft.items[+el.dataset.i];
       if(k==="amount"){ const n=el.value.replace(/[^\d]/g,""); b.amount=+n||0; el.value=n?(+n).toLocaleString("ko-KR"):""; }
       else if(k==="day"){ const n=Math.min(31,+el.value.replace(/[^\d]/g,"")||0); b.day=n||null; el.value=n||""; }
+      else if(k==="nth"||k==="wd"){ b[k]=+el.value; }
       else if(k==="mm"){ if(el.value==="spread") b.mode="spread"; else { b.mode="lump"; b.month=+el.value; } }
       else if(k==="auto"){ b.auto=el.checked; if(b.auto && !b.autoFrom) b.autoFrom=todayISO(); if(b.auto && !b.desc) b.desc=b.key.slice(2); }
       else if(k==="period"){ b.period=el.value; if(b.period==="dates" && !b.dates) b.dates=[]; }
