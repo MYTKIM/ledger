@@ -133,6 +133,8 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 .bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:baseline}
 .bar .n{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar .n em{font-style:normal;color:var(--muted);font-size:12px;margin-left:4px}
+.bar .n em.bp{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.bar .n em.bp.near{color:var(--me)} .bar .n em.bp.over{color:var(--warn);font-weight:600}
 .bar .a{font-size:13px}
 .bar .track{grid-column:1/-1;height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;display:flex}
 .bar .track i{display:block;height:100%}
@@ -559,9 +561,10 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="budTitle">
     <h3><span id="budTitle">예산 편집</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
-      <p class="hint" style="margin:0">여기서 정한 예산은 <b>구글 시트 계획이 없는 달</b>(11월부터)에 쓰입니다. <b>집행일</b>을 정하면 예정된 집행에 표시되고, <b>자동 기록</b>을 켜면 그날 앱을 열 때 거래 원장에 저절로 들어갑니다. <b>기한</b>을 넣으면 그 날짜 이후로는 예산도 자동 기록도 멈춥니다.</p>
-      <div class="blist" id="bList"></div>
-      <div class="tools"><button class="btn small" id="addB">예산 추가</button><button class="btn small" id="fromPlanB">시트 계획으로 채우기</button><button class="btn small" id="suggestB">최근 6개월 평균으로 제안</button></div>
+      <p class="hint" style="margin:0">계정 관리와 같은 구조로 계정마다 예산을 정합니다. 여기서 정한 예산은 <b>구글 시트 계획이 없는 달</b>(11월부터)에 쓰입니다. <b>집행 방식</b>은 수동 기록(직접 입력), 날짜 지정(예정된 집행에 표시), 자동 기록(집행일에 거래 원장에 저절로 기록) 중에서 고릅니다. <b>기한</b>을 넣으면 그 날짜 이후로는 예산도 집행도 멈춥니다.</p>
+      <div class="brow" style="align-items:center"><input id="bFind" type="search" placeholder="항목 찾기" aria-label="항목 찾기" style="flex:1 1 180px"><label class="check" style="font-size:13px"><input type="checkbox" id="bOnly" style="width:auto"> 예산 있는 항목만</label></div>
+      <div class="tools"><button class="btn small" id="fromPlanB">시트 계획으로 채우기</button><button class="btn small" id="suggestB">최근 6개월 평균으로 제안</button><span class="hint" style="background:none;padding:0;font-size:12px;align-self:center">계정 추가·이름 바꾸기는 <b>계정 관리</b>에서 합니다.</span></div>
+      <div class="cat-tree" id="bList"></div>
       <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveBud">저장</button></div></div>
     </div>
   </div>
@@ -819,7 +822,7 @@ function renderTrend(){
 function barsHTML(rows, total){
   if(!rows.length) return `<div class="empty-s">이 달에는 지출 기록이 없습니다.</div>`;
   const max=Math.max(...rows.map(r=>r.c+r.m));
-  return rows.map(r=>`<div class="bar"><div class="n">${esc(r.name)}${r.sub?`<em>${esc(r.sub)}</em>`:""}</div><div class="a num">${won(r.c+r.m)}</div><div class="track">${r.c?`<i class="corp" style="width:${r.c/max*100}%"></i>`:""}${r.m?`<i class="me" style="width:${r.m/max*100}%"></i>`:""}</div></div>`).join("");
+  return rows.map(r=>`<div class="bar"><div class="n">${esc(r.name)}${r.sub?`<em>${esc(r.sub)}</em>`:""}${r.pct!==undefined?(r.pct===null?`<em class="bp na" title="예산이 없거나 정하지 않은 항목">(NA)</em>`:`<em class="bp ${r.pct>100?"over":r.pct>85?"near":""}" title="이번 달 예산 대비">(${Math.round(r.pct)}%)</em>`):""}</div><div class="a num">${won(r.c+r.m)}</div><div class="track">${r.c?`<i class="corp" style="width:${r.c/max*100}%"></i>`:""}${r.m?`<i class="me" style="width:${r.m/max*100}%"></i>`:""}</div></div>`).join("");
 }
 function renderAcct(outs){
   const g={}; outs.forEach(t=>{ const a=txAcct(t); g[a]=g[a]||{name:a,c:0,m:0,n:0}; g[a][t.ent==="corp"?"c":"m"]+=+t.amt||0; g[a].n++; });
@@ -828,8 +831,10 @@ function renderAcct(outs){
 }
 function renderCat(outs){
   const f=view.catEnt; const g={};
-  outs.filter(t=>f==="all"||(f==="corp"?t.ent==="corp":t.ent!=="corp")).forEach(t=>{ const k=t.cat||"미분류"; g[k]=g[k]||{name:k.replace(/^지발연-/,""),sub:isCorpCat(k)?"법인":"",c:0,m:0}; g[k][t.ent==="corp"?"c":"m"]+=+t.amt||0; });
-  $("byCat").innerHTML=barsHTML(Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).slice(0,14));
+  outs.filter(t=>f==="all"||(f==="corp"?t.ent==="corp":t.ent!=="corp")).forEach(t=>{ const k=t.cat||"미분류"; g[k]=g[k]||{key:k,name:k.replace(/^지발연-/,""),sub:isCorpCat(k)?"법인":"",c:0,m:0}; g[k][t.ent==="corp"?"c":"m"]+=+t.amt||0; });
+  const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).slice(0,14);
+  rows.forEach(r=>{ const al=alloc(r.key,curYM); r.pct = al>0 ? (r.c+r.m)/al*100 : null; });
+  $("byCat").innerHTML=barsHTML(rows);
 }
 function renderFilters(tx){
   const ms=[...new Set(tx.map(t=>t.m||""))].filter(Boolean).sort();
@@ -1015,6 +1020,9 @@ function dayFor(b,y,m){
 function ruleTxt(b){ const r=b.dayRule||"date"; if(r==="last") return "마지막 날"; if(r==="lastBiz") return "마지막 평일"; if(r==="firstBiz") return "첫 평일"; if(r==="nth") return `${NTH[b.nth||1]} ${WD[+(b.wd??1)]}요일`; return +b.day?`${+b.day}일`:""; }
 function acctNames(){ return [...new Set(accounts.list.map(a=>a.name).concat(config.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))]; }
 function budgetAcct(b){ if(!b) return "미지정"; if(b.acct) return b.acct; const a=acctOf(b.m); return b.m && !NOT_ACCT(a) ? a : "미지정"; }
+function execOf(b){ if(b.period==="dates") return b.auto?"auto":"date"; return b.exec || (b.auto?"auto":hasDay(b)?"date":"manual"); }
+const EXEC_LBL={manual:"수동 기록", date:"날짜 지정", auto:"자동 기록"};
+function monthEq(b){ const a=+b.amount||0; if(b.period==="month") return a; if(b.period==="year") return a/12; const y=new Date(); const t=todayISO(); y.setFullYear(y.getFullYear()+1); const e=y.getFullYear()+"-"+pad(y.getMonth()+1)+"-"+pad(y.getDate()); return a*(b.dates||[]).filter(d=>d>=t&&d<=e).length/12; }
 function hasDay(b){ return b.period==="dates" ? (b.dates||[]).length>0 : ((b.dayRule&&b.dayRule!=="date") || !!(+b.day)); }
 function schedTxt(b){
   const rt=ruleTxt(b);
@@ -1125,7 +1133,7 @@ function renderBud(){
   const nbT=nb.reduce((a,r)=>a+r[1],0);
   $("bNoTbl").innerHTML = nb.length ? `<thead><tr><th>항목</th><th>귀속</th><th class="r">사용</th><th></th></tr></thead><tbody>`+nb.slice(0,15).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${isCorpCat(k)?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}</td><td class="r num">${won(v)}</td><td class="r"><button class="btn small" data-addb="${esc(k)}">예산 만들기</button></td></tr>`).join("")+`</tbody><tfoot><tr><td>합계</td><td></td><td class="r num">${won(nbT)}</td><td></td></tr></tfoot>`
     : `<tbody><tr><td style="color:var(--muted)">이 달 지출은 모두 예산 안에 있습니다.</td></tr></tbody>`;
-  $("bNoTbl").querySelectorAll("[data-addb]").forEach(b=>b.onclick=()=>{ openBudEdit(); if(!bDraft.items.some(x=>x.key==="c:"+b.dataset.addb)) bDraft.items.push({id:uid(),key:"c:"+b.dataset.addb,period:"month",amount:0,mode:"spread",month:1}); renderBudEdit(); });
+  $("bNoTbl").querySelectorAll("[data-addb]").forEach(b=>b.onclick=()=>{ openBudEdit(); const c=b.dataset.addb; if(!bDraft.items.some(x=>x.key==="c:"+c)) bDraft.items.push({id:uid(),key:"c:"+c,period:"month",amount:0,mode:"spread",month:1,exec:"manual",acct:mainAcct()}); bOpen.add(c); $("bFind").value=""; bFindQ=""; renderBudEdit(); });
 
   $("bKpis").innerHTML=[
     [`${mo}월 예산`,won(mA),`<span style="color:var(--muted)">${hasPlan(ym)?"시트 계획":"앱 예산"} · ${mRows.length}개 항목</span>`],
@@ -1218,54 +1226,74 @@ function bTargets(){ return [...new Set(config.outCats.concat(allTx().filter(t=>
 function bSummary(b){
   const n=occurrences(b, todayISO(), "9999-12-31").slice(0,3).map(o=>o.d.slice(2).replace(/-/g,"."));
   const per = b.period==="year"&&b.mode!=="lump" ? `한 번에 <b>${won(occAmt(b))}</b> (연 ${won(+b.amount||0)} ÷ 12)` : `한 번에 <b>${won(occAmt(b))}</b>`;
-  let t=`${esc(schedTxt(b))} · ${per}`;
-  if(n.length) t+=` · 다음 집행 <b>${n.join(", ")}</b>`; else if(b.end && b.end<todayISO()) t+=` · <span class="warn">기한이 지나 더 이상 집행하지 않습니다</span>`;
-  if(b.auto && !hasDay(b)) t+=` · <span class="warn">자동 기록은 집행일이 있어야 동작합니다</span>`;
+  const ex=execOf(b);
+  let t = ex==="manual" ? `<b>수동 기록</b> · ${b.period==="month"?"매달":b.period==="year"?(b.mode==="lump"?`연 1회 · ${+b.month||1}월`:"연 예산 12분할"):"지정일"} · ${per.replace("한 번에","예산")}` : `<b>${EXEC_LBL[ex]}</b> · ${esc(schedTxt(b).replace(" · 자동 기록",""))} · ${per}`;
+  if(n.length && ex!=="manual") t+=` · 다음 집행 <b>${n.join(", ")}</b>`; else if(b.end && b.end<todayISO()) t+=` · <span class="warn">기한이 지나 더 이상 집행하지 않습니다</span>`;
+  if(ex!=="manual" && !hasDay(b)) t+=` · <span class="warn">집행일을 정해 주세요</span>`;
   const ba=budgetAcct(b);
   t += ba!=="미지정" ? ` · <b>${esc(ba)}</b>에서 출금${b.m?` (${esc(b.m)})`:""}` : ` · <span class="warn">돈이 나가는 계좌를 정하지 않았습니다</span>`;
   if(b.m && b.acct && !NOT_ACCT(acctOf(b.m)) && acctOf(b.m)!==b.acct) t+=` · <span class="warn">${esc(b.m)}의 기본 계좌(${esc(acctOf(b.m))})와 다릅니다</span>`;
   return t;
 }
-function renderBudEdit(){
-  const cats=bTargets(), box=$("bList");
-  if(!bDraft.items.length){ box.innerHTML=`<div class="hint">예산이 없습니다. ‘시트 계획으로 채우기’나 ‘예산 추가’로 시작하세요.</div>`; return; }
+const bOpen=new Set(); let bFindQ="", bOnlyHas=false;
+function itemCard(b,i){
   const aOpts=v=>{ const names=acctNames(); if(v&&!names.includes(v)) names.unshift(v); return `<option value="">고르기</option>`+names.map(n=>`<option value="${esc(n)}"${v===n?" selected":""}>${esc(n)}</option>`).join(""); };
   const mOpts=v=>`<option value="">고르기</option>`+KINDS.map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k); return ms.length?`<optgroup label="${lbl}">`+ms.map(m=>`<option value="${esc(m.code)}"${v===m.code?" selected":""}>${esc(m.code)} · ${esc(m.name)}</option>`).join("")+`</optgroup>`:""; }).join("");
-  box.innerHTML=bDraft.items.map((b,i)=>{
-    const cur=b.key.slice(2); const list=cats.includes(cur)||!cur?cats:[cur,...cats];
-    const amtLbl = b.period==="month" ? "월 금액" : b.period==="year" ? "연 금액" : "1회 금액";
-    let when="";
-    if(b.period==="month" || b.period==="year"){
+  const amtLbl = b.period==="month" ? "월 금액" : b.period==="year" ? "연 금액" : "1회 금액";
+  const ex=execOf(b);
+  let when="";
+  if(b.period==="month" || b.period==="year"){
+    if(ex!=="manual"){
       const r=b.dayRule||"date", lbl = b.period==="year"&&b.mode==="lump" ? `${+b.month||1}월 집행일` : "매달 집행일";
       when=`<label class="fld">${lbl}<select data-i="${i}" data-k="dayRule" data-re="1">${[["date","날짜 지정"],["last","마지막 날"],["lastBiz","마지막 평일"],["firstBiz","첫 평일"],["nth","몇 번째 무슨 요일"]].map(([v,t])=>`<option value="${v}"${r===v?" selected":""}>${t}</option>`).join("")}</select></label>`
         + (r==="date" ? `<label class="fld narrow">며칠<input data-i="${i}" data-k="day" inputmode="numeric" value="${+b.day||""}" placeholder="예: 25"></label>` : "")
         + (r==="nth" ? `<label class="fld narrow">몇 번째<select data-i="${i}" data-k="nth">${[1,2,3,4,-1].map(n=>`<option value="${n}"${+(b.nth||1)===n?" selected":""}>${NTH[n]}</option>`).join("")}</select></label><label class="fld narrow">요일<select data-i="${i}" data-k="wd">${[1,2,3,4,5,6,0].map(w=>`<option value="${w}"${+(b.wd??1)===w?" selected":""}>${WD[w]}요일</option>`).join("")}</select></label>` : "");
     }
-    else when=`<label class="fld">집행일 추가<input type="date" id="nd${i}" data-i="${i}" data-k="newdate"></label><button type="button" class="btn small" data-adddate="${i}">추가</button><div class="dchips">${(b.dates||[]).slice().sort().map(d=>`<span class="chip plain">${d}<button type="button" data-rmdate="${i}" data-d="${d}" aria-label="${d} 삭제">×</button></span>`).join("")}</div>`;
-    return `<div class="bitem">
+  } else when=`<label class="fld">집행일 추가<input type="date" id="nd${i}" data-i="${i}" data-k="newdate"></label><button type="button" class="btn small" data-adddate="${i}">추가</button><div class="dchips">${(b.dates||[]).slice().sort().map(d=>`<span class="chip plain">${d}<button type="button" data-rmdate="${i}" data-d="${d}" aria-label="${d} 삭제">×</button></span>`).join("")}</div>`;
+  return `<div class="bitem" style="border-radius:0;border-width:1px 0 0">
       <div class="brow">
-        <label class="fld wide">항목<select data-i="${i}" data-k="key">${list.map(c=>`<option value="c:${esc(c)}"${b.key==="c:"+c?" selected":""}>${esc(c)}</option>`).join("")}</select></label>
         <label class="fld narrow">주기<select data-i="${i}" data-k="period" data-re="1"><option value="month"${b.period==="month"?" selected":""}>월 예산</option><option value="year"${b.period==="year"?" selected":""}>연 예산</option><option value="dates"${b.period==="dates"?" selected":""}>지정일</option></select></label>
         <label class="fld">${amtLbl} (원)<input data-i="${i}" data-k="amount" inputmode="numeric" value="${b.amount?(+b.amount).toLocaleString("ko-KR"):""}"></label>
-        ${b.period==="year"?`<label class="fld">연 예산 집행<select data-i="${i}" data-k="mm" data-re="1"><option value="spread"${b.mode!=="lump"?" selected":""}>12개월 분할</option>${Array.from({length:12},(_,j)=>`<option value="${j+1}"${b.mode==="lump"&&+b.month===j+1?" selected":""}>${j+1}월에 1회</option>`).join("")}</select></label>`:""}
-        <button type="button" class="x" data-del="${i}" aria-label="이 예산 삭제">×</button>
+        ${b.period==="year"?`<label class="fld">연 예산 나누기<select data-i="${i}" data-k="mm" data-re="1"><option value="spread"${b.mode!=="lump"?" selected":""}>12개월 분할</option>${Array.from({length:12},(_,j)=>`<option value="${j+1}"${b.mode==="lump"&&+b.month===j+1?" selected":""}>${j+1}월에 1회</option>`).join("")}</select></label>`:""}
+        <label class="fld">집행 방식<select data-i="${i}" data-k="exec" data-re="1">${(b.period==="dates"?["date","auto"]:["manual","date","auto"]).map(v=>`<option value="${v}"${ex===v?" selected":""}>${{manual:"수동 기록 (직접 입력)",date:"날짜 지정 (예정만 표시)",auto:"자동 기록 (집행일에 원장에 기록)"}[v]}</option>`).join("")}</select></label>
       </div>
+      ${when?`<div class="brow">${when}</div>`:""}
       <div class="brow">
-        ${when}
         <label class="fld">시작일 (선택)<input type="date" data-i="${i}" data-k="start" value="${esc(b.start||"")}"></label>
         <label class="fld">기한 · 마지막 집행일 (선택)<input type="date" data-i="${i}" data-k="end" value="${esc(b.end||"")}"></label>
       </div>
       <div class="brow">
         <label class="fld">결제수단 (선택)<select data-i="${i}" data-k="m" data-re="1">${mOpts(b.m||"")}</select></label>
         <label class="fld">돈이 나가는 계좌·주머니<select data-i="${i}" data-k="acct" data-re="1">${aOpts(b.acct||"")}</select></label>
-      </div>
-      <div class="brow">
-        <label class="check"><input type="checkbox" data-i="${i}" data-k="auto" data-re="1" ${b.auto?"checked":""} style="width:auto"> 집행일에 거래 원장에 자동 기록</label>
-        ${b.auto?`<label class="fld wide">적요<input data-i="${i}" data-k="desc" value="${esc(b.desc||"")}" placeholder="예: 차량 할부금, 넷플릭스"></label>`:""}
+        ${ex==="auto"?`<label class="fld wide">원장에 적을 적요<input data-i="${i}" data-k="desc" value="${esc(b.desc||"")}" placeholder="예: 차량 할부금, 넷플릭스"></label>`:""}
       </div>
       <div class="bsum" id="bs${i}">${bSummary(b)}</div>
+      <div class="brow" style="justify-content:flex-end"><button type="button" class="btn small" data-del="${i}">이 예산 지우기</button></div>
     </div>`;
-  }).join("");
+}
+function renderBudEdit(){
+  const box=$("bList");
+  const keyIdx={}; bDraft.items.forEach((b,i)=>{ keyIdx[b.key.slice(2)]=i; });
+  let cats=[...new Set(catKnown("out").concat(Object.keys(keyIdx)))].sort(catSort);
+  if(bOnlyHas) cats=cats.filter(c=>c in keyIdx);
+  if(bFindQ) cats=cats.filter(c=>c.toLowerCase().includes(bFindQ.toLowerCase()));
+  const tree={}; cats.forEach(c=>{ const g=catSegs(c)[0]||c; (tree[g]=tree[g]||[]).push(c); });
+  const btn=(attr,txt,primary)=>`<button type="button" class="btn small${primary?" primary":""}" ${attr}>${txt}</button>`;
+  box.innerHTML=Object.keys(tree).map(g=>{
+    const list=tree[g]; const gm=list.reduce((a,c)=>a+(c in keyIdx?monthEq(bDraft.items[keyIdx[c]]):0),0); const nb=list.filter(c=>c in keyIdx).length;
+    let lastSub=null, rows="";
+    list.forEach(c=>{
+      const sg=catSegs(c);
+      if(sg.length>=3 && sg[1]!==lastSub){ lastSub=sg[1]; rows+=`<div class="cat-sub">${esc(sg[1])}</div>`; } else if(sg.length<3) lastSub=null;
+      const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : c;
+      const i = c in keyIdx ? keyIdx[c] : -1, b = i>=0 ? bDraft.items[i] : null, open = b && bOpen.has(c);
+      const info = b ? `<span class="cnt"><b class="num" style="color:var(--ink)">${won(+b.amount||0)}</b> ${b.period==="month"?"/월":b.period==="year"?"/년":"/회"} · ${EXEC_LBL[execOf(b)]}${budgetAcct(b)!=="미지정"?" · "+esc(budgetAcct(b)):""}</span>` : `<span class="cnt">예산 없음</span>`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span>${info}<span class="acts">${b ? btn(`data-tog="${esc(c)}"`, open?"접기":"고치기") : btn(`data-new="${esc(c)}"`,"+ 예산 정하기")}</span></div>${open?itemCard(b,i):""}`;
+    });
+    return `<div class="cat-g"><div class="cat-h"><b>${esc(g)}</b>${g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">예산 ${nb}개 · 월 환산 ${won(gm)}</span></div>${rows}</div>`;
+  }).join("") || `<div class="hint">조건에 맞는 항목이 없습니다.</div>`;
+  box.querySelectorAll("[data-tog]").forEach(x=>x.onclick=()=>{ const c=x.dataset.tog; bOpen.has(c)?bOpen.delete(c):bOpen.add(c); renderBudEdit(); });
+  box.querySelectorAll("[data-new]").forEach(x=>x.onclick=()=>{ const c=x.dataset.new; bDraft.items.push({id:uid(),key:"c:"+c,period:"month",amount:0,mode:"spread",month:1,exec:"manual",acct:isCorpCat(c)?((config.methods.find(m=>m.code==="지통")||{}).acct||"법인통장"):mainAcct()}); bOpen.add(c); renderBudEdit(); });
   box.querySelectorAll("[data-k]").forEach(el=>{
     const k=el.dataset.k; if(k==="newdate") return;
     const h=()=>{ const b=bDraft.items[+el.dataset.i];
@@ -1274,19 +1302,21 @@ function renderBudEdit(){
       else if(k==="nth"||k==="wd"){ b[k]=+el.value; }
       else if(k==="mm"){ if(el.value==="spread") b.mode="spread"; else { b.mode="lump"; b.month=+el.value; } }
       else if(k==="m"){ b.m=el.value; const ra=acctOf(b.m); if(b.m && !NOT_ACCT(ra)) b.acct=ra; }
-      else if(k==="auto"){ b.auto=el.checked; if(b.auto && !b.autoFrom) b.autoFrom=todayISO(); if(b.auto && !b.desc) b.desc=b.key.slice(2); }
-      else if(k==="period"){ b.period=el.value; if(b.period==="dates" && !b.dates) b.dates=[]; }
+      else if(k==="exec"){ b.exec=el.value; if(el.value==="manual"){ b.auto=false; b.day=null; b.dayRule="date"; } else if(el.value==="date"){ b.auto=false; } else { b.auto=true; if(!b.autoFrom) b.autoFrom=todayISO(); if(!b.desc) b.desc=b.key.slice(2); } }
+      else if(k==="period"){ b.period=el.value; if(b.period==="dates"){ if(!b.dates) b.dates=[]; if(b.exec==="manual") b.exec="date"; } }
       else b[k]=el.value;
       if(el.dataset.re) renderBudEdit(); else { const sm=$("bs"+el.dataset.i); if(sm) sm.innerHTML=bSummary(b); }
+      const row=el.closest(".bitem"); if(row){ const info=row.previousElementSibling&&row.previousElementSibling.querySelector(".cnt b"); if(info) info.textContent=won(+b.amount||0); }
     };
     el.addEventListener(el.tagName==="INPUT"&&el.type!=="checkbox"&&el.type!=="date"?"input":"change",h);
   });
-  box.querySelectorAll("[data-adddate]").forEach(btn=>btn.onclick=()=>{ const i=+btn.dataset.adddate, v=$("nd"+i).value; if(!v) return; const b=bDraft.items[i]; b.dates=[...new Set((b.dates||[]).concat([v]))]; renderBudEdit(); });
-  box.querySelectorAll("[data-rmdate]").forEach(btn=>btn.onclick=()=>{ const b=bDraft.items[+btn.dataset.rmdate]; b.dates=(b.dates||[]).filter(d=>d!==btn.dataset.d); renderBudEdit(); });
-  box.querySelectorAll("[data-del]").forEach(btn=>btn.onclick=()=>{ bDraft.items.splice(+btn.dataset.del,1); renderBudEdit(); });
+  box.querySelectorAll("[data-adddate]").forEach(x=>x.onclick=()=>{ const i=+x.dataset.adddate, v=$("nd"+i).value; if(!v) return; const b=bDraft.items[i]; b.dates=[...new Set((b.dates||[]).concat([v]))]; renderBudEdit(); });
+  box.querySelectorAll("[data-rmdate]").forEach(x=>x.onclick=()=>{ const b=bDraft.items[+x.dataset.rmdate]; b.dates=(b.dates||[]).filter(d=>d!==x.dataset.d); renderBudEdit(); });
+  box.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{ const b=bDraft.items[+x.dataset.del]; if(x.dataset.c!=="1"){ x.dataset.c="1"; x.textContent="한 번 더 누르면 지웁니다"; return; } bOpen.delete(b.key.slice(2)); bDraft.items.splice(+x.dataset.del,1); renderBudEdit(); });
 }
+$("bFind").addEventListener("input",e=>{ bFindQ=e.target.value.trim(); renderBudEdit(); });
+$("bOnly").onchange=e=>{ bOnlyHas=e.target.checked; renderBudEdit(); };
 $("budEdit").onclick=openBudEdit;
-$("addB").onclick=()=>{ bDraft.items.unshift({id:uid(),key:"c:"+(bTargets()[0]||""),period:"month",amount:0,mode:"spread",month:1,acct:mainAcct()}); renderBudEdit(); $("bList").scrollTop=0; };
 $("fromPlanB").onclick=()=>{
   const pk=Object.keys(plans).sort(); if(!pk.length){ return; }
   const latest=pk[pk.length-1]; const cats=new Set(); pk.forEach(k=>Object.keys(plans[k].out).forEach(c=>cats.add(c)));
@@ -1310,7 +1340,7 @@ $("suggestB").onclick=()=>{
 };
 $("saveBud").onclick=async()=>{
   const seen=new Set(); bDraft.items=bDraft.items.filter(b=>b.key && (b.period==="dates" ? (+b.amount||0)>0&&(b.dates||[]).length : (+b.amount||0)>0) && !seen.has(b.key) && seen.add(b.key));
-  bDraft.items.forEach(b=>{ if(!b.id) b.id=uid(); if(b.auto && !b.autoFrom) b.autoFrom=todayISO(); });
+  bDraft.items.forEach(b=>{ if(!b.id) b.id=uid(); if(b.auto && !b.autoFrom) b.autoFrom=todayISO(); if(execOf(b)==="manual"){ b.auto=false; if(b.period!=="dates"){ b.day=null; b.dayRule="date"; } } });
   budgets=bDraft; closeOv("budOv"); render();
   await saveBudgets(); runSchedules();
 };
