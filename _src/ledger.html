@@ -98,11 +98,12 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 .bar .n{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar .n em{font-style:normal;color:var(--muted);font-size:12px;margin-left:4px}
 .bar .n em.bp{font-family:var(--f-num);font-variant-numeric:tabular-nums}
-.bar .n em.bp.near{color:var(--me)} .bar .n em.bp.over{color:var(--warn);font-weight:600}
+.bar .n em.bp.near{color:var(--me)} .bar .n em.bp.over{color:var(--warn);font-weight:600} .bar .n em.bp.good{color:var(--in);font-weight:600}
+.bar .n em.bn{font-family:var(--f-num);font-variant-numeric:tabular-nums}
 .bar .a{font-size:13px}
 .bar .track{grid-column:1/-1;height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;display:flex}
 .bar .track i{display:block;height:100%}
-.bar .track i.corp{background:var(--corp)} .bar .track i.me{background:var(--me)}
+.bar .track i.corp{background:var(--corp)} .bar .track i.me{background:var(--me)} .bar .track i.in{background:var(--in)} .bar .track i.in[data-split]{opacity:.55}
 .empty-s{color:var(--muted);font-size:13px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
 .seg button{border:0;background:none;padding:6px 11px;font-size:12.5px;font-weight:500;color:var(--muted)}
@@ -315,6 +316,11 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
           <span class="seg" id="catSeg"><button data-v="all" aria-pressed="true">전체</button><button data-v="corp" aria-pressed="false">법인</button><button data-v="me" aria-pressed="false">개인</button></span>
         </h2>
         <div class="bars" id="byCat"></div>
+      </section>
+
+      <section>
+        <h2>계정별 수입 <span class="aside" id="incNote"></span></h2>
+        <div class="bars" id="byInc"></div>
       </section>
     </div>
 
@@ -754,7 +760,7 @@ function render(){
   $("tNet").textContent=(inc-corp-me<0?"−":"")+won(Math.abs(inc-corp-me));
   const pend=allPending(); $("tPend").textContent=won(sumOf(pend));
   $("sumNote").textContent = tx.length ? tx.length+"건" : "";
-  renderTrend(); renderAcct(outs); renderCat(outs); renderFilters(tx); renderLedger(tx);
+  renderTrend(); renderAcct(outs); renderCat(outs); renderInc(tx.filter(t=>t.t==="in")); renderFilters(tx); renderLedger(tx);
   if(!$("dashView").hidden) renderDash();
   if(!$("accView").hidden) renderAcc();
   if(!$("budView").hidden) renderBud();
@@ -782,16 +788,24 @@ function renderTrend(){
 function barsHTML(rows, total){
   if(!rows.length) return `<div class="empty-s">이 달에는 지출 기록이 없습니다.</div>`;
   const max=Math.max(...rows.map(r=>r.c+r.m));
-  return rows.map(r=>`<div class="bar"><div class="n">${esc(r.name)}${r.sub?`<em>${esc(r.sub)}</em>`:""}${r.pct!==undefined?(r.pct===null?`<em class="bp na" title="예산이 없거나 정하지 않은 항목">(NA)</em>`:`<em class="bp ${r.pct>100?"over":r.pct>85?"near":""}" title="이번 달 예산 대비">(${Math.round(r.pct)}%)</em>`):""}</div><div class="a num">${won(r.c+r.m)}</div><div class="track">${r.c?`<i class="corp" style="width:${r.c/max*100}%"></i>`:""}${r.m?`<i class="me" style="width:${r.m/max*100}%"></i>`:""}</div></div>`).join("");
+  return rows.map(r=>`<div class="bar"><div class="n">${esc(r.name)}${r.sub?`<em>${esc(r.sub)}</em>`:""}${r.n?`<em class="bn">${r.n}건</em>`:""}${r.pct!==undefined?(r.pct===null?`<em class="bp na" title="${r.inc?"계획이 없는 항목":"예산이 없거나 정하지 않은 항목"}">(NA)</em>`:`<em class="bp ${r.inc?(r.pct>=100?"good":""):(r.pct>100?"over":r.pct>85?"near":"")}" title="${r.inc?"이번 달 계획 대비":"이번 달 예산 대비"}">(${Math.round(r.pct)}%)</em>`):""}</div><div class="a num">${won(r.c+r.m)}</div><div class="track">${r.c?`<i class="${r.inc?"in":"corp"}" style="width:${r.c/max*100}%"></i>`:""}${r.m?`<i class="${r.inc?"in":"me"}" style="width:${r.m/max*100}%"${r.inc&&r.c?' data-split="1"':""}></i>`:""}</div></div>`).join("");
 }
 function renderAcct(outs){
   const g={}; outs.forEach(t=>{ const a=txAcct(t); g[a]=g[a]||{name:a,c:0,m:0,n:0}; g[a][t.ent==="corp"?"c":"m"]+=+t.amt||0; g[a].n++; });
   const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).map(r=>({...r,sub:r.n+"건"}));
   $("byAcct").innerHTML=barsHTML(rows);
 }
+function renderInc(ins){
+  const f=view.catEnt; const g={};
+  ins.filter(t=>f==="all"||(f==="corp"?t.ent==="corp":t.ent!=="corp")).forEach(t=>{ const k=t.cat||"미분류"; g[k]=g[k]||{key:k,name:k,sub:t.ent==="corp"?"법인":"",c:0,m:0,n:0}; g[k][t.ent==="corp"?"c":"m"]+=+t.amt||0; g[k].n++; });
+  const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).slice(0,14);
+  rows.forEach(r=>{ const pl = hasPlan(curYM) ? +(plans[curYM].inc[r.key]||0) : 0; r.pct = pl>0 ? (r.c+r.m)/pl*100 : null; r.inc=true; });
+  $("incNote").textContent = hasPlan(curYM) ? "시트 계획 대비" : "";
+  $("byInc").innerHTML = rows.length ? barsHTML(rows) : `<div class="empty-s">이 달에는 수입 기록이 없습니다.</div>`;
+}
 function renderCat(outs){
   const f=view.catEnt; const g={};
-  outs.filter(t=>f==="all"||(f==="corp"?t.ent==="corp":t.ent!=="corp")).forEach(t=>{ const k=t.cat||"미분류"; g[k]=g[k]||{key:k,name:k.replace(/^지발연-/,""),sub:isCorpCat(k)?"법인":"",c:0,m:0}; g[k][t.ent==="corp"?"c":"m"]+=+t.amt||0; });
+  outs.filter(t=>f==="all"||(f==="corp"?t.ent==="corp":t.ent!=="corp")).forEach(t=>{ const k=t.cat||"미분류"; g[k]=g[k]||{key:k,name:k.replace(/^지발연-/,""),sub:isCorpCat(k)?"법인":"",c:0,m:0,n:0}; g[k][t.ent==="corp"?"c":"m"]+=+t.amt||0; g[k].n++; });
   const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).slice(0,14);
   rows.forEach(r=>{ const al=alloc(r.key,curYM); r.pct = al>0 ? (r.c+r.m)/al*100 : null; });
   $("byCat").innerHTML=barsHTML(rows);
