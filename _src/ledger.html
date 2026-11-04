@@ -388,7 +388,8 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 
   <div class="dash" id="budView" hidden>
     <div class="dash-bar">
-      <p id="budNote"></p>
+      <span class="seg" id="budTSeg"><button type="button" data-v="out" aria-pressed="true">지출</button><button type="button" data-v="in" aria-pressed="false">수입</button></span>
+      <p id="budNote" style="flex:1 1 200px"></p>
       <div class="tools"><button class="btn primary" id="budEdit">예산 편집</button></div>
     </div>
     <div class="kpis" id="bKpis"></div>
@@ -403,7 +404,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="scroll-x"><table class="dt" id="bYearTbl"></table></div>
     </div>
     <div class="panel">
-      <h3>계좌별 예산과 예정 집행</h3>
+      <h3 id="baTitle">계좌별 예산과 예정 집행</h3>
       <p class="sub" id="baSub"></p>
       <div class="scroll-x"><table class="dt" id="baTbl"></table></div>
     </div>
@@ -413,20 +414,20 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="scroll-x"><table class="dt" id="schTbl"></table></div>
     </div>
     <div class="panel">
-      <h3>예산 조정 점검</h3>
+      <h3 id="adjTitle">예산 조정 점검</h3>
       <p class="sub" id="adjSub"></p>
       <div class="scroll-x"><table class="dt" id="adjTbl"></table></div>
       <div class="actions" style="margin-top:10px"><span></span><div class="r"><button class="btn small" id="applyAdj">제안대로 앞으로의 예산에 반영</button></div></div>
     </div>
     <div class="panel">
-      <h3>항목별 월 사용액과 추이</h3>
-      <p class="sub">법인 포함 모든 지출 항목. 빨간 숫자는 그 달 예산을 넘긴 달입니다</p>
+      <h3 id="mxTitle">항목별 월 사용액과 추이</h3>
+      <p class="sub" id="mxSub">법인 포함 모든 지출 항목. 빨간 숫자는 그 달 예산을 넘긴 달입니다</p>
       <div class="dash-bar" style="margin-bottom:8px"><span class="seg" id="mxSeg"><button data-v="all" aria-pressed="true">전체</button><button data-v="corp" aria-pressed="false">법인</button><button data-v="me" aria-pressed="false">개인</button></span><input id="mxQ" type="search" placeholder="항목 검색" aria-label="항목 검색" style="border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--surface)"></div>
       <div class="mx-wrap"><table class="matrix" id="mxTbl"></table></div>
     </div>
     <div class="panel">
-      <h3>예산이 없는 지출</h3>
-      <p class="sub">이 달에 쓴 돈 중 어떤 예산에도 묶이지 않은 항목입니다</p>
+      <h3 id="nbTitle">예산이 없는 지출</h3>
+      <p class="sub" id="nbSub">이 달에 쓴 돈 중 어떤 예산에도 묶이지 않은 항목입니다</p>
       <div class="scroll-x"><table class="dt" id="bNoTbl"></table></div>
     </div>
   </div>
@@ -530,6 +531,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <h3><span id="budTitle">예산 편집</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
       <p class="hint" style="margin:0">계정 관리와 같은 구조로 계정마다 예산을 정합니다. 여기서 정한 예산은 <b>구글 시트 계획이 없는 달</b>(11월부터)에 쓰입니다. <b>집행 방식</b>은 수동 기록(직접 입력), 날짜 지정(예정된 집행에 표시), 자동 기록(집행일에 거래 원장에 저절로 기록) 중에서 고릅니다. <b>기한</b>을 넣으면 그 날짜 이후로는 예산도 집행도 멈춥니다.</p>
+      <span class="seg" id="bTSeg" style="justify-self:start"><button type="button" data-v="out" aria-pressed="true">지출 예산</button><button type="button" data-v="in" aria-pressed="false">수입 계획</button></span>
       <div class="brow" style="align-items:center"><input id="bFind" type="search" placeholder="항목 찾기" aria-label="항목 찾기" style="flex:1 1 180px"><label class="check" style="font-size:13px"><input type="checkbox" id="bOnly" style="width:auto"> 예산 있는 항목만</label></div>
       <div class="tools"><button class="btn small" id="fromPlanB">시트 계획으로 채우기</button><button class="btn small" id="suggestB">최근 6개월 평균으로 제안</button><span class="hint" style="background:none;padding:0;font-size:12px;align-self:center">계정 추가·이름 바꾸기는 <b>계정 관리</b>에서 합니다.</span></div>
       <div class="cat-tree" id="bList"></div>
@@ -799,8 +801,8 @@ function renderInc(ins){
   const f=view.catEnt; const g={};
   ins.filter(t=>f==="all"||(f==="corp"?t.ent==="corp":t.ent!=="corp")).forEach(t=>{ const k=t.cat||"미분류"; g[k]=g[k]||{key:k,name:k,sub:t.ent==="corp"?"법인":"",c:0,m:0,n:0}; g[k][t.ent==="corp"?"c":"m"]+=+t.amt||0; g[k].n++; });
   const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).slice(0,14);
-  rows.forEach(r=>{ const pl = hasPlan(curYM) ? +(plans[curYM].inc[r.key]||0) : 0; r.pct = pl>0 ? (r.c+r.m)/pl*100 : null; r.inc=true; });
-  $("incNote").textContent = hasPlan(curYM) ? "시트 계획 대비" : "";
+  rows.forEach(r=>{ const pl = allocT("in", r.key, curYM); r.pct = pl>0 ? (r.c+r.m)/pl*100 : null; r.inc=true; });
+  $("incNote").textContent = hasPlan(curYM) ? "시트 계획 대비" : "수입 계획 대비";
   $("byInc").innerHTML = rows.length ? barsHTML(rows) : `<div class="empty-s">이 달에는 수입 기록이 없습니다.</div>`;
 }
 function renderCat(outs){
@@ -963,7 +965,20 @@ function route(){
 window.addEventListener("hashchange",route);
 
 /* ---------- 예산 ---------- */
-function itemFor(cat){ return budgets.items.find(b=>b.key==="c:"+cat) || null; }
+/* 예산 항목 키: 지출 "c:계정", 수입 "i:계정" */
+let budT="out", bT="out";
+const bKey=(type,cat)=>(type==="in"?"i:":"c:")+cat;
+const typeOfKey=k=>String(k).startsWith("i:")?"in":"out";
+function itemForT(type,cat){ return budgets.items.find(b=>b.key===bKey(type,cat)) || null; }
+function itemFor(cat){ return itemForT("out",cat); }
+function allocT(type,cat,ym){ if(hasPlan(ym)) return +(plans[ym][type==="in"?"inc":"out"][cat]||0); return itemAlloc(itemForT(type,cat), ym); }
+function usedT(type,cat,ym){ return monthTx(ym).reduce((a,t)=>a+(t.t===type&&(t.cat||"미분류")===cat?(+t.amt||0):0),0); }
+function budgetCatsT(type,ym){
+  const s=new Set(); monthTx(ym).forEach(t=>{ if(t.t===type) s.add(t.cat||"미분류"); });
+  const pk=type==="in"?"inc":"out";
+  if(hasPlan(ym)) Object.keys(plans[ym][pk]).forEach(c=>{ if(plans[ym][pk][c]) s.add(c); }); else budgets.items.forEach(b=>{ if(typeOfKey(b.key)===type && itemAlloc(b,ym)) s.add(b.key.slice(2)); });
+  return [...s];
+}
 function occAmt(b){ const a=+b.amount||0; if(b.period==="year" && b.mode!=="lump") return Math.round(a/12); return a; }
 function occurrences(b, from, to){
   const out=[], amt=occAmt(b); if(!amt) return out;
@@ -1004,14 +1019,10 @@ function schedTxt(b){
   if(b.start) t+=` · ${b.start}부터`; if(b.end) t+=` · ${b.end}까지`; if(b.auto) t+=" · 자동 기록"; return t;
 }
 function hasPlan(ym){ return !!plans[ym]; }
-function alloc(cat, ym){ if(hasPlan(ym)) return +(plans[ym].out[cat]||0); return itemAlloc(itemFor(cat), ym); }
-function usedCat(cat, ym){ return monthTx(ym).reduce((a,t)=>a+(t.t==="out"&&(t.cat||"미분류")===cat?(+t.amt||0):0),0); }
+function alloc(cat, ym){ return allocT("out",cat,ym); }
+function usedCat(cat, ym){ return usedT("out",cat,ym); }
 function yearKeys(y){ const ks=[]; for(let m=1;m<=12;m++) ks.push(y+"-"+pad(m)); return ks; }
-function budgetCats(ym){
-  const s=new Set(); monthTx(ym).forEach(t=>{ if(t.t==="out") s.add(t.cat||"미분류"); });
-  if(hasPlan(ym)) Object.keys(plans[ym].out).forEach(c=>{ if(plans[ym].out[c]) s.add(c); }); else budgets.items.forEach(b=>{ if(itemAlloc(b,ym)) s.add(b.key.slice(2)); });
-  return [...s];
-}
+function budgetCats(ym){ return budgetCatsT("out",ym); }
 function barCls(r){ return r>1 ? "warnb" : r>0.85 ? "midb" : "okb"; }
 function bBar(used, al){ const r = al ? used/al : (used?2:0); return `<div class="pbar"><span><i class="${barCls(r)}" style="width:${Math.min(100,r*100)}%"></i></span><b class="num ${r>1?"bad":""}">${al?pctTxt(r*100):(used?"예산 0":"—")}</b></div>`; }
 function bBarTxt(u,a){ return a ? `<span class="${u>a?"bad":"good"}">예산의 ${pctTxt(u/a*100)}</span>` : `<span style="color:var(--muted)">예산 없음</span>`; }
@@ -1024,104 +1035,112 @@ function spark(vals, allocs){
   return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${bl}<path d="${line}" style="stroke:var(--ink);fill:none" stroke-width="1.4"/><circle cx="${x(n-1)}" cy="${y(vals[n-1])}" r="2" style="fill:var(--ink)"/></svg>`;
 }
 const r10k = v => Math.ceil(v/10000)*10000;
-function verdictFor(cat, y, curMo){
+function verdictForT(T, cat, y, curMo){ const A=(c,k)=>allocT(T,c,k), U=(c,k)=>usedT(T,c,k);
   // 최근 3개월(이번 달 제외) 실사용 평균과 그 기간 예산 평균을 비교
   const ks=[]; for(let m=Math.max(1,curMo-3); m<curMo; m++) ks.push(y+"-"+pad(m));
   if(!ks.length) return {cls:"na",txt:"판단 보류",sug:null};
-  const u=ks.reduce((a,k)=>a+usedCat(cat,k),0)/ks.length, al=ks.reduce((a,k)=>a+alloc(cat,k),0)/ks.length;
-  const yk=yearKeys(y).slice(0,curMo), ann=yearKeys(y).reduce((a,k)=>a+alloc(cat,k),0), ytd=yk.reduce((a,k)=>a+usedCat(cat,k),0);
-  const nz=yearKeys(y).filter(k=>alloc(cat,k)>0).length;
+  const u=ks.reduce((a,k)=>a+U(cat,k),0)/ks.length, al=ks.reduce((a,k)=>a+A(cat,k),0)/ks.length;
+  const yk=yearKeys(y).slice(0,curMo), ann=yearKeys(y).reduce((a,k)=>a+A(cat,k),0), ytd=yk.reduce((a,k)=>a+U(cat,k),0);
+  const nz=yearKeys(y).filter(k=>A(cat,k)>0).length;
   if(nz && nz<=2){ // 연 1~2회성 예산
     if(ytd>ann*1.05) return {cls:"up",txt:`연 예산 초과 ${won(ytd-ann)}`,sug:null};
     return {cls:"ok",txt:"연 1회성 · 적정",sug:null};
   }
-  if(!al && !ann){ if(u>=30000) return {cls:"new",txt:`예산 없음 · 월 ${won(r10k(u))} 제안`,sug:r10k(u)}; return {cls:"na",txt:"소액",sug:null}; }
+  if(!al && !ann){ if(u>=30000) return {cls:"new",txt:`계획 없음 · 월 ${won(r10k(u))} 제안`,sug:r10k(u)}; return {cls:"na",txt:"소액",sug:null}; }
   if(u>al*1.15 && u-al>=20000) return {cls:"up",txt:`상향 검토 · ${won(al)} → ${won(r10k(u))}`,sug:r10k(u)};
   if(al>0 && u<al*0.6 && al-u>=20000) return {cls:"down",txt:`하향 검토 · ${won(al)} → ${won(r10k(u))}`,sug:r10k(u)};
   return {cls:"ok",txt:"적정",sug:null};
 }
+function verdictFor(cat,y,curMo){ return verdictForT("out",cat,y,curMo); }
 let mxEnt="all", mxQ="";
+function bBarT(u,a){ if(budT!=="in") return bBar(u,a); const r=a?u/a:(u?2:0); return `<div class="pbar"><span><i class="${r>=1?"okb":r>0.6?"midb":"warnb"}" style="width:${Math.min(100,r*100)}%"></i></span><b class="num">${a?pctTxt(r*100):(u?"계획 0":"—")}</b></div>`; }
 function renderBud(){
+  const T=budT, W=(o,i)=>T==="in"?i:o, A=(c,k)=>allocT(T,c,k), U=(c,k)=>usedT(T,c,k), BC=k=>budgetCatsT(T,k), IF=c=>itemForT(T,c);
+  $("baTitle").parentElement.hidden = T==="in";
+  $("adjTitle").textContent=W("예산 조정 점검","수입 계획 점검"); $("mxTitle").textContent=W("항목별 월 사용액과 추이","항목별 월 수입과 추이");
+  $("mxSub").textContent=W("법인 포함 모든 지출 항목. 빨간 숫자는 그 달 예산을 넘긴 달입니다","법인 포함 모든 수입 항목. 계획보다 더 들어온 달도 그대로 표시합니다");
+  $("nbTitle").textContent=W("예산이 없는 지출","계획이 없는 수입"); $("nbSub").textContent=W("이 달에 쓴 돈 중 어떤 예산에도 묶이지 않은 항목입니다","이 달에 들어온 돈 중 계획을 정하지 않은 항목입니다");
   const ym=curYM, y=ym.slice(0,4), mo=+ym.slice(5);
   const yk=yearKeys(y), ytdK=yk.slice(0,mo);
   const planMonths=yk.filter(hasPlan);
-  $("budNote").textContent = `${y}년 ${mo}월 기준 · 시트 계획 ${planMonths.length}개월${planMonths.length?` (${planMonths.map(k=>+k.slice(5)).join(", ")}월)`:""} · 앱 예산 ${budgets.items.length}개`;
+  $("budNote").textContent = `${W("지출","수입")} · ${y}년 ${mo}월 기준 · 시트 계획 ${planMonths.length}개월${planMonths.length?` (${planMonths.map(k=>+k.slice(5)).join(", ")}월)`:""} · 앱 ${W("예산","계획")} ${budgets.items.filter(b=>typeOfKey(b.key)===T).length}개`;
   $("bMonTitle").textContent=`${mo}월 예산`; $("bYearTitle").textContent=`${y}년 예산`;
   $("bMonSub").textContent = hasPlan(ym) ? `${mo}월 구글 시트에 적힌 계획 금액 기준입니다. 사용액은 카드 청구일이 아니라 쓴 날 기준입니다.` : `${mo}월은 시트 계획이 없어 앱에서 정한 예산을 씁니다. 사용액은 쓴 날 기준입니다.`;
 
   // ----- month table
-  const mRows=budgetCats(ym).map(c=>({c,al:alloc(c,ym),u:usedCat(c,ym)})).filter(r=>r.al).sort((a,b)=>b.al-a.al);
+  const mRows=BC(ym).map(c=>({c,al:A(c,ym),u:U(c,ym)})).filter(r=>r.al).sort((a,b)=>b.al-a.al);
   const mA=mRows.reduce((a,r)=>a+r.al,0), mU=mRows.reduce((a,r)=>a+r.u,0);
-  $("bMonTbl").innerHTML = mRows.length ? `<thead><tr><th>항목</th><th class="r">예산</th><th class="r">사용</th><th class="r">남은 예산</th><th>사용률</th></tr></thead><tbody>`+
-    mRows.map(r=>`<tr class="bud-row"><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}${!hasPlan(ym)&&itemFor(r.c)?`<span class="tag">${esc(schedTxt(itemFor(r.c)))}</span>`:""}</td><td class="r num">${won(r.al)}</td><td class="r num">${won(r.u)}</td><td class="r num ${r.al-r.u<0?"bad":""}">${sgn(r.al-r.u)}</td><td>${bBar(r.u,r.al)}</td></tr>`).join("")+
-    `</tbody><tfoot><tr><td>합계</td><td class="r num">${won(mA)}</td><td class="r num">${won(mU)}</td><td class="r num ${mA-mU<0?"bad":""}">${sgn(mA-mU)}</td><td>${bBar(mU,mA)}</td></tr></tfoot>`
+  $("bMonTbl").innerHTML = mRows.length ? `<thead><tr><th>항목</th><th class="r">${W("예산","계획")}</th><th class="r">${W("사용","입금")}</th><th class="r">${W("남은 예산","남은 계획")}</th><th>${W("사용률","달성률")}</th></tr></thead><tbody>`+
+    mRows.map(r=>`<tr class="bud-row"><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}${!hasPlan(ym)&&IF(r.c)?`<span class="tag">${esc(schedTxt(IF(r.c)))}</span>`:""}</td><td class="r num">${won(r.al)}</td><td class="r num">${won(r.u)}</td><td class="r num ${T!=="in"&&r.al-r.u<0?"bad":""}">${sgn(r.al-r.u)}</td><td>${bBarT(r.u,r.al)}</td></tr>`).join("")+
+    `</tbody><tfoot><tr><td>합계</td><td class="r num">${won(mA)}</td><td class="r num">${won(mU)}</td><td class="r num ${T!=="in"&&mA-mU<0?"bad":""}">${sgn(mA-mU)}</td><td>${bBarT(mU,mA)}</td></tr></tfoot>`
     : `<tbody><tr><td style="color:var(--muted)">이 달에 잡힌 예산이 없습니다. 가계부를 다시 불러오면 시트 계획이 들어오고, ‘예산 편집’에서 앞으로의 예산을 정할 수 있습니다.</td></tr></tbody>`;
 
   // ----- year table
-  const cats=new Set(); yk.forEach(k=>{ budgetCats(k).forEach(c=>cats.add(c)); });
-  const yRows=[...cats].map(c=>{ const ann=yk.reduce((a,k)=>a+alloc(c,k),0), plan=ytdK.reduce((a,k)=>a+alloc(c,k),0), used=ytdK.reduce((a,k)=>a+usedCat(c,k),0); return {c,ann,plan,used}; }).filter(r=>r.ann).sort((a,b)=>b.ann-a.ann);
+  const cats=new Set(); yk.forEach(k=>{ BC(k).forEach(c=>cats.add(c)); });
+  const yRows=[...cats].map(c=>{ const ann=yk.reduce((a,k)=>a+A(c,k),0), plan=ytdK.reduce((a,k)=>a+A(c,k),0), used=ytdK.reduce((a,k)=>a+U(c,k),0); return {c,ann,plan,used}; }).filter(r=>r.ann).sort((a,b)=>b.ann-a.ann);
   const yA=yRows.reduce((a,r)=>a+r.ann,0), yU=yRows.reduce((a,r)=>a+r.used,0), yP=yRows.reduce((a,r)=>a+r.plan,0);
   $("bYearSub").textContent=`연 예산 = 1~12월 각 달 예산의 합 (시트 계획이 있는 달은 계획, 없는 달은 앱 예산). ‘지금까지 계획’은 1~${mo}월 예산의 합입니다.`;
-  $("bYearTbl").innerHTML = yRows.length ? `<thead><tr><th>항목</th><th class="r">연 예산</th><th class="r">지금까지 계획</th><th class="r">누적 사용</th><th class="r">연 잔액</th><th>연 집행률</th><th class="r">계획 대비</th></tr></thead><tbody>`+
-    yRows.map(r=>{ const gap=r.used-r.plan; return `<tr class="bud-row"><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}</td><td class="r num">${won(r.ann)}</td><td class="r num">${won(r.plan)}</td><td class="r num">${won(r.used)}</td><td class="r num ${r.ann-r.used<0?"bad":""}">${sgn(r.ann-r.used)}</td><td>${bBar(r.used,r.ann)}</td><td class="r num ${gap>0?"bad":"good"}">${gap>0?"+":""}${sgn(gap)}</td></tr>`; }).join("")+
-    `</tbody><tfoot><tr><td>합계</td><td class="r num">${won(yA)}</td><td class="r num">${won(yP)}</td><td class="r num">${won(yU)}</td><td class="r num ${yA-yU<0?"bad":""}">${sgn(yA-yU)}</td><td>${bBar(yU,yA)}</td><td class="r num ${yU-yP>0?"bad":"good"}">${yU-yP>0?"+":""}${sgn(yU-yP)}</td></tr></tfoot>`
+  $("bYearTbl").innerHTML = yRows.length ? `<thead><tr><th>항목</th><th class="r">${W("연 예산","연 계획")}</th><th class="r">지금까지 계획</th><th class="r">${W("누적 사용","누적 입금")}</th><th class="r">연 잔액</th><th>${W("연 집행률","연 달성률")}</th><th class="r">계획 대비</th></tr></thead><tbody>`+
+    yRows.map(r=>{ const gap=r.used-r.plan; return `<tr class="bud-row"><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}</td><td class="r num">${won(r.ann)}</td><td class="r num">${won(r.plan)}</td><td class="r num">${won(r.used)}</td><td class="r num ${T!=="in"&&r.ann-r.used<0?"bad":""}">${sgn(r.ann-r.used)}</td><td>${bBarT(r.used,r.ann)}</td><td class="r num ${(gap>0)!==(T==="in")?"bad":"good"}">${gap>0?"+":""}${sgn(gap)}</td></tr>`; }).join("")+
+    `</tbody><tfoot><tr><td>합계</td><td class="r num">${won(yA)}</td><td class="r num">${won(yP)}</td><td class="r num">${won(yU)}</td><td class="r num ${T!=="in"&&yA-yU<0?"bad":""}">${sgn(yA-yU)}</td><td>${bBarT(yU,yA)}</td><td class="r num ${(yU-yP>0)!==(T==="in")?"bad":"good"}">${yU-yP>0?"+":""}${sgn(yU-yP)}</td></tr></tfoot>`
     : `<tbody><tr><td style="color:var(--muted)">올해 예산이 없습니다.</td></tr></tbody>`;
 
   renderSchedule();
-  renderBudAcct(ym);
+  if(T==="out") renderBudAcct(ym);
   // ----- adjustments
-  const allCats=new Set(); ytdK.forEach(k=>{ monthTx(k).forEach(t=>{ if(t.t==="out") allCats.add(t.cat||"미분류"); }); budgetCats(k).forEach(c=>allCats.add(c)); });
-  const adj=[...allCats].map(c=>({c,v:verdictFor(c,y,mo)})).filter(r=>r.v.sug!=null || r.v.cls==="up").sort((a,b)=>({up:0,new:1,down:2}[a.v.cls]-({up:0,new:1,down:2}[b.v.cls])));
+  const allCats=new Set(); ytdK.forEach(k=>{ monthTx(k).forEach(t=>{ if(t.t===T) allCats.add(t.cat||"미분류"); }); BC(k).forEach(c=>allCats.add(c)); });
+  const adj=[...allCats].map(c=>({c,v:verdictForT(T,c,y,mo)})).filter(r=>r.v.sug!=null || r.v.cls==="up").sort((a,b)=>({up:0,new:1,down:2}[a.v.cls]-({up:0,new:1,down:2}[b.v.cls])));
   window.__adj=adj;
-  $("adjSub").textContent=`최근 3개월(${Math.max(1,mo-3)}~${mo-1}월) 실제 사용 평균을 그 기간 예산과 비교했습니다. 15% 넘게 많이 쓰면 상향, 40% 넘게 적게 쓰면 하향을 제안합니다. 제안 금액은 평균을 만 원 단위로 올린 값입니다.`;
-  $("adjTbl").innerHTML = adj.length ? `<thead><tr><th>항목</th><th>판단</th><th class="r">3개월 평균 사용</th><th class="r">3개월 평균 예산</th><th class="r">올해 누적 사용</th></tr></thead><tbody>`+
-    adj.map(r=>{ const ks=[]; for(let m=Math.max(1,mo-3);m<mo;m++) ks.push(y+"-"+pad(m)); const u=ks.length?ks.reduce((a,k)=>a+usedCat(r.c,k),0)/ks.length:0, al=ks.length?ks.reduce((a,k)=>a+alloc(r.c,k),0)/ks.length:0;
-      return `<tr><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}</td><td><span class="verdict ${r.v.cls}">${esc(r.v.txt)}</span></td><td class="r num">${won(u)}</td><td class="r num">${won(al)}</td><td class="r num">${won(ytdK.reduce((a,k)=>a+usedCat(r.c,k),0))}</td></tr>`; }).join("")+`</tbody>`
+  $("adjSub").textContent=`최근 3개월(${Math.max(1,mo-3)}~${mo-1}월) ${W("실제 사용 평균을 그 기간 예산과 비교했습니다. 15% 넘게 많이 쓰면 상향, 40% 넘게 적게 쓰면 하향을 제안합니다.","실제 입금 평균을 그 기간 계획과 비교했습니다. 15% 넘게 더 들어오면 상향, 40% 넘게 덜 들어오면 하향을 제안합니다.")} 제안 금액은 평균을 만 원 단위로 올린 값입니다.`;
+  $("adjTbl").innerHTML = adj.length ? `<thead><tr><th>항목</th><th>판단</th><th class="r">${W("3개월 평균 사용","3개월 평균 입금")}</th><th class="r">${W("3개월 평균 예산","3개월 평균 계획")}</th><th class="r">${W("올해 누적 사용","올해 누적 입금")}</th></tr></thead><tbody>`+
+    adj.map(r=>{ const ks=[]; for(let m=Math.max(1,mo-3);m<mo;m++) ks.push(y+"-"+pad(m)); const u=ks.length?ks.reduce((a,k)=>a+U(r.c,k),0)/ks.length:0, al=ks.length?ks.reduce((a,k)=>a+A(r.c,k),0)/ks.length:0;
+      return `<tr><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}</td><td><span class="verdict ${r.v.cls}">${esc(r.v.txt)}</span></td><td class="r num">${won(u)}</td><td class="r num">${won(al)}</td><td class="r num">${won(ytdK.reduce((a,k)=>a+U(r.c,k),0))}</td></tr>`; }).join("")+`</tbody>`
     : `<tbody><tr><td style="color:var(--muted)">조정이 필요한 항목이 없습니다.</td></tr></tbody>`;
   $("applyAdj").hidden = !adj.some(r=>r.v.sug!=null);
 
   // ----- matrix
   const mxK=yk.slice(0,mo).filter(k=>monthTx(k).length||hasPlan(k));
-  let mc=[...new Set([].concat(...mxK.map(k=>monthTx(k).filter(t=>t.t==="out").map(t=>t.cat||"미분류"))))];
+  let mc=[...new Set([].concat(...mxK.map(k=>monthTx(k).filter(t=>t.t===T).map(t=>t.cat||"미분류"))))];
   if(mxEnt!=="all") mc=mc.filter(c=>mxEnt==="corp"?isCorpCat(c):!isCorpCat(c));
   if(mxQ) mc=mc.filter(c=>c.toLowerCase().includes(mxQ.toLowerCase()));
   const groups={}; mc.forEach(c=>{ const g=groupKey(c); (groups[g]=groups[g]||[]).push(c); });
-  const gOrder=Object.keys(groups).sort((a,b)=>{ const s=x=>groups[x].reduce((t,c)=>t+mxK.reduce((u,k)=>u+usedCat(c,k),0),0); return s(b)-s(a); });
+  const gOrder=Object.keys(groups).sort((a,b)=>{ const s=x=>groups[x].reduce((t,c)=>t+mxK.reduce((u,k)=>u+U(c,k),0),0); return s(b)-s(a); });
   let h=`<thead><tr><th>항목</th>${mxK.map(k=>`<th>${+k.slice(5)}월</th>`).join("")}<th>누적</th><th>월평균</th><th>추이</th><th>올해 예산</th><th>집행률</th></tr></thead><tbody>`;
-  const cell=(u,al)=>`<td class="num ${!u?"z":(al&&u>al?"over":"")}">${u?Math.round(u).toLocaleString("ko-KR"):"·"}</td>`;
+  const cell=(u,al)=>`<td class="num ${!u?"z":(al&&u>al&&T!=="in"?"over":"")}">${u?Math.round(u).toLocaleString("ko-KR"):"·"}</td>`;
   let grand=mxK.map(()=>0);
   gOrder.forEach(g=>{
-    const cs=groups[g].map(c=>({c,u:mxK.map(k=>usedCat(c,k)),al:mxK.map(k=>alloc(c,k))})).sort((a,b)=>b.u.reduce((x,y)=>x+y,0)-a.u.reduce((x,y)=>x+y,0));
+    const cs=groups[g].map(c=>({c,u:mxK.map(k=>U(c,k)),al:mxK.map(k=>A(c,k))})).sort((a,b)=>b.u.reduce((x,y)=>x+y,0)-a.u.reduce((x,y)=>x+y,0));
     const gu=mxK.map((k,i)=>cs.reduce((a,r)=>a+r.u[i],0)); grand=grand.map((v,i)=>v+gu[i]);
     const gt=gu.reduce((a,b)=>a+b,0);
     h+=`<tr class="grp"><td>${esc(g)}</td>${gu.map(v=>`<td class="num">${v?Math.round(v).toLocaleString("ko-KR"):"·"}</td>`).join("")}<td class="num">${Math.round(gt).toLocaleString("ko-KR")}</td><td class="num">${Math.round(gt/Math.max(1,mxK.length)).toLocaleString("ko-KR")}</td><td>${spark(gu,[])}</td><td></td><td></td></tr>`;
-    cs.forEach(r=>{ const tot=r.u.reduce((a,b)=>a+b,0), ann=yk.reduce((a,k)=>a+alloc(r.c,k),0);
-      h+=`<tr><td title="${esc(r.c)}">${esc(r.c.replace(/^지발연\s*-\s*/,""))}</td>${r.u.map((u,i)=>cell(u,r.al[i])).join("")}<td class="num">${Math.round(tot).toLocaleString("ko-KR")}</td><td class="num">${Math.round(tot/Math.max(1,mxK.length)).toLocaleString("ko-KR")}</td><td>${spark(r.u,r.al)}</td><td class="num">${ann?Math.round(ann).toLocaleString("ko-KR"):"—"}</td><td class="num ${ann&&tot>ann?"over":""}">${ann?pctTxt(tot/ann*100):"—"}</td></tr>`; });
+    cs.forEach(r=>{ const tot=r.u.reduce((a,b)=>a+b,0), ann=yk.reduce((a,k)=>a+A(r.c,k),0);
+      h+=`<tr><td title="${esc(r.c)}">${esc(r.c.replace(/^지발연\s*-\s*/,""))}</td>${r.u.map((u,i)=>cell(u,r.al[i])).join("")}<td class="num">${Math.round(tot).toLocaleString("ko-KR")}</td><td class="num">${Math.round(tot/Math.max(1,mxK.length)).toLocaleString("ko-KR")}</td><td>${spark(r.u,r.al)}</td><td class="num">${ann?Math.round(ann).toLocaleString("ko-KR"):"—"}</td><td class="num ${ann&&tot>ann&&T!=="in"?"over":""}">${ann?pctTxt(tot/ann*100):"—"}</td></tr>`; });
   });
   const gt=grand.reduce((a,b)=>a+b,0);
   h+=`</tbody><tfoot><tr class="grp"><td>합계</td>${grand.map(v=>`<td class="num">${Math.round(v).toLocaleString("ko-KR")}</td>`).join("")}<td class="num">${Math.round(gt).toLocaleString("ko-KR")}</td><td class="num">${Math.round(gt/Math.max(1,mxK.length)).toLocaleString("ko-KR")}</td><td>${spark(grand,[])}</td><td></td><td></td></tr></tfoot>`;
   $("mxTbl").innerHTML = mc.length ? h : `<tbody><tr><td>조건에 맞는 항목이 없습니다.</td></tr></tbody>`;
 
   // ----- unbudgeted
-  const nb=sumBy(monthTx(ym).filter(t=>t.t==="out"&&!alloc(t.cat||"미분류",ym)),t=>t.cat||"미분류");
+  const nb=sumBy(monthTx(ym).filter(t=>t.t===T&&!A(t.cat||"미분류",ym)),t=>t.cat||"미분류");
   const nbT=nb.reduce((a,r)=>a+r[1],0);
-  $("bNoTbl").innerHTML = nb.length ? `<thead><tr><th>항목</th><th>귀속</th><th class="r">사용</th><th></th></tr></thead><tbody>`+nb.slice(0,15).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${isCorpCat(k)?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}</td><td class="r num">${won(v)}</td><td class="r"><button class="btn small" data-addb="${esc(k)}">예산 만들기</button></td></tr>`).join("")+`</tbody><tfoot><tr><td>합계</td><td></td><td class="r num">${won(nbT)}</td><td></td></tr></tfoot>`
-    : `<tbody><tr><td style="color:var(--muted)">이 달 지출은 모두 예산 안에 있습니다.</td></tr></tbody>`;
-  $("bNoTbl").querySelectorAll("[data-addb]").forEach(b=>b.onclick=()=>{ openBudEdit(); const c=b.dataset.addb; if(!bDraft.items.some(x=>x.key==="c:"+c)) bDraft.items.push({id:uid(),key:"c:"+c,period:"month",amount:0,mode:"spread",month:1,exec:"manual",acct:mainAcct()}); bOpen.add(c); $("bFind").value=""; bFindQ=""; renderBudEdit(); });
+  $("bNoTbl").innerHTML = nb.length ? `<thead><tr><th>항목</th><th>귀속</th><th class="r">${W("사용","입금")}</th><th></th></tr></thead><tbody>`+nb.slice(0,15).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${isCorpCat(k)?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}</td><td class="r num">${won(v)}</td><td class="r"><button class="btn small" data-addb="${esc(k)}">${W("예산 만들기","계획 만들기")}</button></td></tr>`).join("")+`</tbody><tfoot><tr><td>합계</td><td></td><td class="r num">${won(nbT)}</td><td></td></tr></tfoot>`
+    : `<tbody><tr><td style="color:var(--muted)">${W("이 달 지출은 모두 예산 안에 있습니다.","이 달 수입은 모두 계획 안에 있습니다.")}</td></tr></tbody>`;
+  $("bNoTbl").querySelectorAll("[data-addb]").forEach(b=>b.onclick=()=>{ openBudEdit(); const c=b.dataset.addb; bT=T; segSet("bTSeg",T); if(!bDraft.items.some(x=>x.key===bKey(T,c))) bDraft.items.push({id:uid(),key:bKey(T,c),period:"month",amount:0,mode:"spread",month:1,exec:"manual",acct:T==="in"?(lastInAcct(c)||mainAcct()):mainAcct()}); bOpen.add(c); $("bFind").value=""; bFindQ=""; renderBudEdit(); });
 
   $("bKpis").innerHTML=[
-    [`${mo}월 예산`,won(mA),`<span style="color:var(--muted)">${hasPlan(ym)?"시트 계획":"앱 예산"} · ${mRows.length}개 항목</span>`],
-    [`${mo}월 사용 (예산 항목)`,won(mU),bBarTxt(mU,mA)],
-    [`${mo}월 남은 예산`,sgn(mA-mU),`<span class="${mA-mU<0?"bad":"good"}">${mA-mU<0?"초과":"남음"}</span>`],
-    [`${y}년 누적 · 계획 대비`,(yU-yP>0?"+":"")+sgn(yU-yP),`<span style="color:var(--muted)">계획 ${won(yP)} · 사용 ${won(yU)}</span>`],
-    ["예산 밖 지출",won(nbT),`<span style="color:var(--muted)">${mo}월 · ${nb.length}개 항목</span>`]
+    [W(`${mo}월 예산`,`${mo}월 수입 계획`),won(mA),`<span style="color:var(--muted)">${hasPlan(ym)?"시트 계획":W("앱 예산","앱 계획")} · ${mRows.length}개 항목</span>`],
+    [W(`${mo}월 사용 (예산 항목)`,`${mo}월 입금 (계획 항목)`),won(mU),(T==="in" ? (mA?`<span class="${mU>=mA?"good":""}">계획의 ${pctTxt(mU/mA*100)}</span>`:`<span style="color:var(--muted)">계획 없음</span>`) : bBarTxt(mU,mA))],
+    [W(`${mo}월 남은 예산`,`${mo}월 남은 계획`),sgn(mA-mU),(T==="in" ? `<span class="${mU>=mA?"good":""}">${mU>=mA?"계획 달성":"아직 덜 들어옴"}</span>` : `<span class="${mA-mU<0?"bad":"good"}">${mA-mU<0?"초과":"남음"}</span>`)],
+    [`${y}년 누적 · 계획 대비`,(yU-yP>0?"+":"")+sgn(yU-yP),`<span style="color:var(--muted)">계획 ${won(yP)} · ${W("사용","입금")} ${won(yU)}</span>`],
+    [W("예산 밖 지출","계획 밖 수입"),won(nbT),`<span style="color:var(--muted)">${mo}월 · ${nb.length}개 항목</span>`]
   ].map(k=>`<div class="kpi"><div class="k">${k[0]}</div><div class="v num">${k[1]}</div><div class="s">${k[2]}</div></div>`).join("");
 }
 segBind("mxSeg", v=>{ mxEnt=v; renderBud(); });
+segBind("budTSeg", v=>{ budT=v; renderBud(); });
 $("mxQ").addEventListener("input",e=>{ mxQ=e.target.value.trim(); renderBud(); });
 $("applyAdj").onclick=()=>{
-  openBudEdit();
-  (window.__adj||[]).filter(r=>r.v.sug!=null).forEach(r=>{ const k="c:"+r.c; const ex=bDraft.items.find(b=>b.key===k); if(ex){ ex.period="month"; ex.amount=r.v.sug; } else bDraft.items.push({id:uid(),key:k,period:"month",amount:r.v.sug,mode:"spread",month:1}); });
+  openBudEdit(); bT=budT; segSet("bTSeg",bT);
+  (window.__adj||[]).filter(r=>r.v.sug!=null).forEach(r=>{ const k=bKey(budT,r.c); const ex=bDraft.items.find(b=>b.key===k); if(ex){ ex.period="month"; ex.amount=r.v.sug; } else bDraft.items.push({id:uid(),key:k,period:"month",amount:r.v.sug,mode:"spread",month:1,exec:"manual",acct:budT==="in"?(lastInAcct(r.c)||mainAcct()):mainAcct()}); bOpen.add(r.c); });
   renderBudEdit();
 };
 
@@ -1143,10 +1162,10 @@ async function runSchedules(){
       const from=b.autoFrom||today; const posted=new Set(b.posted||[]);
       occurrences(b, from, today).forEach(o=>{
         if(posted.has(o.d)) return;
-        const ym=o.d.slice(0,7), id="sch-"+b.id+"-"+o.d, cat=b.key.slice(2);
+        const ym=o.d.slice(0,7), id="sch-"+b.id+"-"+o.d, cat=b.key.slice(2), inc=typeOfKey(b.key)==="in";
         if(!monthTx(ym).some(t=>t.id===id)){
-          const tx={id, d:o.d, t:"out", amt:o.amt, desc:b.desc||cat, cat, m:b.m||"", ent:isCorpCat(cat)?"corp":"me", src:"sched", ts:Date.now()};
-          if(b.acct && b.acct!==acctOf(b.m)) tx.ac=b.acct;
+          const tx={id, d:o.d, t:inc?"in":"out", amt:o.amt, desc:b.desc||cat, cat, m:inc?"":(b.m||""), ent:isCorpCat(cat)?"corp":"me", src:"sched", ts:Date.now()};
+          if(inc){ tx.ac=b.acct||mainAcct(); } else if(b.acct && b.acct!==acctOf(b.m)) tx.ac=b.acct;
           tx.st = needsSettle(tx) ? "pending" : null;
           months[ym]=monthTx(ym).concat([tx]); touched.add(ym); made++;
         }
@@ -1168,7 +1187,7 @@ function renderBudAcct(ym){
   budgetCats(ym).forEach(c=>{ const al=alloc(c,ym); if(al) row(budgetAcct(itemFor(c))).bud+=al; });
   monthTx(ym).forEach(t=>{ if(t.t==="out" && alloc(t.cat||"미분류",ym)) row(txAcct(t)).used+=(+t.amt||0); });
   const d1=new Date(); d1.setDate(d1.getDate()+1); const tom=d1.getFullYear()+"-"+pad(d1.getMonth()+1)+"-"+pad(d1.getDate());
-  budgets.items.filter(hasDay).forEach(b=>occurrences(b,tom,end).forEach(o=>{ const r=row(budgetAcct(b)); r.up+=o.amt; r.n++; }));
+  budgets.items.filter(b=>typeOfKey(b.key)==="out" && hasDay(b)).forEach(b=>occurrences(b,tom,end).forEach(o=>{ const r=row(budgetAcct(b)); r.up+=o.amt; r.n++; }));
   const rows=Object.values(g).filter(r=>r.bud||r.used||r.up).sort((x,y)=>(x.a==="미지정")-(y.a==="미지정")||(y.bud+y.up)-(x.bud+x.up));
   $("baSub").textContent=`${+ym.slice(5)}월 예산이 어느 계좌에서 나가는지, 앞으로 30일 동안 예정된 집행을 빼면 잔액이 얼마 남는지 봅니다. 잔액은 계좌·자금 탭에서 입력한 잔액에 그 뒤 기록을 더하고 뺀 값입니다.`;
   if(!rows.length){ $("baTbl").innerHTML=`<tbody><tr><td style="color:var(--muted)">이 달 예산이 없습니다.</td></tr></tbody>`; return; }
@@ -1190,12 +1209,12 @@ function renderSchedule(){
     const id="sch-"+b.id+"-"+o.d, rec=monthTx(o.d.slice(0,7)).some(t=>t.id===id), posted=(b.posted||[]).includes(o.d);
     let st; if(rec) st=`<span class="st-done">기록됨</span>`; else if(o.d>today) st= b.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-manual">직접 기록</span>`; else if(b.auto && posted) st=`<span class="st-manual">기록 후 삭제됨</span>`; else if(b.auto && o.d<(b.autoFrom||today)) st=`<span class="st-manual">자동 기록 전 일정</span>`; else st= b.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span>`;
     const m=methodOf(b.m);
-    return `<tr><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(b.key.slice(2))}<span class="tag">${esc(schedTxt(b))}</span></td><td>${esc(b.desc||"")}</td><td class="r num">${won(o.amt)}</td><td>${budgetAcct(b)!=="미지정"?`${b.m?esc(b.m)+" → ":""}${esc(budgetAcct(b))}`:'<span style="color:var(--muted)">미지정</span>'}</td><td>${st}</td></tr>`;
+    return `<tr><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(b.key.slice(2))}<span class="tag">${esc(schedTxt(b))}</span></td><td>${esc(b.desc||"")}</td><td class="r num ${typeOfKey(b.key)==="in"?"good":""}">${typeOfKey(b.key)==="in"?"+":""}${won(o.amt)}</td><td>${typeOfKey(b.key)==="in" ? `입금 → ${esc(b.acct||mainAcct())}` : budgetAcct(b)!=="미지정"?`${b.m?esc(b.m)+" → ":""}${esc(budgetAcct(b))}`:'<span style="color:var(--muted)">미지정</span>'}</td><td>${st}</td></tr>`;
   }).join("")+`</tbody>`;
 }
 
 let bDraft=null;
-function openBudEdit(){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.items=bDraft.items.filter(b=>b.key&&b.key.startsWith("c:")); renderBudEdit(); openOv("budOv"); }
+function openBudEdit(){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.items=bDraft.items.filter(b=>b.key&&(b.key.startsWith("c:")||b.key.startsWith("i:"))); bT=budT; segSet("bTSeg",bT); renderBudEdit(); openOv("budOv"); }
 function bTargets(){ return [...new Set(config.outCats.concat(allTx().filter(t=>t.t==="out"&&t.cat).map(t=>t.cat)).concat(...Object.values(plans).map(p=>Object.keys(p.out))))].sort(); }
 function bSummary(b){
   const n=occurrences(b, todayISO(), "9999-12-31").slice(0,3).map(o=>o.d.slice(2).replace(/-/g,"."));
@@ -1205,7 +1224,8 @@ function bSummary(b){
   if(n.length && ex!=="manual") t+=` · 다음 집행 <b>${n.join(", ")}</b>`; else if(b.end && b.end<todayISO()) t+=` · <span class="warn">기한이 지나 더 이상 집행하지 않습니다</span>`;
   if(ex!=="manual" && !hasDay(b)) t+=` · <span class="warn">집행일을 정해 주세요</span>`;
   const ba=budgetAcct(b);
-  t += ba!=="미지정" ? ` · <b>${esc(ba)}</b>에서 출금${b.m?` (${esc(b.m)})`:""}` : ` · <span class="warn">돈이 나가는 계좌를 정하지 않았습니다</span>`;
+  if(typeOfKey(b.key)==="in") t += b.acct ? ` · <b>${esc(b.acct)}</b>(으)로 입금` : ` · <span class="warn">들어오는 계좌를 정하지 않았습니다</span>`;
+  else t += ba!=="미지정" ? ` · <b>${esc(ba)}</b>에서 출금${b.m?` (${esc(b.m)})`:""}` : ` · <span class="warn">돈이 나가는 계좌를 정하지 않았습니다</span>`;
   if(b.m && b.acct && !NOT_ACCT(acctOf(b.m)) && acctOf(b.m)!==b.acct) t+=` · <span class="warn">${esc(b.m)}의 기본 계좌(${esc(acctOf(b.m))})와 다릅니다</span>`;
   return t;
 }
@@ -1237,8 +1257,8 @@ function itemCard(b,i){
         <label class="fld">기한 · 마지막 집행일 (선택)<input type="date" data-i="${i}" data-k="end" value="${esc(b.end||"")}"></label>
       </div>
       <div class="brow">
-        <label class="fld">결제수단 (선택)<select data-i="${i}" data-k="m" data-re="1">${mOpts(b.m||"")}</select></label>
-        <label class="fld">돈이 나가는 계좌·주머니<select data-i="${i}" data-k="acct" data-re="1">${aOpts(b.acct||"")}</select></label>
+        ${typeOfKey(b.key)==="in" ? "" : `<label class="fld">결제수단 (선택)<select data-i="${i}" data-k="m" data-re="1">${mOpts(b.m||"")}</select></label>`}
+        <label class="fld">${typeOfKey(b.key)==="in"?"들어오는 계좌":"돈이 나가는 계좌·주머니"}<select data-i="${i}" data-k="acct" data-re="1">${aOpts(b.acct||"")}</select></label>
         ${ex==="auto"?`<label class="fld wide">원장에 적을 적요<input data-i="${i}" data-k="desc" value="${esc(b.desc||"")}" placeholder="예: 차량 할부금, 넷플릭스"></label>`:""}
       </div>
       <div class="bsum" id="bs${i}">${bSummary(b)}</div>
@@ -1247,8 +1267,8 @@ function itemCard(b,i){
 }
 function renderBudEdit(){
   const box=$("bList");
-  const keyIdx={}; bDraft.items.forEach((b,i)=>{ keyIdx[b.key.slice(2)]=i; });
-  let cats=[...new Set(catKnown("out").concat(Object.keys(keyIdx)))].sort(catSort);
+  const keyIdx={}; bDraft.items.forEach((b,i)=>{ if(typeOfKey(b.key)===bT) keyIdx[b.key.slice(2)]=i; });
+  let cats=[...new Set(catKnown(bT).concat(Object.keys(keyIdx)))].sort(catSort);
   if(bOnlyHas) cats=cats.filter(c=>c in keyIdx);
   if(bFindQ) cats=cats.filter(c=>c.toLowerCase().includes(bFindQ.toLowerCase()));
   const tree={}; cats.forEach(c=>{ const g=catSegs(c)[0]||c; (tree[g]=tree[g]||[]).push(c); });
@@ -1261,13 +1281,13 @@ function renderBudEdit(){
       if(sg.length>=3 && sg[1]!==lastSub){ lastSub=sg[1]; rows+=`<div class="cat-sub">${esc(sg[1])}</div>`; } else if(sg.length<3) lastSub=null;
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : c;
       const i = c in keyIdx ? keyIdx[c] : -1, b = i>=0 ? bDraft.items[i] : null, open = b && bOpen.has(c);
-      const info = b ? `<span class="cnt"><b class="num" style="color:var(--ink)">${won(+b.amount||0)}</b> ${b.period==="month"?"/월":b.period==="year"?"/년":"/회"} · ${EXEC_LBL[execOf(b)]}${budgetAcct(b)!=="미지정"?" · "+esc(budgetAcct(b)):""}</span>` : `<span class="cnt">예산 없음</span>`;
-      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span>${info}<span class="acts">${b ? btn(`data-tog="${esc(c)}"`, open?"접기":"고치기") : btn(`data-new="${esc(c)}"`,"+ 예산 정하기")}</span></div>${open?itemCard(b,i):""}`;
+      const info = b ? `<span class="cnt"><b class="num" style="color:var(--ink)">${won(+b.amount||0)}</b> ${b.period==="month"?"/월":b.period==="year"?"/년":"/회"} · ${EXEC_LBL[execOf(b)]}${budgetAcct(b)!=="미지정"?" · "+esc(budgetAcct(b)):""}</span>` : `<span class="cnt">${bT==="in"?"계획 없음":"예산 없음"}</span>`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span>${info}<span class="acts">${b ? btn(`data-tog="${esc(c)}"`, open?"접기":"고치기") : btn(`data-new="${esc(c)}"`,bT==="in"?"+ 계획 정하기":"+ 예산 정하기")}</span></div>${open?itemCard(b,i):""}`;
     });
-    return `<div class="cat-g"><div class="cat-h"><b>${esc(g)}</b>${g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">예산 ${nb}개 · 월 환산 ${won(gm)}</span></div>${rows}</div>`;
+    return `<div class="cat-g"><div class="cat-h"><b>${esc(g)}</b>${g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${bT==="in"?"계획":"예산"} ${nb}개 · 월 환산 ${won(gm)}</span></div>${rows}</div>`;
   }).join("") || `<div class="hint">조건에 맞는 항목이 없습니다.</div>`;
   box.querySelectorAll("[data-tog]").forEach(x=>x.onclick=()=>{ const c=x.dataset.tog; bOpen.has(c)?bOpen.delete(c):bOpen.add(c); renderBudEdit(); });
-  box.querySelectorAll("[data-new]").forEach(x=>x.onclick=()=>{ const c=x.dataset.new; bDraft.items.push({id:uid(),key:"c:"+c,period:"month",amount:0,mode:"spread",month:1,exec:"manual",acct:isCorpCat(c)?((config.methods.find(m=>m.code==="지통")||{}).acct||"법인통장"):mainAcct()}); bOpen.add(c); renderBudEdit(); });
+  box.querySelectorAll("[data-new]").forEach(x=>x.onclick=()=>{ const c=x.dataset.new; const corpA=(config.methods.find(m=>m.code==="지통")||{}).acct||"법인통장"; bDraft.items.push({id:uid(),key:bKey(bT,c),period:"month",amount:0,mode:"spread",month:1,exec:"manual",acct: bT==="in" ? (lastInAcct(c)||(isCorpCat(c)?corpA:mainAcct())) : (isCorpCat(c)?corpA:mainAcct())}); bOpen.add(c); renderBudEdit(); });
   box.querySelectorAll("[data-k]").forEach(el=>{
     const k=el.dataset.k; if(k==="newdate") return;
     const h=()=>{ const b=bDraft.items[+el.dataset.i];
@@ -1292,24 +1312,24 @@ $("bFind").addEventListener("input",e=>{ bFindQ=e.target.value.trim(); renderBud
 $("bOnly").onchange=e=>{ bOnlyHas=e.target.checked; renderBudEdit(); };
 $("budEdit").onclick=openBudEdit;
 $("fromPlanB").onclick=()=>{
-  const pk=Object.keys(plans).sort(); if(!pk.length){ return; }
-  const latest=pk[pk.length-1]; const cats=new Set(); pk.forEach(k=>Object.keys(plans[k].out).forEach(c=>cats.add(c)));
+  const pk=Object.keys(plans).sort(); if(!pk.length) return; const P=bT==="in"?"inc":"out";
+  const latest=pk[pk.length-1]; const cats=new Set(); pk.forEach(k=>Object.keys(plans[k][P]).forEach(c=>cats.add(c)));
   const has=new Set(bDraft.items.map(b=>b.key));
   [...cats].forEach(c=>{
-    if(has.has("c:"+c)) return;
-    const nzK=pk.filter(k=>+(plans[k].out[c]||0)>0);
-    if(!nzK.length) return;
-    if(pk.length>=4 && nzK.length===1){ const k=nzK[0]; bDraft.items.push({id:uid(),key:"c:"+c,period:"year",amount:+plans[k].out[c],mode:"lump",month:+k.slice(5)}); return; }
-    const v=+(plans[latest].out[c]||0) || +(plans[nzK[nzK.length-1]].out[c]||0);
-    if(v) bDraft.items.push({id:uid(),key:"c:"+c,period:"month",amount:v,mode:"spread",month:1});
+    const key=bKey(bT,c); if(has.has(key)) return;
+    const nzK=pk.filter(k=>+(plans[k][P][c]||0)>0); if(!nzK.length) return;
+    const acct = bT==="in" ? (lastInAcct(c)||mainAcct()) : mainAcct();
+    if(pk.length>=4 && nzK.length===1){ const k=nzK[0]; bDraft.items.push({id:uid(),key,period:"year",amount:+plans[k][P][c],mode:"lump",month:+k.slice(5),exec:"manual",acct}); return; }
+    const v=+(plans[latest][P][c]||0) || +(plans[nzK[nzK.length-1]][P][c]||0);
+    if(v) bDraft.items.push({id:uid(),key,period:"month",amount:v,mode:"spread",month:1,exec:"manual",acct});
   });
   renderBudEdit();
 };
 $("suggestB").onclick=()=>{
   const full=Object.keys(months).filter(k=>k<CUR_YM&&monthTx(k).length).sort().slice(-6); if(!full.length) return;
   const has=new Set(bDraft.items.map(b=>b.key));
-  const tot={}; full.forEach(k=>monthTx(k).forEach(t=>{ if(t.t==="out"&&t.cat) tot[t.cat]=(tot[t.cat]||0)+(+t.amt||0); }));
-  Object.entries(tot).map(([c,v])=>[c,v/full.length]).filter(([c,v])=>v>=50000&&!has.has("c:"+c)).sort((a,b)=>b[1]-a[1]).forEach(([c,v])=>bDraft.items.push({id:uid(),key:"c:"+c,period:"month",amount:r10k(v),mode:"spread",month:1}));
+  const tot={}; full.forEach(k=>monthTx(k).forEach(t=>{ if(t.t===bT&&t.cat&&!isRecon(t)) tot[t.cat]=(tot[t.cat]||0)+(+t.amt||0); }));
+  Object.entries(tot).map(([c,v])=>[c,v/full.length]).filter(([c,v])=>v>=50000&&!has.has(bKey(bT,c))).sort((a,b)=>b[1]-a[1]).forEach(([c,v])=>bDraft.items.push({id:uid(),key:bKey(bT,c),period:"month",amount:r10k(v),mode:"spread",month:1,exec:"manual",acct:bT==="in"?(lastInAcct(c)||mainAcct()):mainAcct()}));
   renderBudEdit();
 };
 $("saveBud").onclick=async()=>{
@@ -1503,7 +1523,7 @@ let catType="out";
 function catKnown(type){
   const set=new Set(type==="in" ? config.inCats : config.outCats);
   allTx().forEach(t=>{ if(!t.cat) return; if(type==="in" ? t.t==="in" : t.t==="out") set.add(t.cat); });
-  if(type==="out"){ budgets.items.forEach(b=>b.key&&set.add(b.key.slice(2))); }
+  budgets.items.forEach(b=>{ if(b.key && typeOfKey(b.key)===type) set.add(b.key.slice(2)); });
   return [...set].filter(Boolean);
 }
 function catUse(type){ const u={}; allTx().forEach(t=>{ if(t.cat && (type==="in"?t.t==="in":t.t==="out")) u[t.cat]=(u[t.cat]||0)+1; }); return u; }
@@ -1582,9 +1602,7 @@ async function applyCatRename(type, map){
   if(type==="in") config.inCats=fix(config.inCats); else config.outCats=fix(config.outCats);
   Object.values(map).forEach(v=>{ const l=type==="in"?config.inCats:config.outCats; if(!l.includes(v)) l.push(v); });
   let budCh=false, plansCh=[], accCh=false;
-  if(type==="out"){
-    const seen=new Set(); budgets.items=budgets.items.filter(b=>{ const c=b.key.slice(2); if(map[c]!==undefined){ b.key="c:"+map[c]; budCh=true; } if(seen.has(b.key)) return false; seen.add(b.key); return true; });
-  }
+  { const seen=new Set(); budgets.items=budgets.items.filter(b=>{ if(typeOfKey(b.key)===type){ const c=b.key.slice(2); if(map[c]!==undefined){ b.key=bKey(type,map[c]); budCh=true; } } if(seen.has(b.key)) return false; seen.add(b.key); return true; }); }
   Object.keys(plans).forEach(k=>{ const o=plans[k][type==="in"?"inc":"out"]; let ch=false; Object.keys(o).forEach(c=>{ if(map[c]!==undefined){ o[map[c]]=(o[map[c]]||0)+o[c]; delete o[c]; ch=true; } }); if(ch) plansCh.push(k); });
   Object.values(accounts.snaps).forEach(ss=>ss.forEach(sn=>{ const f=type==="in"?"inCat":"outCat"; if(sn[f]&&map[sn[f]]!==undefined){ sn[f]=map[sn[f]]; accCh=true; } }));
   render();
@@ -1594,6 +1612,7 @@ async function applyCatRename(type, map){
   for(const k of plansCh){ try{ await plansRef.doc(k).set({ym:k,out:plans[k].out,inc:plans[k].inc}); }catch(_){} }
   if(accCh) await saveAccounts();
 }
+segBind("bTSeg", v=>{ bT=v; renderBudEdit(); });
 segBind("catTypeSeg", v=>{ catType=v; catMsg(""); renderCats(); });
 $("openCats").onclick=()=>{ catMsg(""); renderCats(); openOv("catOv"); };
 $("catAdd").onclick=()=>catAddName($("catNew").value);
