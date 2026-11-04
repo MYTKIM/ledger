@@ -72,6 +72,32 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-
 .month button{width:34px;height:34px;border:1px solid var(--line);background:var(--surface);border-radius:8px;font-size:16px}
 .month .label{min-width:128px;text-align:center;font-weight:700;font-size:17px}
 .month .label small{display:block;font-weight:500;font-size:11px;color:var(--muted);letter-spacing:.08em}
+.month .label{border:1px solid transparent;border-radius:8px;background:none;cursor:pointer;padding:2px 6px;width:auto;height:auto;font-size:17px;font-family:inherit;color:inherit}
+.month .label:hover{border-color:var(--line);background:var(--surface)}
+.month .label span::after{content:" ▾";font-size:11px;color:var(--muted)}
+.brand h1{cursor:pointer}
+.mp-years{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.mp-years b{font-size:18px}
+.mp-years button{width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:8px;font-size:16px}
+.mp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mp-grid button{position:relative;padding:12px 0;border:1px solid var(--line);border-radius:10px;background:var(--paper);font-weight:600}
+.mp-grid button.has::after{content:"";position:absolute;left:50%;bottom:5px;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:var(--corp)}
+.mp-grid button[aria-current="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.mp-grid button.now{border-color:var(--ink)}
+.mp-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.cat-tree{display:grid;gap:8px}
+.cat-g{border:1px solid var(--line);border-radius:10px;background:var(--paper);overflow:hidden}
+.cat-h{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--sunk);flex-wrap:wrap}
+.cat-h b{font-size:14px}
+.cat-h .cnt,.cat-l .cnt{font-size:11.5px;color:var(--muted)}
+.cat-h .acts,.cat-l .acts{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
+.cat-sub{padding:2px 10px 2px 22px;font-size:12px;font-weight:600;color:var(--muted);display:flex;gap:6px;align-items:center;border-top:1px solid var(--line);flex-wrap:wrap}
+.cat-l{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 22px;border-top:1px solid var(--line);flex-wrap:wrap;min-width:0}
+.cat-l.d3{padding-left:38px}
+.cat-l .nm{min-width:0;overflow-wrap:anywhere}
+.cat-edit{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-top:1px dashed var(--line);background:var(--surface)}
+.cat-edit input,.cat-edit select{flex:1 1 200px;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px 8px;background:var(--paper);color:var(--ink)}
+.linkbtn{border:0;background:none;color:var(--corp);font-size:12px;padding:0;cursor:pointer;text-decoration:underline}
 .tools{display:flex;gap:8px;flex-wrap:wrap}
 .btn{border:1px solid var(--line);background:var(--surface);padding:8px 12px;border-radius:8px;font-weight:500}
 .btn:hover{border-color:var(--muted)}
@@ -280,13 +306,14 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     </div>
     <div class="month" aria-label="월 선택">
       <button id="prevM" aria-label="이전 달">‹</button>
-      <div class="label"><small id="mYear">2026</small><span id="mLabel">10월</span></div>
+      <button class="label" id="mPick" type="button" aria-label="연도와 달 고르기"><small id="mYear">2026</small><span id="mLabel">10월</span></button>
       <button id="nextM" aria-label="다음 달">›</button>
     </div>
     <nav class="views" aria-label="화면 선택"><a href="#ledger" id="vLedger" aria-current="page">장부</a><a href="#dashboard" id="vDash">대시보드</a><a href="#budget" id="vBud">예산</a><a href="#accounts" id="vAcc">계좌·자금</a></nav>
     <div class="tools">
       <button class="btn" id="openImport">가계부 불러오기</button>
-      <button class="btn" id="openSettings">결제수단·계정 설정</button>
+      <button class="btn" id="openSettings">결제수단 설정</button>
+      <button class="btn" id="openCats">계정 관리</button>
       <button class="btn" id="openBackup">백업</button>
     </div>
   </header>
@@ -485,6 +512,31 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   </div>
 </div>
 
+<!-- 연도·달 고르기 -->
+<div class="overlay" id="mpOv" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mpTitle" style="max-width:420px">
+    <h3><span id="mpTitle">연도와 달</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="mp-years"><button type="button" id="mpPrevY" aria-label="이전 해">‹</button><b id="mpY" class="num">2026</b><button type="button" id="mpNextY" aria-label="다음 해">›</button></div>
+    <div class="mp-grid" id="mpGrid"></div>
+    <div class="mp-chips" id="mpChips"></div>
+    <div class="actions" style="margin-top:14px"><span class="hint" style="background:none;padding:0;font-size:12px">점이 있는 달은 기록이 있는 달입니다.</span><div class="r"><button type="button" class="btn" id="mpNow">이번 달</button></div></div>
+  </div>
+</div>
+
+<!-- 계정 관리 -->
+<div class="overlay" id="catOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="catTitle">
+    <h3><span id="catTitle">계정 관리</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form">
+      <span class="seg" id="catTypeSeg" style="justify-self:start"><button type="button" data-v="out" aria-pressed="true">지출 계정</button><button type="button" data-v="in" aria-pressed="false">수입 계정</button></span>
+      <p class="hint" style="margin:0">계정 이름의 <b>-</b>(하이픈)으로 대그룹 › 소그룹 › 항목을 나눕니다. 예: <b>생활비-마트-코스트코</b>, <b>생활비-온라인-쿠팡</b>, <b>우진-의료비</b>. 이름을 바꾸거나 다른 그룹으로 옮기면 지난 거래, 예산, 시트 계획에도 함께 반영됩니다. ‘지발연’으로 시작하는 계정은 새 기록에서 법인으로 분류됩니다.</p>
+      <div class="cat-edit" style="border:1px solid var(--line);border-radius:10px"><input id="catNew" placeholder="새 계정 이름 (예: 생활비-마트-이마트)" aria-label="새 계정 이름"><button type="button" class="btn primary small" id="catAdd">계정 추가</button></div>
+      <div id="catMsg" class="hint" hidden></div>
+      <div class="cat-tree" id="catTree"></div>
+    </div>
+  </div>
+</div>
+
 <!-- 잔액 입력 -->
 <div class="overlay" id="balOv" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="balTitle">
@@ -570,16 +622,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="scroll-x"><table class="cfg" id="mTable"><thead><tr><th style="width:80px">약어</th><th>이름</th><th style="width:110px">종류</th><th>돈이 나가는 곳</th><th style="width:84px">소유</th><th style="width:80px">결제일</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
         <button class="btn small" id="addM" style="margin-top:8px">결제수단 추가</button>
       </div>
-      <div>
-        <span class="lbl" style="font-size:12px;font-weight:600;color:var(--muted)">지출 계정 <span style="font-weight:400">— ‘지발연-’으로 시작하면 법인으로 자동 분류</span></span>
-        <div class="catlist" id="outCats"></div>
-        <div class="two" style="margin-top:8px"><input id="newOutCat" placeholder="예: 지발연-도서구입" class="f" style="border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--paper)"><button class="btn small" id="addOutCat" style="justify-self:start">지출 계정 추가</button></div>
-      </div>
-      <div>
-        <span class="lbl" style="font-size:12px;font-weight:600;color:var(--muted)">수입 계정</span>
-        <div class="catlist" id="inCats"></div>
-        <div class="two" style="margin-top:8px"><input id="newInCat" placeholder="예: 강의료" style="border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--paper)"><button class="btn small" id="addInCat" style="justify-self:start">수입 계정 추가</button></div>
-      </div>
+      <p class="hint" style="margin:0">지출·수입 계정은 위쪽의 <b>계정 관리</b>에서 추가하고 고칩니다.</p>
       <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveSet">설정 저장</button></div></div>
     </div>
   </div>
@@ -681,6 +724,8 @@ function effects(t){
 }
 function allTx(){ return [].concat(...Object.keys(months).map(monthTx)); }
 const isCorpCat = cat => /^지발연/.test(cat||"");
+const catSegs = c => String(c||"").split(/\s*-\s*/).map(x=>x.trim()).filter(Boolean);
+const catSort = (a,b) => { const A=catSegs(a), B=catSegs(b); for(let i=0;i<Math.min(A.length,B.length);i++){ const c=A[i].localeCompare(B[i],"ko"); if(c) return c; } return A.length-B.length; };
 const groupOf = cat => { const s=(cat||"기타").split(/\s*-\s*/)[0].trim(); return s||"기타"; };
 function needsSettle(tx){ if(tx.t!=="out"||tx.ent!=="corp") return false; if(tx.m==="기타") return !(resolve(tx.via)||{}).own || (resolve(tx.via)||{}).own!=="corp"; const r=resolve(tx.m); return !!r && r.own!=="corp"; }
 function txMethodTxt(t){ if(t.m!=="기타") return chainTxt(t.m); const v=resolve(t.via); return `기타 · ${esc(t.mx||"이름 없음")}`+(v?" → "+v.chain.map(m=>esc(m.name||m.code)).join(" → "):""); }
@@ -698,6 +743,8 @@ function saveMonth(ym){
   p.then(()=>{ if(pendingLocal[ym]===arr) delete pendingLocal[ym]; }, ()=>{});
   return p;
 }
+/* 여러 달을 한꺼번에 저장할 때: 저장 전인 달의 변경이 먼저 저장된 달의 알림에 덮이지 않도록 모두 붙잡아 둡니다 */
+async function saveMonths(keys){ keys=[...keys]; keys.forEach(k=>{ pendingLocal[k]=(months[k]||[]).map(x=>({...x})); }); for(const k of keys){ try{ await saveMonth(k); }catch(_){} } }
 function saveConfig(){ if(!configRef) return Promise.resolve(); return configRef.set(config).catch(e=>showNotice("설정을 저장하지 못했습니다 ("+(e&&e.code||"오류")+").")); }
 let accQ=Promise.resolve();
 function saveAccounts(){ if(!accRef) return Promise.resolve(); const body=JSON.parse(JSON.stringify(accounts)); accQ=accQ.catch(()=>{}).then(()=>accRef.set(body)).catch(e=>showNotice("계좌 정보를 저장하지 못했습니다 ("+(e&&e.code||"오류")+").")); return accQ; }
@@ -1125,7 +1172,7 @@ async function runSchedules(){
       if(changedBud) b.posted=[...posted].sort().slice(-120);
     });
     if(made) render();
-    for(const ym of touched){ try{ await saveMonth(ym); }catch(_){} }
+    await saveMonths(touched);
     if(changedBud) await saveBudgets();
     if(made) showNotice(`예약된 집행 ${made}건을 거래 원장에 기록했습니다.`);
   } finally { schedRunning=false; }
@@ -1361,7 +1408,7 @@ async function reconcileAll(){
         const k=s.d.slice(0,7); months[k]=monthTx(k).concat([want]); touched.add(k);
       }
     });
-    if(touched.size){ render(); for(const k of touched){ try{ await saveMonth(k); }catch(_){} } }
+    if(touched.size){ render(); await saveMonths(touched); }
   } finally { reconBusy=false; }
 }
 function reconInfo(t){
@@ -1409,7 +1456,7 @@ $("settleBtn").onclick=async()=>{
   const to=mainAcct();
   months[ym]=monthTx(ym).concat([{id:uid(), d, t:"move", amt:total, desc:`법인 정산 입금 (${pend.length}건)`, cat:"법인 정산", m:"", from:"법인통장", to, ent:"me", src:"manual", ts:Date.now()}]);
   render();
-  for(const k of touched){ try{ await saveMonth(k); }catch(_){} }
+  await saveMonths(touched);
 };
 
 /* 계좌 편집 */
@@ -1429,6 +1476,123 @@ $("saveAcc").onclick=async()=>{
   aDraft.list=aDraft.list.filter(a=>a.name); aDraft.buffer=+($("aBuf").value.replace(/[^\d.]/g,""))||0;
   accounts=aDraft; closeOv("accOv"); render(); await saveAccounts();
 };
+
+/* ---------- 연도·달 고르기 ---------- */
+let mpY=+curYM.slice(0,4);
+function renderMP(){
+  $("mpY").textContent=mpY;
+  const has=new Set(Object.keys(months).filter(k=>monthTx(k).length));
+  $("mpGrid").innerHTML=Array.from({length:12},(_,i)=>{ const k=mpY+"-"+pad(i+1); return `<button type="button" data-k="${k}" class="${has.has(k)?"has":""} ${k===CUR_YM?"now":""}" aria-current="${k===curYM?"true":"false"}">${i+1}월</button>`; }).join("");
+  $("mpGrid").querySelectorAll("button").forEach(b=>b.onclick=()=>{ curYM=b.dataset.k; closeOv("mpOv"); render(); });
+  const ys=[...new Set([...has].map(k=>+k.slice(0,4)).concat([+CUR_YM.slice(0,4)]))].sort();
+  $("mpChips").innerHTML=ys.length>1?ys.map(y=>`<button type="button" class="btn small" data-y="${y}"${y===mpY?' style="border-color:var(--ink)"':""}>${y}년</button>`).join(""):"";
+  $("mpChips").querySelectorAll("[data-y]").forEach(b=>b.onclick=()=>{ mpY=+b.dataset.y; renderMP(); });
+}
+$("mPick").onclick=()=>{ mpY=+curYM.slice(0,4); renderMP(); openOv("mpOv"); };
+$("mpPrevY").onclick=()=>{ mpY--; renderMP(); }; $("mpNextY").onclick=()=>{ mpY++; renderMP(); };
+$("mpNow").onclick=()=>{ curYM=CUR_YM; closeOv("mpOv"); render(); };
+document.querySelector(".brand h1").onclick=()=>{ location.hash="#ledger"; curYM=CUR_YM; render(); };
+
+/* ---------- 계정 관리 ---------- */
+let catType="out";
+function catKnown(type){
+  const set=new Set(type==="in" ? config.inCats : config.outCats);
+  allTx().forEach(t=>{ if(!t.cat) return; if(type==="in" ? t.t==="in" : t.t==="out") set.add(t.cat); });
+  if(type==="out"){ budgets.items.forEach(b=>b.key&&set.add(b.key.slice(2))); }
+  return [...set].filter(Boolean);
+}
+function catUse(type){ const u={}; allTx().forEach(t=>{ if(t.cat && (type==="in"?t.t==="in":t.t==="out")) u[t.cat]=(u[t.cat]||0)+1; }); return u; }
+function catMsg(h,warn){ const m=$("catMsg"); m.hidden=!h; m.className="hint"+(warn?" warn":""); m.innerHTML=h||""; }
+function renderCats(){
+  const type=catType, cats=catKnown(type).sort(catSort), use=catUse(type);
+  const tree={}; cats.forEach(c=>{ const sg=catSegs(c); const g=sg[0]||c; (tree[g]=tree[g]||[]).push(c); });
+  const btn=(act,arg,txt)=>`<button type="button" class="btn small" data-act="${act}" data-arg="${esc(arg)}">${txt}</button>`;
+  $("catTree").innerHTML=Object.keys(tree).map(g=>{
+    const list=tree[g]; const n=list.reduce((a,c)=>a+(use[c]||0),0);
+    let lastSub=null, rows="";
+    list.forEach(c=>{
+      const sg=catSegs(c);
+      if(sg.length>=3 && sg[1]!==lastSub){ lastSub=sg[1]; const sp=sg.slice(0,2).join("-"); rows+=`<div class="cat-sub">${esc(sg[1])} <span class="acts" style="margin-left:auto">${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div>`; }
+      else if(sg.length<3) lastSub=null;
+      const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : "(그룹 자체)";
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span><span class="cnt">${use[c]?use[c]+"건":"기록 없음"}</span><span class="acts">${btn("edit",c,"고치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
+    });
+    return `<div class="cat-g"><div class="cat-h"><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n}건</span><span class="acts">${btn("addin",g,"하위 추가")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div>${rows}</div>`;
+  }).join("") || `<div class="hint">계정이 없습니다.</div>`;
+  $("catTree").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>catAction(b.dataset.act, b.dataset.arg, b));
+}
+function openEditRow(key, html){
+  $("catTree").querySelectorAll(".cat-edit").forEach(e=>{ if(e.dataset.for!==key){ e.hidden=true; e.innerHTML=""; } });
+  const row=[...$("catTree").querySelectorAll(".cat-edit")].find(e=>e.dataset.for===key); if(!row) return null;
+  row.hidden=false; row.innerHTML=html; const i=row.querySelector("input"); if(i) setTimeout(()=>i.focus(),20); return row;
+}
+function catAction(act, arg, el){
+  const type=catType, use=catUse(type);
+  if(act==="addin"){
+    const holder = catSegs(arg).length===1 ? "grp:"+arg : (el.closest(".cat-g").querySelector('.cat-edit[data-for^="grp:"]').dataset.for);
+    const row=openEditRow(holder, `<input value="${esc(arg)}-" aria-label="새 계정 이름"><button type="button" class="btn primary small">추가</button><button type="button" class="btn small">취소</button>`);
+    const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
+    ok.onclick=()=>catAddName(row.querySelector("input").value); return;
+  }
+  if(act==="edit" || act==="rengrp"){
+    const holder = act==="edit" ? arg : (catSegs(arg).length===1 ? "grp:"+arg : el.closest(".cat-g").querySelector('.cat-edit[data-for^="grp:"]').dataset.for);
+    const row=openEditRow(holder, `<input value="${esc(arg)}" aria-label="새 이름"><button type="button" class="btn primary small">${act==="edit"?"이름 바꾸기":"그룹 이름 바꾸기"}</button><button type="button" class="btn small">취소</button>`);
+    const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
+    ok.onclick=async()=>{
+      const nv=catSegs(row.querySelector("input").value).join("-"); if(!nv || nv===catSegs(arg).join("-") && nv===arg){ row.hidden=true; return; }
+      const map={}; const os=catSegs(arg);
+      if(act==="edit") map[arg]=nv;
+      else catKnown(type).forEach(c=>{ const sg=catSegs(c); if(os.every((x,i)=>sg[i]===x)) map[c]=catSegs(nv).concat(sg.slice(os.length)).join("-"); });
+      const n=Object.keys(map).reduce((a,c)=>a+(use[c]||0),0);
+      const merge=Object.values(map).some(v=>catKnown(type).includes(v) && !(v in map));
+      if(ok.dataset.c!=="1"){ ok.dataset.c="1"; ok.textContent=`${Object.keys(map).length}개 계정 · 거래 ${n}건 바꾸기${merge?" (같은 이름과 합쳐짐)":""} — 한 번 더 누르기`; return; }
+      await applyCatRename(type,map); catMsg(`바꿨습니다. 거래 ${n}건에 반영했습니다.`); renderCats();
+    };
+    return;
+  }
+  if(act==="del"){
+    const n=use[arg]||0;
+    if(!n){
+      const row=openEditRow(arg, `<span style="flex:1">기록이 없는 계정입니다. 목록에서 지울까요?</span><button type="button" class="btn primary small">삭제</button><button type="button" class="btn small">취소</button>`);
+      const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
+      ok.onclick=async()=>{ if(type==="in") config.inCats=config.inCats.filter(c=>c!==arg); else config.outCats=config.outCats.filter(c=>c!==arg); await saveConfig(); catMsg(`‘${esc(arg)}’을 지웠습니다.`); renderCats(); };
+    } else {
+      const others=catKnown(type).filter(c=>c!==arg).sort(catSort);
+      const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">거래 ${n}건이 있습니다. 어느 계정으로 옮기고 지울까요?</span><select aria-label="옮길 계정">${others.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select><button type="button" class="btn primary small">옮기고 삭제</button><button type="button" class="btn small">취소</button>`);
+      const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
+      ok.onclick=async()=>{ const to=row.querySelector("select").value; if(!to) return; await applyCatRename(type,{[arg]:to}); catMsg(`거래 ${n}건을 ‘${esc(to)}’(으)로 옮기고 지웠습니다.`); renderCats(); };
+    }
+  }
+}
+async function catAddName(v){
+  const nv=catSegs(v).join("-"); if(!nv) return;
+  const list = catType==="in" ? config.inCats : config.outCats;
+  if(catKnown(catType).includes(nv)){ catMsg(`‘${esc(nv)}’은 이미 있습니다.`,true); return; }
+  list.push(nv); await saveConfig(); catMsg(`‘${esc(nv)}’을 추가했습니다.`); $("catNew").value=""; renderCats();
+}
+async function applyCatRename(type, map){
+  const touched=new Set();
+  Object.keys(months).forEach(k=>{ let ch=false; const arr=monthTx(k).map(t=>{ if(t.cat && map[t.cat]!==undefined && (type==="in"?t.t==="in":t.t!=="in")){ ch=true; return {...t,cat:map[t.cat]}; } return t; }); if(ch){ months[k]=arr; touched.add(k); } });
+  const fix=list=>[...new Set(list.map(c=>map[c]!==undefined?map[c]:c))];
+  if(type==="in") config.inCats=fix(config.inCats); else config.outCats=fix(config.outCats);
+  Object.values(map).forEach(v=>{ const l=type==="in"?config.inCats:config.outCats; if(!l.includes(v)) l.push(v); });
+  let budCh=false, plansCh=[], accCh=false;
+  if(type==="out"){
+    const seen=new Set(); budgets.items=budgets.items.filter(b=>{ const c=b.key.slice(2); if(map[c]!==undefined){ b.key="c:"+map[c]; budCh=true; } if(seen.has(b.key)) return false; seen.add(b.key); return true; });
+  }
+  Object.keys(plans).forEach(k=>{ const o=plans[k][type==="in"?"inc":"out"]; let ch=false; Object.keys(o).forEach(c=>{ if(map[c]!==undefined){ o[map[c]]=(o[map[c]]||0)+o[c]; delete o[c]; ch=true; } }); if(ch) plansCh.push(k); });
+  Object.values(accounts.snaps).forEach(ss=>ss.forEach(sn=>{ const f=type==="in"?"inCat":"outCat"; if(sn[f]&&map[sn[f]]!==undefined){ sn[f]=map[sn[f]]; accCh=true; } }));
+  render();
+  await saveMonths(touched);
+  await saveConfig();
+  if(budCh) await saveBudgets();
+  for(const k of plansCh){ try{ await plansRef.doc(k).set({ym:k,out:plans[k].out,inc:plans[k].inc}); }catch(_){} }
+  if(accCh) await saveAccounts();
+}
+segBind("catTypeSeg", v=>{ catType=v; catMsg(""); renderCats(); });
+$("openCats").onclick=()=>{ catMsg(""); renderCats(); openOv("catOv"); };
+$("catAdd").onclick=()=>catAddName($("catNew").value);
+$("catNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); catAddName($("catNew").value); } });
 
 /* ---------- 이벤트: 월/필터 ---------- */
 function shiftMonth(d){ let [y,m]=curYM.split("-").map(Number); m+=d; while(m<1){m+=12;y--;} while(m>12){m-=12;y++;} curYM=y+"-"+pad(m); render(); }
@@ -1455,9 +1619,9 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySele
 function fillCatSelect(type, val){
   const sel=$("iCat"); const list = type==="in" ? config.inCats : config.outCats;
   const all = list.includes(val)||!val ? list : [val, ...list];
-  const groups={}; all.forEach(c=>{ const g=type==="in"?"수입":groupOf(c); (groups[g]=groups[g]||[]).push(c); });
+  const groups={}; [...all].sort(catSort).forEach(c=>{ const g=catSegs(c)[0]||"기타"; (groups[g]=groups[g]||[]).push(c); });
   sel.innerHTML = (type==="move"?`<option value="법인 정산">법인 정산</option><option value="적금 가입·납입">적금 가입·납입</option><option value="적금 만기·해지">적금 만기·해지</option><option value="계좌 이체">계좌 이체</option>`:"") +
-    Object.keys(groups).map(g=>`<optgroup label="${esc(g)}">${groups[g].map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</optgroup>`).join("");
+    Object.keys(groups).map(g=>`<optgroup label="${esc(g)}">${groups[g].map(c=>{ const sg=catSegs(c); return `<option value="${esc(c)}">${esc(sg.length>1?sg.slice(1).join(" › "):c)}</option>`; }).join("")}</optgroup>`).join("");
   if(val) sel.value=val;
 }
 function fillMethods(){
@@ -1581,16 +1745,10 @@ function renderSettings(){
   }).join("") + `<datalist id="acctList">${[...new Set(accounts.list.map(a=>a.name).concat(draft.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))].map(a=>`<option value="${esc(a)}">`).join("")}</datalist>`;
   tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const m=draft.methods[+el.dataset.i], k=el.dataset.k; m[k]=el.value.trim(); if(k==="own"){ const corpA=(config.methods.find(x=>x.code==="지통")||{}).acct||"법인통장"; if(m.own==="corp"&&m.acct===mainAcct()) m.acct=corpA; else if(m.own!=="corp"&&m.acct===corpA) m.acct=mainAcct(); renderSettings(); return; } if(k==="kind"&&m.kind!=="pay") delete m.link; if(k==="kind"&&m.kind!=="card") delete m.pay; if(el.dataset.re) renderSettings(); });
   tb.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ draft.methods.splice(+b.dataset.del,1); renderSettings(); });
-  const cat=(arr,key,cls)=>arr.map((c,i)=>`<span class="chip ${cls(c)}">${esc(c)}<button data-k="${key}" data-i="${i}" aria-label="${esc(c)} 삭제">×</button></span>`).join("");
-  $("outCats").innerHTML=cat(draft.outCats,"outCats",c=>isCorpCat(c)?"corp":"me");
-  $("inCats").innerHTML=cat(draft.inCats,"inCats",()=>"in");
-  document.querySelectorAll("#outCats button,#inCats button").forEach(b=>b.onclick=()=>{ draft[b.dataset.k].splice(+b.dataset.i,1); renderSettings(); });
 }
 $("addM").onclick=()=>{ draft.methods.push({code:"",name:"",acct:mainAcct(),own:"me",kind:"card"}); renderSettings(); };
 /* 소유를 법인으로 바꾸면 돈이 나가는 곳을 법인통장으로 맞춥니다 */
-$("addOutCat").onclick=()=>{ const v=$("newOutCat").value.trim(); if(v&&!draft.outCats.includes(v)) draft.outCats.push(v); $("newOutCat").value=""; renderSettings(); };
-$("addInCat").onclick=()=>{ const v=$("newInCat").value.trim(); if(v&&!draft.inCats.includes(v)) draft.inCats.push(v); $("newInCat").value=""; renderSettings(); };
-$("saveSet").onclick=async()=>{ draft.methods=draft.methods.filter(m=>m.code); config=draft; closeOv("setOv"); render(); await saveConfig(); };
+$("saveSet").onclick=async()=>{ config={...config, methods:draft.methods.filter(m=>m.code)}; closeOv("setOv"); render(); await saveConfig(); };
 
 /* ---------- 백업 ---------- */
 function collectBackup(){
