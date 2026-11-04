@@ -475,6 +475,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       </div>
       <div class="f" id="entRow"><span class="lbl">귀속</span><span class="seg" id="entInSeg"><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="true">개인</button></span></div>
       <div class="hint" id="flowHint"></div>
+      <div class="hint" id="reconBox" hidden></div>
       <label class="check" id="settleRow"><input type="checkbox" id="iSettle"> 법인에서 아직 정산받지 않음</label>
       <div class="actions">
         <button type="button" class="btn danger" id="delBtn" hidden>삭제</button>
@@ -645,7 +646,7 @@ let staged = null;          // parsed import
 let accounts = JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS));
 let accRef = null;
 let budgets = {items:[]}; let budRef = null;
-const loaded = {months:false, bud:false}; let budPending = false, schedRunning = false;
+const loaded = {months:false, bud:false, acc:false}; let budPending = false, schedRunning = false;
 let plans = {}; let plansRef = null;   // ym -> {out:{cat:amt}, inc:{cat:amt}}
 
 const OTHER_M = {code:"기타", name:"기타 수단", kind:"other", acct:"미정", own:"me"};
@@ -714,7 +715,7 @@ async function boot(){
   plansRef.onSnapshot(snap=>{ const n={}; snap.docs.forEach(d=>{ const b=d.data(); if(b) n[d.id]={out:{...(b.out||{})},inc:{...(b.inc||{})}}; }); plans=n; render(); }, e=>showNotice("시트 계획을 읽지 못했습니다 ("+e.code+")."));
   budRef = db.doc("config/budgets");
   budRef.onSnapshot(s=>{ if(s.exists && !budPending){ const d=s.data(); budgets={items:(d.items||[]).map(x=>JSON.parse(JSON.stringify(x)))}; } loaded.bud=true; render(); maybeRunSchedules(); }, e=>showNotice("예산을 읽지 못했습니다 ("+e.code+")."));
-  accRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); accounts={buffer:d.buffer==null?3:d.buffer, list:(d.list||DEFAULT_ACCOUNTS.list).map(x=>({...x})), snaps:JSON.parse(JSON.stringify(d.snaps||{}))}; render(); } }, e=>showNotice("계좌 정보를 읽지 못했습니다 ("+e.code+")."));
+  accRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); accounts={buffer:d.buffer==null?3:d.buffer, list:(d.list||DEFAULT_ACCOUNTS.list).map(x=>({...x})), snaps:JSON.parse(JSON.stringify(d.snaps||{}))}; } loaded.acc=true; render(); }, e=>showNotice("계좌 정보를 읽지 못했습니다 ("+e.code+")."));
   configRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); config={methods:(d.methods||DEFAULT_CONFIG.methods).map(x=>({...x})), outCats:[...(d.outCats||DEFAULT_CONFIG.outCats)], inCats:[...(d.inCats||DEFAULT_CONFIG.inCats)]}; render(); } }, e=>showNotice("설정을 읽지 못했습니다 ("+e.code+")."));
   let first = true;
   monthsRef.onSnapshot(snap=>{
@@ -746,6 +747,7 @@ function render(){
   if(!$("dashView").hidden) renderDash();
   if(!$("accView").hidden) renderAcc();
   if(!$("budView").hidden) renderBud();
+  if(!reconBusy) scheduleRecon();
 }
 
 function renderTrend(){
@@ -811,7 +813,7 @@ function renderLedger(tx){
     const ym=(t.d||"").slice(0,7), day=+(t.d||"").slice(8,10)||"";
     if(!showDay && ym!==lastDay){ html+=`<div class="daysep">${+ym.slice(5)}월 · ${ym.slice(0,4)}</div>`; lastDay=ym; }
     const m=methodOf(t.m), acct=txAcct(t);
-    const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : "";
+    const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : isRecon(t) ? `<span class="chip plain">잔액 맞춤 · ${t.lock?"수동":"자동"}</span>` : "";
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
     const st = t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "";
     const mv = t.t==="move" ? effects(t) : null;
@@ -1285,7 +1287,7 @@ function renderAcc(){
   const cards=accounts.list.map(a=>{
     const tr=tracked(a.name, today); const up=cardUpcoming(a.name); const ss=snapsOf(a.name);
     if(a.liquid){ if(tr){ liquid+=tr.bal; upcoming+=up; } else missing.push(a.name); }
-    const hist=ss.slice(-6).reverse().map(s=>`<li><span>${s.d.slice(5).replace("-","/")}</span><span class="num">${won(s.bal)}</span></li>`).join("");
+    const hist=ss.slice(-6).reverse().map(s=>{ const r=reconOf(a.name,s); return `<li><span>${s.d.slice(5).replace("-","/")}${r?` <span style="color:var(--muted)">맞춤 ${r.t==="in"?"+":"−"}${won(r.amt)}${r.lock?" (수동)":""}</span>`:""}</span><span class="num">${won(s.bal)}</span></li>`; }).join("");
     return `<div class="acc ${tr?"":"need"}"><div class="top"><span class="nm">${esc(a.name)}${a.name===mainAcct()?' <span class="tag">주 통장</span>':""}${instOf(a)?`<span style="display:block;font-size:12px;font-weight:400;color:var(--muted)">${esc(instOf(a))}</span>`:""}</span><span class="chip ${a.kind==="corp"?"corp":a.liquid?"in":"plain"}">${esc(KIND[a.kind]||a.kind)}${a.liquid?" · 가용":""}</span></div>`+
       (tr ? `<div class="bal num">${won(tr.bal)}</div><div class="meta"><span>${tr.snap.d.slice(5).replace("-","/")} 입력 <b class="num">${won(tr.snap.bal)}</b> 이후 입금 <b class="num">${won(tr.flow.inn)}</b> · 출금 <b class="num">${won(tr.flow.out)}</b></span>${up?`<span>카드 결제 예정 <b class="num">${won(up)}</b></span>`:""}${a.maturity?`<span>만기 ${esc(a.maturity)}</span>`:""}</div>`
           : `<div class="meta"><span>아직 잔액을 입력하지 않았습니다.</span></div>`)+
@@ -1328,6 +1330,44 @@ function openBal(name){
   const sel=$("bAcct"); sel.innerHTML=accounts.list.map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join("");
   if(name) sel.value=name; $("bDate").value=todayISO(); $("bAmt").value=""; calcBal(); openOv("balOv"); setTimeout(()=>$("bAmt").focus(),30);
 }
+/* 잔액 맞춤 기록(src:"recon")은 잔액 입력(스냅샷)마다 하나이며, 금액은 고정값이 아니라
+   "입력한 잔액 − (직전 입력 잔액 + 그 사이 다른 기록들)"로 늘 다시 계산됩니다.
+   그래서 빠진 거래를 나중에 넣으면 맞춤 금액이 그만큼 줄고, 남는 차이(CMA 이자 등)만 남습니다.
+   lock:true 인 기록은 직접 고친 것이라 자동으로 바꾸지 않습니다. */
+function isRecon(t){ return t.src==="recon"; }
+function reconOf(acct, s){ return allTx().find(t=>isRecon(t) && t.ac===acct && (t.snapTs ? t.snapTs===s.ts : t.d===s.d)) || null; }
+function snapGap(acct, prev, s){
+  let net=0; allTx().forEach(t=>{ if(isRecon(t) && t.ac===acct) return; effects(t).forEach(e=>{ if(e.acct===acct && e.d>prev.d && e.d<=s.d) net+=e.v; }); });
+  return Math.round(s.bal - (prev.bal + net));
+}
+let reconTimer=null, reconBusy=false;
+function scheduleRecon(){ clearTimeout(reconTimer); reconTimer=setTimeout(reconcileAll, 400); }
+async function reconcileAll(){
+  if(reconBusy || !loaded.months || !loaded.acc || !monthsRef) return; reconBusy=true;
+  try{
+    const touched=new Set();
+    Object.keys(accounts.snaps).forEach(acct=>{
+      const ss=snapsOf(acct);
+      for(let i=1;i<ss.length;i++){
+        const s=ss[i], prev=ss[i-1]; if(s.recon==="none") continue;
+        const ex=reconOf(acct,s); if(ex && ex.lock) continue;
+        if(!s.recon && !ex) continue; /* 예전 방식으로 '잔액만 저장'한 기록은 그대로 둠 */
+        const diff=snapGap(acct,prev,s), t=diff>0?"in":"out", amt=Math.abs(diff);
+        if(amt<1){ if(ex){ const k=ex.d.slice(0,7); months[k]=monthTx(k).filter(x=>x.id!==ex.id); touched.add(k); } continue; }
+        const cat = ex && ex.t===t ? ex.cat : (t==="in" ? (s.inCat||defaultInCat(acct)) : (s.outCat||"미확인 지출"));
+        const want={...(ex||{}), id: ex?ex.id:"rc-"+s.ts, d:s.d, t, amt, cat, desc:`${acct} 잔액 맞춤 (${t==="in"?"이자 등":"빠진 지출"})`, m:"", ac:acct, ent:"me", src:"recon", snapTs:s.ts, ts: ex&&ex.ts||Date.now()};
+        if(ex && ex.amt===want.amt && ex.t===want.t && ex.cat===want.cat && ex.desc===want.desc && ex.snapTs===want.snapTs && ex.d===want.d) continue;
+        if(ex){ const k=ex.d.slice(0,7); months[k]=monthTx(k).filter(x=>x.id!==ex.id); touched.add(k); }
+        const k=s.d.slice(0,7); months[k]=monthTx(k).concat([want]); touched.add(k);
+      }
+    });
+    if(touched.size){ render(); for(const k of touched){ try{ await saveMonth(k); }catch(_){} } }
+  } finally { reconBusy=false; }
+}
+function reconInfo(t){
+  const ss=snapsOf(t.ac); const i=ss.findIndex(s=> t.snapTs ? s.ts===t.snapTs : s.d===t.d);
+  if(i<1) return null; return {s:ss[i], prev:ss[i-1], diff:snapGap(t.ac, ss[i-1], ss[i])};
+}
 function defaultInCat(name){ if(/아내/.test(name)) return config.inCats.find(c=>/MH.*이자|명화.*이자/.test(c))||"기타"; if(/저수지/.test(name)) return "저수지 통장 이자"; return config.inCats.find(c=>/이자/.test(c))||"기타"; }
 function calcBal(){
   const name=$("bAcct").value, d=$("bDate").value, amt=+($("bAmt").value.replace(/[^\d]/g,""))||0, box=$("bCalc");
@@ -1337,23 +1377,21 @@ function calcBal(){
   const f=flowSplit(name,s.d,d); const exp=s.bal+f.net; const diff=amt-exp;
   let h=`<div class="diffbox"><div class="line"><span>${s.d.slice(5).replace("-","/")}에 입력한 잔액</span><span class="num">${won(s.bal)}</span></div><div class="line"><span>그 뒤 기록된 입금</span><span class="num">+${won(f.inn)}</span></div><div class="line"><span>그 뒤 기록된 출금${f.card?` (카드값 ${won(f.card)} 포함)`:""}</span><span class="num">−${won(f.out)}</span></div><div class="line total"><span>기록으로 추적한 잔액</span><span class="num">${won(exp)}</span></div>${amt?`<div class="line total"><span>입력한 잔액과의 차이</span><span class="num ${diff>=0?"good":"bad"}">${diff>0?"+":diff<0?"−":""}${won(Math.abs(diff))}</span></div>`:""}</div>`;
   if(!amt){ box.innerHTML=h; return; }
-  if(diff===0) h+=`<div class="hint">기록과 정확히 맞습니다.</div><div class="actions"><span></span><div class="r"><button class="btn primary" id="bSave">잔액 저장</button></div></div>`;
-  else if(diff>0) h+=`<div class="choice"><div class="opt"><span>차액 <b class="num">${won(diff)}</b>을 수입으로 기록</span><select id="bCat">${config.inCats.map(c=>`<option${c===defaultInCat(name)?" selected":""}>${esc(c)}</option>`).join("")}</select><button class="btn primary small" id="bRec">기록하고 저장</button></div><div class="opt"><span>기록 없이 잔액만 맞추기</span><button class="btn small" id="bSave">잔액만 저장</button></div></div>`;
-  else h+=`<div class="choice"><div class="opt"><span>차액 <b class="num">${won(-diff)}</b>을 빠진 지출로 기록</span><select id="bCat">${["미확인 지출"].concat(config.outCats.filter(c=>!isCorpCat(c))).map(c=>`<option>${esc(c)}</option>`).join("")}</select><button class="btn primary small" id="bRec">기록하고 저장</button></div><div class="opt"><span>장부에 직접 찾아 넣을 예정이면</span><button class="btn small" id="bSave">잔액만 저장</button></div></div>`;
+  if(diff===0) h+=`<div class="hint">기록과 정확히 맞습니다.</div><div class="actions"><span></span><div class="r"><button class="btn primary" id="bRec">잔액 저장</button></div></div>`;
+  else h+=`<div class="choice"><div class="opt"><span><b>맞춤 기록으로 남기기 (권장)</b><br><span style="font-size:12px;color:var(--muted)">차이 ${won(Math.abs(diff))}을 ${diff>0?"수입":"지출"}으로 기록합니다. 나중에 빠진 거래를 넣으면 이 금액이 자동으로 줄고, 남는 차이(이자 등)만 남습니다. 차이가 늘면 수입, 줄면 지출로 저절로 바뀝니다.</span></span><span style="display:grid;gap:6px;flex:1;min-width:180px"><label style="font-size:11.5px;color:var(--muted)">늘었을 때 수입 항목<select id="bInCat">${config.inCats.map(c=>`<option${c===defaultInCat(name)?" selected":""}>${esc(c)}</option>`).join("")}</select></label><label style="font-size:11.5px;color:var(--muted)">줄었을 때 지출 항목<select id="bOutCat">${["미확인 지출"].concat(config.outCats.filter(c=>!isCorpCat(c))).map(c=>`<option>${esc(c)}</option>`).join("")}</select></label></span><button class="btn primary small" id="bRec">저장</button></div><div class="opt"><span>잔액만 저장하고 맞춤 기록은 남기지 않기</span><button class="btn small" id="bSave">잔액만 저장</button></div></div>`;
   box.innerHTML=h;
-  $("bSave").onclick=()=>saveBal(name,d,amt,null);
-  if($("bRec")) $("bRec").onclick=()=>saveBal(name,d,amt,{diff,cat:$("bCat").value});
+  if($("bSave")) $("bSave").onclick=()=>saveBal(name,d,amt,null);
+  if($("bRec") && !$("bInCat")) $("bRec").onclick=()=>saveBal(name,d,amt,{inCat:defaultInCat(name),outCat:"미확인 지출"});
+  else if($("bRec")) $("bRec").onclick=()=>saveBal(name,d,amt,{inCat:$("bInCat").value,outCat:$("bOutCat").value});
 }
 async function saveBal(name,d,amt,rec){
-  const ym=d.slice(0,7);
-  if(rec){
-    const tx={id:uid(), d, t:rec.diff>0?"in":"out", amt:Math.abs(rec.diff), desc:rec.diff>0?`${name} 잔액 맞춤 (이자 등)`:`${name} 잔액 맞춤 (빠진 지출)`, cat:rec.cat, m:"", ac:name, ent:"me", src:"recon", ts:Date.now()};
-    if(rec.diff<0 && !config.outCats.includes(rec.cat)){ config.outCats.push(rec.cat); saveConfig(); }
-    months[ym]=monthTx(ym).concat([tx]);
-  }
-  (accounts.snaps[name]=accounts.snaps[name]||[]).push({d,bal:amt,ts:Date.now()});
+  const snap={d,bal:amt,ts:Date.now()};
+  if(rec){ snap.recon="auto"; snap.inCat=rec.inCat; snap.outCat=rec.outCat; if(rec.outCat && !config.outCats.includes(rec.outCat)){ config.outCats.push(rec.outCat); saveConfig(); } }
+  else if(lastSnap(name,d)) snap.recon="none";
+  (accounts.snaps[name]=accounts.snaps[name]||[]).push(snap);
   closeOv("balOv"); render();
-  try{ if(rec) await saveMonth(ym); await saveAccounts(); }catch(_){}
+  try{ await saveAccounts(); }catch(_){}
+  reconcileAll();
 }
 ["bAcct","bDate"].forEach(id=>$(id).addEventListener("change",calcBal));
 $("bAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; calcBal(); });
@@ -1470,6 +1508,15 @@ $("iCat").onchange=()=>{ form.entTouched=false; autoEnt();
   updateHint(true); };
 $("iAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; updateHint(false); });
 
+function showReconBox(t){
+  const box=$("reconBox"); if(!t || !isRecon(t)){ box.hidden=true; return; }
+  const ri=reconInfo(t); box.hidden=false;
+  const now = ri ? ri.diff : null;
+  box.innerHTML = `<b>잔액 맞춤 기록</b> · ${esc(t.ac)} ${ri?`${ri.prev.d.slice(5).replace("-","/")} 잔액 ${won(ri.prev.bal)} → ${ri.s.d.slice(5).replace("-","/")} 잔액 ${won(ri.s.bal)}`:""}<br>`
+    + (now!=null ? `그 사이 기록으로 설명되지 않는 차이: <b class="num">${now>0?"+":now<0?"−":""}${won(Math.abs(now))}</b><br>` : "")
+    + (t.lock ? `직접 고친 금액이라 자동으로 바뀌지 않습니다. <button type="button" class="btn small" id="reconAuto">자동 맞춤으로 되돌리기</button>` : `빠진 거래를 장부에 넣으면 이 금액은 자동으로 다시 계산됩니다. 금액을 직접 고쳐 저장하면 그 금액으로 고정됩니다.`);
+  const b=$("reconAuto"); if(b) b.onclick=async()=>{ const k=t.d.slice(0,7); months[k]=monthTx(k).map(x=>x.id===t.id?{...x,lock:false}:x); closeOv("txOv"); render(); try{ await saveMonth(k); }catch(_){} reconcileAll(); };
+}
 function openTx(ym, id){
   const t = ym&&id ? monthTx(ym).find(x=>x.id===id) : null;
   editing = t ? {ym, id} : null;
@@ -1484,6 +1531,7 @@ function openTx(ym, id){
   if(!t) autoEnt();
   $("iMx").value = t&&t.m==="기타" ? (t.mx||"") : ""; viaOptions($("iVia"), t&&t.m==="기타" ? (t.via||"") : "");
   fillMethods(); updateHint(!t);
+  showReconBox(t);
   if(t) $("iSettle").checked = t.st==="pending";
   openOv("txOv"); setTimeout(()=>$(t?"iDesc":"iAmt").focus(),30);
 }
@@ -1499,6 +1547,7 @@ $("txForm").onsubmit=async e=>{
   const tx = {...(base||{}), id: base?base.id:uid(), d, t:form.t, amt, desc:$("iDesc").value.trim(), cat:$("iCat").value, m: form.t==="move"?"":form.m, ent: form.t==="move"?"me":form.ent, src: base?base.src:"manual", ts: base&&base.ts?base.ts:Date.now()};
   if(form.t==="move"){ tx.from=$("iFrom").value; tx.to=$("iTo").value; delete tx.io; } else { delete tx.from; delete tx.to; delete tx.io; }
   if(form.t!=="move" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; } else { delete tx.mx; delete tx.via; }
+  if(base && isRecon(base) && (tx.amt!==base.amt || tx.t!==base.t)) tx.lock=true;
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
   if(eligible && !$("iSettle").checked && !(base&&base.settledOn)) tx.settledOn = todayISO();
