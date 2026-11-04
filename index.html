@@ -496,6 +496,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="f"><label for="iTo">받은 계좌</label><select id="iTo"></select></div>
       </div>
       <div class="f" id="methodRow"><span class="lbl" id="mLbl">결제수단</span><div class="methods" id="iMethods" role="group" aria-labelledby="mLbl"></div></div>
+      <div class="f" id="inAcctRow" hidden><span class="lbl" id="iaLbl">들어온 계좌</span><div class="methods" id="iAccts" role="group" aria-labelledby="iaLbl"></div></div>
       <div class="two" id="otherRow" hidden>
         <div class="f"><label for="iMx">수단 이름</label><input id="iMx" placeholder="예: 알리페이, 현지 현금"></div>
         <div class="f"><label for="iVia">실제로 돈이 나간 곳</label><select id="iVia"></select></div>
@@ -864,7 +865,7 @@ function renderLedger(tx){
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
     const st = t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "";
     const mv = t.t==="move" ? effects(t) : null;
-    const flow = t.t==="move" ? `<span class="flow">${esc((mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc((mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
+    const flow = t.t==="move" ? `<span class="flow">${esc((mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc((mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.t==="in" ? (NOT_ACCT(acct) ? `<span class="flow">입금 계좌 미지정</span>` : `<span class="flow">입금 → <b>${esc(acct)}</b></span>`) : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
     const cls = t.t==="in"?"in":t.t==="move"?"move":"";
     html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num"><b>${day}</b>${["일","월","화","수","목","금","토"][new Date((t.d||"")+"T00:00").getDay()]||""}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${cls}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${entChip}${st}<span>${esc(t.cat||"미분류")}</span><span>·</span>${flow}</div></button>`;
   });
@@ -1638,7 +1639,9 @@ $("iVia").onchange=()=>updateHint(true); $("iMx").oninput=()=>updateHint(false);
 function acctOptions(sel,val){ const names=[...new Set(accounts.list.map(a=>a.name).concat(config.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))]; sel.innerHTML=`<option value="">외부 (추적 안 함)</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(""); sel.value=val||""; }
 function updateHint(autoSettle){
   const t=form.t, m=methodOf(form.m);
-  $("moveRow").hidden = t!=="move"; $("methodRow").hidden = t==="move"; $("entRow").hidden = t==="move";
+  $("moveRow").hidden = t!=="move"; $("methodRow").hidden = t==="move" || t==="in"; $("entRow").hidden = t==="move"; $("inAcctRow").hidden = t!=="in";
+  if(t==="in"){ $("otherRow").hidden=true; $("settleRow").hidden=true; $("iCat").previousElementSibling.textContent="계정 (수입 항목)"; const h=$("flowHint"); h.className="hint"; const a0=+($("iAmt").value.replace(/[^\d]/g,""))||0;
+    h.innerHTML = form.ac ? `${a0?won(a0)+"이 ":""}<b>${esc(form.ac)}</b>(으)로 들어온 것으로 기록합니다. 계좌·자금 탭의 잔액에도 더해집니다.` : "들어온 계좌를 고르면 그 통장 잔액에도 반영됩니다."; return; }
   if(t==="move"){ $("settleRow").hidden=true; const f=$("iFrom").value, to=$("iTo").value; const h=$("flowHint"); h.className="hint"; h.innerHTML=`<b>${esc(f||"외부")}</b>에서 <b>${esc(to||"외부")}</b>로 옮긴 돈입니다. 수입·지출 합계에는 넣지 않고 계좌 잔액에만 반영합니다.`; return; }
   $("mLbl").textContent = t==="in" ? "입금 수단" : "결제수단";
   $("iCat").previousElementSibling.textContent = t==="in" ? "계정 (수입 항목)" : t==="move" ? "구분" : "계정 (지출 항목)";
@@ -1661,12 +1664,21 @@ function updateHint(autoSettle){
   else if(NOT_ACCT(rv.acct)) { h.className="hint warn"; h.innerHTML=`<b>${esc(m.name)}</b>이(가) 어느 계좌에서 나가는지 아직 연결되지 않았습니다. 결제수단·계정 설정에서 연결해 주세요.`; }
   else h.innerHTML=`${via}<b>${ac}</b>에서 ${amt?won(amt)+"이 ":""}빠져나갑니다${when}.`;
 }
-function setType(t){ form.t=t; segSet("typeSeg",t); fillCatSelect(t, ""); if(!form.entTouched) autoEnt(); updateHint(true); }
+function inAcctList(){ const main=mainAcct(); const names=acctNames(); return [main,...names.filter(n=>n!==main)].filter(n=>n && !NOT_ACCT(n)); }
+function fillAccts(){
+  const box=$("iAccts");
+  box.innerHTML=inAcctList().map(n=>{ const a=accounts.list.find(x=>x.name===n)||{}; const sub=instOf(a)||(KIND[a.kind]||""); return `<button type="button" data-v="${esc(n)}" aria-pressed="${n===form.ac?"true":"false"}">${esc(n)}<small>${esc(sub||" ")}</small></button>`; }).join("");
+  box.querySelectorAll("button").forEach(b=>b.onclick=()=>{ form.ac=b.dataset.v; fillAccts(); updateHint(false); });
+}
+/* 같은 수입 항목이 마지막으로 들어온 계좌를 기본으로 */
+function lastInAcct(cat){ let best=null; allTx().forEach(t=>{ if(t.t==="in" && t.cat===cat && !isRecon(t)){ const a=txAcct(t); if(!NOT_ACCT(a) && (!best || t.d>best.d)) best={d:t.d,a}; } }); return best ? best.a : ""; }
+function setType(t){ form.t=t; segSet("typeSeg",t); fillCatSelect(t, ""); if(!form.entTouched) autoEnt(); if(t==="in" && !form.ac){ form.ac=lastInAcct($("iCat").value)||mainAcct(); fillAccts(); } updateHint(true); }
 function autoEnt(){ const c=$("iCat").value; form.ent = (form.t==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me"; segSet("entInSeg",form.ent); }
 segBind("typeSeg", v=>setType(v));
 segBind("entInSeg", v=>{ form.ent=v; form.entTouched=true; updateHint(true); });
 $("iFrom").onchange=$("iTo").onchange=()=>updateHint(false);
 $("iCat").onchange=()=>{ form.entTouched=false; autoEnt();
+  if(form.t==="in" && !editing){ const la=lastInAcct($("iCat").value); if(la){ form.ac=la; fillAccts(); } }
   const bi = form.t==="out" ? itemFor($("iCat").value) : null;
   if(bi && bi.m && !form.m && !editing){ form.m=bi.m; fillMethods(); }
   updateHint(true); };
@@ -1686,7 +1698,7 @@ function openTx(ym, id){
   editing = t ? {ym, id} : null;
   $("txTitle").textContent = t ? "기록 수정" : "새 기록";
   $("delBtn").hidden = !t;
-  form = {t: t?t.t:"out", m: t?(t.m||""):"", ent: t?(t.ent==="corp"?"corp":"me"):"me", entTouched: !!t};
+  form = {t: t?t.t:"out", m: t?(t.m||""):"", ent: t?(t.ent==="corp"?"corp":"me"):"me", entTouched: !!t, ac: t&&t.t==="in" ? (t.ac || (NOT_ACCT(acctOf(t.m))?"":acctOf(t.m))) : ""};
   $("iDate").value = t ? t.d : (curYM===CUR_YM ? todayISO() : curYM+"-01");
   $("iAmt").value = t ? (+t.amt).toLocaleString("ko-KR") : "";
   $("iDesc").value = t ? (t.desc||"") : "";
@@ -1694,6 +1706,7 @@ function openTx(ym, id){
   { const ef = t && t.t==="move" ? effects(t) : []; acctOptions($("iFrom"), (ef.find(e=>e.v<0)||{}).acct || ""); acctOptions($("iTo"), (ef.find(e=>e.v>0)||{}).acct || ""); }
   if(!t) autoEnt();
   $("iMx").value = t&&t.m==="기타" ? (t.mx||"") : ""; viaOptions($("iVia"), t&&t.m==="기타" ? (t.via||"") : "");
+  if(!t){ form.ac=""; } fillAccts();
   fillMethods(); updateHint(!t);
   showReconBox(t);
   if(t) $("iSettle").checked = t.st==="pending";
@@ -1708,9 +1721,11 @@ $("txForm").onsubmit=async e=>{
   if(!d){ $("iDate").focus(); return; }
   const ym=d.slice(0,7);
   const base = editing ? monthTx(editing.ym).find(x=>x.id===editing.id) : null;
-  const tx = {...(base||{}), id: base?base.id:uid(), d, t:form.t, amt, desc:$("iDesc").value.trim(), cat:$("iCat").value, m: form.t==="move"?"":form.m, ent: form.t==="move"?"me":form.ent, src: base?base.src:"manual", ts: base&&base.ts?base.ts:Date.now()};
+  const tx = {...(base||{}), id: base?base.id:uid(), d, t:form.t, amt, desc:$("iDesc").value.trim(), cat:$("iCat").value, m: (form.t==="move"||form.t==="in")?"":form.m, ent: form.t==="move"?"me":form.ent, src: base?base.src:"manual", ts: base&&base.ts?base.ts:Date.now()};
   if(form.t==="move"){ tx.from=$("iFrom").value; tx.to=$("iTo").value; delete tx.io; } else { delete tx.from; delete tx.to; delete tx.io; }
-  if(form.t!=="move" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; } else { delete tx.mx; delete tx.via; }
+  if(form.t==="in"){ if(form.ac) tx.ac=form.ac; else delete tx.ac; delete tx.mx; delete tx.via; }
+  else if(base && base.t==="in" && !isRecon(base)) delete tx.ac;
+  if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; } else { delete tx.mx; delete tx.via; }
   if(base && isRecon(base) && (tx.amt!==base.amt || tx.t!==base.t)) tx.lock=true;
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
