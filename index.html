@@ -160,6 +160,14 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 
 .ledger-head{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;margin-bottom:10px}
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.weeks{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
+.weeks .wl{font-size:12px;color:var(--muted);margin-right:2px}
+.weeks button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:500;display:inline-flex;gap:5px;align-items:baseline}
+.weeks button small{font-size:11px;color:var(--muted);font-weight:400}
+.weeks button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.weeks button[aria-pressed="true"] small{color:var(--paper);opacity:.75}
+.weeks button:disabled{opacity:.4;cursor:default}
+.weeks .clr{border:0;background:none;color:var(--corp);text-decoration:underline;padding:4px 2px}
 .filters select,.filters input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;font-size:12.5px;max-width:100%}
 .ledger{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
 .row{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:2px 12px;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;align-items:center;background:none;border-left:0;border-right:0;border-top:0;width:100%;text-align:left}
@@ -386,6 +394,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
             <input id="fText" type="search" placeholder="적요 검색" aria-label="적요 검색">
           </div>
         </div>
+        <div class="weeks" id="wkBar" role="group" aria-label="주차로 보기"></div>
         <div id="ledgerWrap"></div>
       </section>
     </div>
@@ -741,7 +750,14 @@ let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 let months = {};            // ym -> [tx]
 let curYM = CUR_YM;
 let db = null, monthsRef = null, configRef = null;
-const view = {catEnt:"all", ent:"all", method:"", cat:"", text:""};
+const view = {catEnt:"all", ent:"all", method:"", cat:"", text:"", weeks:new Set(), wkYM:""};
+/* 주차: 월요일 시작. 1주차는 1일부터 첫 일요일까지 */
+function weeksOf(ym){
+  const [y,m]=ym.split("-").map(Number), L=lastDay(y,m), out=[]; let d=1;
+  while(d<=L){ const dw=(new Date(y,m-1,d).getDay()+6)%7; const end=Math.min(L, d+(6-dw)); out.push({n:out.length+1, from:d, to:end}); d=end+1; }
+  return out;
+}
+function weekOfDay(ym, day){ const w=weeksOf(ym).find(w=>day>=w.from&&day<=w.to); return w?w.n:0; }
 let editing = null;         // {ym, id} | null
 let form = {t:"out", m:"", ent:"me", entTouched:false};
 let staged = null;          // parsed import
@@ -914,12 +930,26 @@ function renderFilters(tx){
 function renderLedger(tx){
   const wrap=$("ledgerWrap");
   const anyData=Object.keys(months).some(k=>monthTx(k).length);
+  if(view.wkYM!==curYM){ view.weeks.clear(); view.wkYM=curYM; }
   let list = view.ent==="pending" ? allPending() : tx.slice();
   if(view.ent==="corp") list=list.filter(t=>t.ent==="corp");
   if(view.ent==="me") list=list.filter(t=>t.ent!=="corp");
   if(view.method) list=list.filter(t=>t.m===view.method);
   if(view.cat) list=list.filter(t=>t.cat===view.cat);
   if(view.text){ const q=view.text.toLowerCase(); list=list.filter(t=>(t.desc||"").toLowerCase().includes(q)||(t.cat||"").toLowerCase().includes(q)); }
+  // 주차 버튼: 다른 조건을 적용한 뒤의 주별 건수를 보여 주고, 켠 주차만 남깁니다
+  const wb=$("wkBar");
+  if(view.ent==="pending"){ wb.hidden=true; }
+  else {
+    wb.hidden=false;
+    const ws=weeksOf(curYM), cnt={}; list.forEach(t=>{ const n=weekOfDay(curYM,+t.d.slice(8,10)); cnt[n]=(cnt[n]||0)+1; });
+    const today=todayISO(), thisW = today.slice(0,7)===curYM ? weekOfDay(curYM,+today.slice(8,10)) : 0;
+    wb.innerHTML=`<span class="wl">주차</span>`+ws.map(w=>`<button type="button" data-w="${w.n}" aria-pressed="${view.weeks.has(w.n)}" ${cnt[w.n]||view.weeks.has(w.n)?"":"disabled"} title="${+curYM.slice(5)}월 ${w.from}~${w.to}일">${w.n}주${w.n===thisW?"·이번":""} <small>${w.from}~${w.to}일 · ${cnt[w.n]||0}건</small></button>`).join("")
+      + (view.weeks.size?`<button type="button" class="clr" id="wkClr">전체 보기</button>`:"");
+    wb.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{ const n=+b.dataset.w; view.weeks.has(n)?view.weeks.delete(n):view.weeks.add(n); render(); });
+    if($("wkClr")) $("wkClr").onclick=()=>{ view.weeks.clear(); render(); };
+    if(view.weeks.size) list=list.filter(t=>view.weeks.has(weekOfDay(curYM,+t.d.slice(8,10))));
+  }
   list.sort((a,b)=> (b.d||"").localeCompare(a.d||"") || ((b.ts||0)-(a.ts||0)));
   if(!anyData){
     wrap.innerHTML=`<div class="welcome"><h3>아직 장부가 비어 있습니다</h3><p>구글 드라이브의 월별 가계부(‘거래’ 시트)를 불러오면 2월부터 지금까지의 기록이 법인·개인, 결제수단, 출금 계좌별로 정리됩니다. 오늘 쓴 돈은 아래 <b>+ 기록하기</b>로 바로 입력할 수 있습니다.</p><button class="btn primary" id="welcomeImp">가계부 불러오기</button></div>`;
