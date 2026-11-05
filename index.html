@@ -98,7 +98,10 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-
 .cat-edit{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-top:1px dashed var(--line);background:var(--surface)}
 .cat-edit input,.cat-edit select{flex:1 1 200px;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px 8px;background:var(--paper);color:var(--ink)}
 [data-dt]{cursor:pointer}
-#dtOv{z-index:31} #txOv{z-index:32}
+#dtOv{z-index:31} #stOv{z-index:31} #txOv{z-index:32}
+.st-row{display:grid;grid-template-columns:auto 52px minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.st-row input{width:18px;height:18px}
+.st-row .meta{grid-column:3/-1;font-size:12px;color:var(--muted)}
 .cnt-link{color:var(--corp);text-decoration:underline;text-underline-offset:3px}
 .bar[data-dt]{border-radius:6px;padding:3px 4px;margin:-3px -4px}
 .bar[data-dt]:hover,tr[data-dt]:hover td,td[data-dt]:hover{background:var(--sunk)}
@@ -497,6 +500,28 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 </div>
 
 <button class="fab" id="fab">+ 기록하기</button>
+
+<!-- 법인 정산 입금 -->
+<div class="overlay" id="stOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="stTitle">
+    <h3><span id="stTitle">법인 정산 입금 기록</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form">
+      <p class="hint" style="margin:0">개인 카드·현금으로 먼저 낸 법인 비용을 법인통장에서 돌려받은 것을 기록합니다. 고른 건들은 <b>정산 완료</b>가 되고, <b>법인통장 → 받은 통장</b> 이체가 하나 생깁니다. 비용은 쓴 날 이미 법인 지출로 잡혀 있으므로, 이 이체는 수입·지출 합계에 다시 넣지 않고 두 통장 잔액에만 반영합니다.</p>
+      <div class="two">
+        <div class="f"><label for="stDate">입금일</label><input id="stDate" type="date"></div>
+        <div class="f"><label for="stAmt">실제로 받은 금액 (원)</label><input id="stAmt" class="big" inputmode="numeric"></div>
+      </div>
+      <div class="two">
+        <div class="f"><label for="stFrom">보낸 계좌</label><select id="stFrom"></select></div>
+        <div class="f"><label for="stTo">받은 계좌</label><select id="stTo"></select></div>
+      </div>
+      <div class="actions" style="margin:0"><span class="hint" style="background:none;padding:0" id="stSel"></span><div class="r"><button type="button" class="btn small" id="stAll">모두 고르기</button><button type="button" class="btn small" id="stNone">모두 풀기</button></div></div>
+      <div class="ledger" id="stList"></div>
+      <div class="hint warn" id="stDiff" hidden></div>
+      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="stSave">정산 입금 기록</button></div></div>
+    </div>
+  </div>
+</div>
 
 <!-- 항목 상세 팝업 -->
 <div class="overlay" id="dtOv" hidden>
@@ -901,6 +926,7 @@ function renderLedger(tx){
     $("welcomeImp").onclick=openImport; return;
   }
   if(!list.length){ wrap.innerHTML=`<div class="ledger"><div class="foot">조건에 맞는 기록이 없습니다.</div></div>`; return; }
+  const stBar = view.ent==="pending" ? `<div class="actions" style="margin:0 0 10px"><span class="hint" style="background:none;padding:0">개인 카드·현금으로 먼저 낸 법인 비용입니다. 법인에서 돌려받았으면 기록하세요.</span><div class="r"><button type="button" class="btn primary small" id="stOpen2">정산 입금 기록</button></div></div>` : "";
   let html=`<div class="ledger">`, lastDay=null, showDay=view.ent!=="pending";
   list.forEach(t=>{
     const ym=(t.d||"").slice(0,7), day=+(t.d||"").slice(8,10)||"";
@@ -916,7 +942,8 @@ function renderLedger(tx){
   });
   const shown=sumOf(list.filter(t=>t.t==="out")), shownIn=sumOf(list.filter(t=>t.t==="in"));
   html+=`<div class="foot"><span>${list.length}건 표시</span><span class="num">지출 ${won(shown)}${shownIn?" · 수입 "+won(shownIn):""}</span></div></div>`;
-  wrap.innerHTML=html;
+  wrap.innerHTML=stBar+html;
+  if($("stOpen2")) $("stOpen2").onclick=openSettle;
   wrap.querySelectorAll(".row").forEach(b=>b.onclick=()=>openTx(b.dataset.ym,b.dataset.id));
 }
 
@@ -1535,19 +1562,48 @@ $("bAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,
 $("balBtn").onclick=()=>openBal();
 
 /* 정산 입금: 대기 중인 법인 비용을 한 번에 정산 처리 */
-$("settleBtn").onclick=async()=>{
-  const pend=allPending(); const b=$("settleBtn");
-  if(!pend.length){ b.textContent="정산 대기 없음"; setTimeout(()=>b.textContent="정산 입금 기록",2000); return; }
-  if(b.dataset.c!=="1"){ b.dataset.c="1"; b.textContent=`${won(sumOf(pend))} 정산 입금으로 기록할까요? 한 번 더 누르기`; setTimeout(()=>{ b.dataset.c=""; b.textContent="정산 입금 기록"; },4000); return; }
-  b.dataset.c=""; b.textContent="정산 입금 기록";
-  const d=todayISO(), ym=d.slice(0,7), total=sumOf(pend);
-  const touched=new Set([ym]);
-  pend.forEach(t=>{ const k=t.d.slice(0,7); months[k]=monthTx(k).map(x=>x.id===t.id?{...x,st:"done",settledOn:d}:x); touched.add(k); });
-  const to=mainAcct();
-  months[ym]=monthTx(ym).concat([{id:uid(), d, t:"move", amt:total, desc:`법인 정산 입금 (${pend.length}건)`, cat:"법인 정산", m:"", from:"법인통장", to, ent:"me", src:"manual", ts:Date.now()}]);
-  render();
-  await saveMonths(touched);
+/* 법인 정산: 고른 정산 대기 건을 정산 완료로 바꾸고, 법인통장 → 받은 통장 이체를 하나 남깁니다.
+   이체에는 settles(정산한 거래 id)를, 거래에는 settledBy(이체 id)를 적어 두어 이체를 지우면 다시 정산 대기로 돌아갑니다. */
+let stSel=new Set(), stAmtTouched=false;
+function corpAcct(){ return (config.methods.find(m=>m.code==="지통")||{}).acct || "법인통장"; }
+function openSettle(){
+  const pend=allPending().sort((a,b)=>a.d.localeCompare(b.d));
+  stSel=new Set(pend.map(t=>t.id)); stAmtTouched=false;
+  $("stDate").value=todayISO();
+  acctOptions($("stFrom"), corpAcct()); acctOptions($("stTo"), mainAcct());
+  renderSettle(); openOv("stOv");
+}
+function renderSettle(){
+  const pend=allPending().sort((a,b)=>a.d.localeCompare(b.d));
+  if(!pend.length){ $("stList").innerHTML=`<div class="foot">정산 대기 중인 법인 비용이 없습니다.</div>`; $("stSel").textContent=""; $("stSave").disabled=true; $("stAmt").value=""; $("stDiff").hidden=true; return; }
+  let html="", last=null;
+  pend.forEach(t=>{ const ym=t.d.slice(0,7); if(ym!==last){ html+=`<div class="daysep">${+ym.slice(5)}월 · ${ym.slice(0,4)}</div>`; last=ym; }
+    html+=`<label class="st-row"><input type="checkbox" data-id="${esc(t.id)}" ${stSel.has(t.id)?"checked":""}><span class="num" style="font-size:12.5px;color:var(--muted)">${t.d.slice(5).replace("-","/")}</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${esc(t.desc||"(적요 없음)")}</span><span class="num" style="font-weight:600">${won(t.amt)}</span><span class="meta">${esc(t.cat||"")} · ${txMethodTxt(t)} → ${esc(txAcct(t))}</span></label>`; });
+  $("stList").innerHTML=html;
+  $("stList").querySelectorAll("input[data-id]").forEach(c=>c.onchange=()=>{ c.checked?stSel.add(c.dataset.id):stSel.delete(c.dataset.id); renderSettle(); });
+  const sel=pend.filter(t=>stSel.has(t.id)), tot=sumOf(sel);
+  $("stSel").innerHTML=`<b>${sel.length}건 · ${won(tot)}</b> 골랐습니다 (대기 전체 ${pend.length}건 · ${won(sumOf(pend))})`;
+  if(!stAmtTouched) $("stAmt").value = tot ? tot.toLocaleString("ko-KR") : "";
+  const got=+($("stAmt").value.replace(/[^\d]/g,""))||0;
+  $("stDiff").hidden = !got || got===tot;
+  $("stDiff").innerHTML = got>tot ? `받은 금액이 고른 건 합계보다 <b>${won(got-tot)}</b> 많습니다. 빠진 건이 있는지 확인해 주세요. 그대로 저장하면 받은 금액대로 이체를 기록합니다.` : `받은 금액이 고른 건 합계보다 <b>${won(tot-got)}</b> 적습니다. 일부만 받았다면 받은 만큼의 건만 고르는 것이 정확합니다. 그대로 저장하면 받은 금액대로 이체를 기록합니다.`;
+  $("stSave").disabled = !sel.length || !got;
+}
+$("stAmt").addEventListener("input",e=>{ stAmtTouched=true; const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; renderSettle(); });
+$("stAll").onclick=()=>{ allPending().forEach(t=>stSel.add(t.id)); stAmtTouched=false; renderSettle(); };
+$("stNone").onclick=()=>{ stSel.clear(); stAmtTouched=false; renderSettle(); };
+$("stSave").onclick=async()=>{
+  const sel=allPending().filter(t=>stSel.has(t.id)); if(!sel.length) return;
+  const d=$("stDate").value||todayISO(), ym=d.slice(0,7), amt=+($("stAmt").value.replace(/[^\d]/g,""))||sumOf(sel);
+  const from=$("stFrom").value||corpAcct(), to=$("stTo").value||mainAcct(), mid=uid();
+  const mons=[...new Set(sel.map(t=>+t.d.slice(5,7)))].sort((a,b)=>a-b).map(m=>m+"월").join("·");
+  const touched=new Set([ym]); const ids=new Set(sel.map(t=>t.id));
+  Object.keys(months).forEach(k=>{ if(monthTx(k).some(x=>ids.has(x.id))){ months[k]=monthTx(k).map(x=>ids.has(x.id)?{...x,st:"done",settledOn:d,settledBy:mid}:x); touched.add(k); } });
+  months[ym]=monthTx(ym).concat([{id:mid, d, t:"move", amt, desc:`법인 정산 입금 (${mons} ${sel.length}건)`, cat:"법인 정산", m:"", from, to, ent:"me", src:"manual", settles:[...ids], ts:Date.now()}]);
+  closeOv("stOv"); render(); await saveMonths(touched);
+  showNotice(`정산 ${sel.length}건을 완료로 바꾸고 ${from} → ${to} ${won(amt)} 이체를 기록했습니다.`);
 };
+$("settleBtn").onclick=openSettle;
 
 /* 계좌 편집 */
 let aDraft=null;
@@ -1875,8 +1931,16 @@ $("delBtn").onclick=async()=>{
   const b=$("delBtn");
   if(b.dataset.confirm!=="1"){ b.dataset.confirm="1"; b.textContent="한 번 더 누르면 삭제"; setTimeout(()=>{ b.dataset.confirm=""; b.textContent="삭제"; },3000); return; }
   b.dataset.confirm=""; b.textContent="삭제";
-  months[editing.ym]=monthTx(editing.ym).filter(x=>x.id!==editing.id); const ym=editing.ym; closeOv("txOv"); render();
-  try{ await saveMonth(ym); }catch(_){}
+  const gone=monthTx(editing.ym).find(x=>x.id===editing.id);
+  months[editing.ym]=monthTx(editing.ym).filter(x=>x.id!==editing.id); const ym=editing.ym;
+  const touched=new Set([ym]);
+  if(gone && Array.isArray(gone.settles) && gone.settles.length){
+    const ids=new Set(gone.settles);
+    Object.keys(months).forEach(k=>{ if(monthTx(k).some(x=>ids.has(x.id)&&x.settledBy===gone.id)){ months[k]=monthTx(k).map(x=>{ if(!(ids.has(x.id)&&x.settledBy===gone.id)) return x; const r={...x,st:"pending"}; delete r.settledBy; delete r.settledOn; return r; }); touched.add(k); } });
+    showNotice(`정산 이체를 지워 ${gone.settles.length}건을 다시 정산 대기로 돌렸습니다.`);
+  }
+  closeOv("txOv"); render();
+  await saveMonths(touched);
 };
 
 /* ---------- 설정 ---------- */
