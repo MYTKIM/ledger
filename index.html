@@ -751,10 +751,10 @@ let months = {};            // ym -> [tx]
 let curYM = CUR_YM;
 let db = null, monthsRef = null, configRef = null;
 const view = {catEnt:"all", ent:"all", method:"", cat:"", text:"", weeks:new Set(), wkYM:""};
-/* 주차: 월요일 시작. 1주차는 1일부터 첫 일요일까지 */
+/* 주차: 달력처럼 일요일 시작. 1주차는 1일부터 첫 토요일까지 */
 function weeksOf(ym){
   const [y,m]=ym.split("-").map(Number), L=lastDay(y,m), out=[]; let d=1;
-  while(d<=L){ const dw=(new Date(y,m-1,d).getDay()+6)%7; const end=Math.min(L, d+(6-dw)); out.push({n:out.length+1, from:d, to:end}); d=end+1; }
+  while(d<=L){ const dw=new Date(y,m-1,d).getDay(); const end=Math.min(L, d+(6-dw)); out.push({n:out.length+1, from:d, to:end}); d=end+1; }
   return out;
 }
 function weekOfDay(ym, day){ const w=weeksOf(ym).find(w=>day>=w.from&&day<=w.to); return w?w.n:0; }
