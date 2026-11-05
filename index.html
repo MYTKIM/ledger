@@ -98,6 +98,8 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-
 .cat-edit{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-top:1px dashed var(--line);background:var(--surface)}
 .cat-edit input,.cat-edit select{flex:1 1 200px;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px 8px;background:var(--paper);color:var(--ink)}
 [data-dt]{cursor:pointer}
+#dtOv{z-index:31} #txOv{z-index:32}
+.cnt-link{color:var(--corp);text-decoration:underline;text-underline-offset:3px}
 .bar[data-dt]{border-radius:6px;padding:3px 4px;margin:-3px -4px}
 .bar[data-dt]:hover,tr[data-dt]:hover td,td[data-dt]:hover{background:var(--sunk)}
 tr[data-dt] td:first-child{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
@@ -828,6 +830,7 @@ function render(){
   if(!$("budView").hidden) renderBud();
   if(!reconBusy) scheduleRecon();
   if(dtl && !$("dtOv").hidden) renderDetail();
+  if(!$("catOv").hidden) renderCats();
 }
 
 function renderTrend(){
@@ -1634,6 +1637,7 @@ function catKnown(type){
   budgets.items.forEach(b=>{ if(b.key && typeOfKey(b.key)===type) set.add(b.key.slice(2)); });
   return [...set].filter(Boolean);
 }
+function allYms(){ return Object.keys(months).filter(k=>monthTx(k).length).sort(); }
 function catUse(type){ const u={}; allTx().forEach(t=>{ if(t.cat && (type==="in"?t.t==="in":t.t==="out")) u[t.cat]=(u[t.cat]||0)+1; }); return u; }
 function catMsg(h,warn){ const m=$("catMsg"); m.hidden=!h; m.className="hint"+(warn?" warn":""); m.innerHTML=h||""; }
 function renderCats(){
@@ -1648,9 +1652,9 @@ function renderCats(){
       if(sg.length>=3 && sg[1]!==lastSub){ lastSub=sg[1]; const sp=sg.slice(0,2).join("-"); rows+=`<div class="cat-sub">${esc(sg[1])} <span class="acts" style="margin-left:auto">${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div>`; }
       else if(sg.length<3) lastSub=null;
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : "(그룹 자체)";
-      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span><span class="cnt">${use[c]?use[c]+"건":"기록 없음"}</span><span class="acts">${btn("edit",c,"고치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})}>${use[c]}건</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts">${btn("edit",c,"고치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
     });
-    return `<div class="cat-g"><div class="cat-h"><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n}건</span><span class="acts">${btn("addin",g,"하위 추가")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div>${rows}</div>`;
+    return `<div class="cat-g"><div class="cat-h"><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n?`<span class="cnt-link"${dtAttr({k:"cat",v:list,t:type,ym:allYms(),lbl:g+" 전체"})}>${n}건</span>`:"0건"}</span><span class="acts">${btn("addin",g,"하위 추가")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div>${rows}</div>`;
   }).join("") || `<div class="hint">계정이 없습니다.</div>`;
   $("catTree").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>catAction(b.dataset.act, b.dataset.arg, b));
 }
