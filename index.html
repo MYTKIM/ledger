@@ -569,6 +569,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       </div>
       <div class="f" id="methodRow"><span class="lbl" id="mLbl">결제수단</span><div class="methods" id="iMethods" role="group" aria-labelledby="mLbl"></div></div>
       <div class="f" id="inAcctRow" hidden><span class="lbl" id="iaLbl">들어온 계좌</span><div class="methods" id="iAccts" role="group" aria-labelledby="iaLbl"></div></div>
+      <div class="f" id="inFromRow" hidden><label for="iFromAc">보낸 곳</label><select id="iFromAc"></select></div>
       <div class="two" id="otherRow" hidden>
         <div class="f"><label for="iMx">수단 이름</label><input id="iMx" placeholder="예: 알리페이, 현지 현금"></div>
         <div class="f"><label for="iVia">실제로 돈이 나간 곳</label><select id="iVia"></select></div>
@@ -799,7 +800,10 @@ function effDate(t){
 function effects(t){
   const a=+t.amt||0;
   if(t.t==="out") return [{acct:txAcct(t), d:effDate(t), v:-a, card:effDate(t)!==t.d}];
-  if(t.t==="in") return [{acct:txAcct(t), d:t.d, v:a}];
+  if(t.t==="in"){ const r=[{acct:txAcct(t), d:t.d, v:a}];
+    /* 가족 계좌에서 받은 수입(예: 아내 저수지통장 → 저수지통장 생활비): 수입으로 잡되 보낸 계좌 잔액에서도 뺍니다 */
+    if(t.fromAc && !NOT_ACCT(t.fromAc) && t.fromAc!==r[0].acct) r.push({acct:t.fromAc, d:t.d, v:-a});
+    return r; }
   const from = t.from!==undefined ? t.from : (t.io==="in" ? "" : acctOf(t.m));
   const to = t.to!==undefined ? t.to : (t.io==="in" ? acctOf(t.m) : "");
   return [{acct:from,d:t.d,v:-a},{acct:to,d:t.d,v:a}].filter(e=>!NOT_ACCT(e.acct));
@@ -973,7 +977,7 @@ function renderLedger(tx){
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
     const st = t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "";
     const mv = t.t==="move" ? effects(t) : null;
-    const flow = t.t==="move" ? `<span class="flow">${esc((mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc((mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.t==="in" ? (NOT_ACCT(acct) ? `<span class="flow">입금 계좌 미지정</span>` : `<span class="flow">입금 → <b>${esc(acct)}</b></span>`) : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
+    const flow = t.t==="move" ? `<span class="flow">${esc((mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc((mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.t==="in" ? (NOT_ACCT(acct) ? `<span class="flow">입금 계좌 미지정</span>` : `<span class="flow">${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}<b>${esc(acct)}</b></span>`) : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
     const cls = t.t==="in"?"in":t.t==="move"?"move":"";
     html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num"><b>${day}</b>${["일","월","화","수","목","금","토"][new Date((t.d||"")+"T00:00").getDay()]||""}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${cls}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${entChip}${st}<span>${esc(t.cat||"미분류")}</span><span>·</span>${flow}</div></button>`;
   });
@@ -1513,7 +1517,7 @@ function passbookHTML(name){
     const sign=x.v>0?"+":"−", amt=`<span class="v num ${x.v>0?"p":""}">${sign}${won(Math.abs(x.v))}</span>`, r=`<span class="r num">잔액 ${won(x.bal)}</span>`;
     if(x.kind==="card") return `<li><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}${r}</li>`;
     const t=x.t, lbl = x.kind==="rc" ? "잔액 맞춤" : esc(t.desc||t.cat||"(적요 없음)");
-    const sub = x.kind==="rc" ? `${esc(t.cat||"")} · ${t.lock?"직접 고친 금액":"설명 안 되는 차이"}` : t.t==="move" ? `${esc(t.from||"")} → ${esc(t.to||"")}` : esc(t.cat||"");
+    const sub = x.kind==="rc" ? `${esc(t.cat||"")} · ${t.lock?"직접 고친 금액":"설명 안 되는 차이"}` : t.t==="move" ? `${esc(t.from||"")} → ${esc(t.to||"")}` : t.fromAc ? `${esc(t.cat||"")} · ${esc(t.fromAc)} → ${esc(txAcct(t))}` : esc(t.cat||"");
     return `<li data-ym="${t.d.slice(0,7)}" data-id="${esc(t.id)}" class="${x.kind==="rc"?"rc":""}"><span class="d">${d}</span><span class="l">${lbl}</span>${amt}<span class="s">${sub}</span>${r}</li>`;
   }).join("");
   const n=rows.filter(x=>x.kind!=="snap").length;
@@ -1736,7 +1740,7 @@ function renderDetail(){
   list.forEach(t=>{
     const ym=t.d.slice(0,7); if(multi && ym!==last){ html+=`<div class="daysep">${+ym.slice(5)}월 · ${ym.slice(0,4)}</div>`; last=ym; }
     const acct=txAcct(t);
-    const flow = t.t==="in" ? (NOT_ACCT(acct)?"입금 계좌 미지정":`입금 → ${esc(acct)}`) : t.m ? `${txMethodTxt(t)} → ${esc(acct)}` : t.ac ? `계좌 → ${esc(t.ac)}` : "결제수단 미지정";
+    const flow = t.t==="in" ? (NOT_ACCT(acct)?"입금 계좌 미지정":`${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}${esc(acct)}`) : t.m ? `${txMethodTxt(t)} → ${esc(acct)}` : t.ac ? `계좌 → ${esc(t.ac)}` : "결제수단 미지정";
     html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num"><b>${+t.d.slice(8,10)}</b>${["일","월","화","수","목","금","토"][new Date(t.d+"T00:00").getDay()]}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${t.t==="in"?"in":""}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${t.ent==="corp"?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}${t.st==="pending"?'<span class="chip warn">정산 대기</span>':""}${t.src==="sched"?'<span class="chip plain">예약 집행</span>':""}${isRecon(t)?'<span class="chip plain">잔액 맞춤</span>':""}<span>${esc(t.cat||"미분류")}</span><span>·</span><span class="flow">${flow}</span></div></button>`;
   });
   html+=`<div class="foot"><span>${list.length}건</span><span class="num">합계 ${won(tot)}</span></div>`;
@@ -1907,9 +1911,13 @@ $("iVia").onchange=()=>updateHint(true); $("iMx").oninput=()=>updateHint(false);
 function acctOptions(sel,val){ const names=[...new Set(accounts.list.map(a=>a.name).concat(config.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))]; sel.innerHTML=`<option value="">외부 (추적 안 함)</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(""); sel.value=val||""; }
 function updateHint(autoSettle){
   const t=form.t, m=methodOf(form.m);
-  $("moveRow").hidden = t!=="move"; $("methodRow").hidden = t==="move" || t==="in"; $("entRow").hidden = t==="move"; $("inAcctRow").hidden = t!=="in";
+  $("moveRow").hidden = t!=="move"; $("methodRow").hidden = t==="move" || t==="in"; $("entRow").hidden = t==="move"; $("inAcctRow").hidden = t!=="in"; $("inFromRow").hidden = t!=="in";
   if(t==="in"){ $("otherRow").hidden=true; $("settleRow").hidden=true; $("iCat").previousElementSibling.textContent="계정 (수입 항목)"; const h=$("flowHint"); h.className="hint"; const a0=+($("iAmt").value.replace(/[^\d]/g,""))||0;
-    h.innerHTML = form.ac ? `${a0?won(a0)+"이 ":""}<b>${esc(form.ac)}</b>(으)로 들어온 것으로 기록합니다. 계좌·자금 탭의 잔액에도 더해집니다.` : "들어온 계좌를 고르면 그 통장 잔액에도 반영됩니다."; return; }
+    const fa=$("iFromAc").value;
+    h.innerHTML = (form.ac ? `${a0?won(a0)+"이 ":""}<b>${esc(form.ac)}</b>(으)로 들어온 것으로 기록합니다. 계좌·자금 탭의 잔액에도 더해집니다.` : "들어온 계좌를 고르면 그 통장 잔액에도 반영됩니다.")
+      + (fa ? `<br><b>${esc(fa)}</b> 잔액에서는 같은 금액이 빠집니다. 수입 합계와 예산에는 수입으로 잡힙니다.` : "");
+    if(fa && fa===form.ac){ h.className="hint warn"; h.innerHTML="보낸 곳과 들어온 계좌가 같습니다. 다른 계좌를 골라 주세요."; }
+    return; }
   if(t==="move"){ $("settleRow").hidden=true; const f=$("iFrom").value, to=$("iTo").value; const h=$("flowHint"); h.className="hint"; h.innerHTML=`<b>${esc(f||"외부")}</b>에서 <b>${esc(to||"외부")}</b>로 옮긴 돈입니다. 수입·지출 합계에는 넣지 않고 계좌 잔액에만 반영합니다.`; return; }
   $("mLbl").textContent = t==="in" ? "입금 수단" : "결제수단";
   $("iCat").previousElementSibling.textContent = t==="in" ? "계정 (수입 항목)" : t==="move" ? "구분" : "계정 (지출 항목)";
@@ -1938,15 +1946,18 @@ function fillAccts(){
   box.innerHTML=inAcctList().map(n=>{ const a=accounts.list.find(x=>x.name===n)||{}; const sub=instOf(a)||(KIND[a.kind]||""); return `<button type="button" data-v="${esc(n)}" aria-pressed="${n===form.ac?"true":"false"}">${esc(n)}<small>${esc(sub||" ")}</small></button>`; }).join("");
   box.querySelectorAll("button").forEach(b=>b.onclick=()=>{ form.ac=b.dataset.v; fillAccts(); updateHint(false); });
 }
+function fillFromAc(val){ const sel=$("iFromAc"); sel.innerHTML=`<option value="">밖에서 들어온 돈 (보낸 계좌 없음)</option>`+inAcctList().map(n=>`<option value="${esc(n)}">내 계좌에서 옮김 · ${esc(n)}</option>`).join(""); sel.value=val||""; }
+function lastFromAc(cat){ let best=null; allTx().forEach(t=>{ if(t.t==="in" && t.cat===cat && !isRecon(t) && (!best || t.d>best.d)) best={d:t.d,a:t.fromAc||""}; }); return best ? best.a : ""; }
+$("iFromAc").onchange=()=>updateHint(false);
 /* 같은 수입 항목이 마지막으로 들어온 계좌를 기본으로 */
 function lastInAcct(cat){ let best=null; allTx().forEach(t=>{ if(t.t==="in" && t.cat===cat && !isRecon(t)){ const a=txAcct(t); if(!NOT_ACCT(a) && (!best || t.d>best.d)) best={d:t.d,a}; } }); return best ? best.a : ""; }
-function setType(t){ form.t=t; segSet("typeSeg",t); fillCatSelect(t, ""); if(!form.entTouched) autoEnt(); if(t==="in" && !form.ac){ form.ac=lastInAcct($("iCat").value)||mainAcct(); fillAccts(); } updateHint(true); }
+function setType(t){ form.t=t; segSet("typeSeg",t); fillCatSelect(t, ""); if(!form.entTouched) autoEnt(); if(t==="in" && !form.ac){ form.ac=lastInAcct($("iCat").value)||mainAcct(); fillAccts(); } if(t==="in" && !editing) fillFromAc(lastFromAc($("iCat").value)); updateHint(true); }
 function autoEnt(){ const c=$("iCat").value; form.ent = (form.t==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me"; segSet("entInSeg",form.ent); }
 segBind("typeSeg", v=>setType(v));
 segBind("entInSeg", v=>{ form.ent=v; form.entTouched=true; updateHint(true); });
 $("iFrom").onchange=$("iTo").onchange=()=>updateHint(false);
 $("iCat").onchange=()=>{ form.entTouched=false; autoEnt();
-  if(form.t==="in" && !editing){ const la=lastInAcct($("iCat").value); if(la){ form.ac=la; fillAccts(); } }
+  if(form.t==="in" && !editing){ const la=lastInAcct($("iCat").value); if(la){ form.ac=la; fillAccts(); } fillFromAc(lastFromAc($("iCat").value)); }
   const bi = form.t==="out" ? itemFor($("iCat").value) : null;
   if(bi && bi.m && !form.m && !editing){ form.m=bi.m; fillMethods(); }
   updateHint(true); };
@@ -1974,7 +1985,7 @@ function openTx(ym, id){
   { const ef = t && t.t==="move" ? effects(t) : []; acctOptions($("iFrom"), (ef.find(e=>e.v<0)||{}).acct || ""); acctOptions($("iTo"), (ef.find(e=>e.v>0)||{}).acct || ""); }
   if(!t) autoEnt();
   $("iMx").value = t&&t.m==="기타" ? (t.mx||"") : ""; viaOptions($("iVia"), t&&t.m==="기타" ? (t.via||"") : "");
-  if(!t){ form.ac=""; } fillAccts();
+  if(!t){ form.ac=""; } fillAccts(); fillFromAc(t&&t.t==="in" ? (t.fromAc||"") : "");
   fillMethods(); updateHint(!t);
   showReconBox(t);
   if(t) $("iSettle").checked = t.st==="pending";
@@ -1991,8 +2002,8 @@ $("txForm").onsubmit=async e=>{
   const base = editing ? monthTx(editing.ym).find(x=>x.id===editing.id) : null;
   const tx = {...(base||{}), id: base?base.id:uid(), d, t:form.t, amt, desc:$("iDesc").value.trim(), cat:$("iCat").value, m: (form.t==="move"||form.t==="in")?"":form.m, ent: form.t==="move"?"me":form.ent, src: base?base.src:"manual", ts: base&&base.ts?base.ts:Date.now()};
   if(form.t==="move"){ tx.from=$("iFrom").value; tx.to=$("iTo").value; delete tx.io; } else { delete tx.from; delete tx.to; delete tx.io; }
-  if(form.t==="in"){ if(form.ac) tx.ac=form.ac; else delete tx.ac; delete tx.mx; delete tx.via; }
-  else if(base && base.t==="in" && !isRecon(base)) delete tx.ac;
+  if(form.t==="in"){ if(form.ac) tx.ac=form.ac; else delete tx.ac; delete tx.mx; delete tx.via; const fa=$("iFromAc").value; if(fa && fa!==form.ac && !isRecon(tx)) tx.fromAc=fa; else delete tx.fromAc; }
+  else { delete tx.fromAc; if(base && base.t==="in" && !isRecon(base)) delete tx.ac; }
   if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; } else { delete tx.mx; delete tx.via; }
   if(base && isRecon(base) && (tx.amt!==base.amt || tx.t!==base.t)) tx.lock=true;
   const eligible = needsSettle(tx);
