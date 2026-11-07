@@ -309,6 +309,13 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .acc details summary{cursor:pointer;color:var(--muted)}
 .acc details ul{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:2px}
 .acc details li{display:flex;justify-content:space-between;gap:8px}
+.pb{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:0;max-height:340px;overflow:auto}
+.acc details .pb li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:2px 8px;padding:5px 2px;border-top:1px solid var(--line);align-items:baseline}
+.pb li[data-id]{cursor:pointer} .pb li[data-id]:hover{background:var(--sunk)}
+.pb .d{color:var(--muted);font-size:12px} .pb .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pb .v{text-align:right;font-weight:600} .pb .v.p{color:var(--in)} .pb .r{grid-column:3;text-align:right;font-size:11.5px;color:var(--muted)}
+.pb li.snap{background:var(--sunk);border-radius:6px;border-top-color:transparent} .pb li.snap .l{font-weight:600}
+.pb li.rc .l{color:var(--warn)} .pb .s{grid-column:2;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .acc .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .acc.need{border-style:dashed}
 .diffbox{border-radius:8px;padding:12px;background:var(--sunk);display:grid;gap:4px;font-size:13px}
@@ -1479,6 +1486,39 @@ function personalStats(){
   const cur=pm(CUR_YM);
   return {a3:av(full.slice(-3)), a6:av(full.slice(-6)), cur, run: day ? cur.out/day*dim : 0, day, dim};
 }
+/* 통장 내역: 직전 잔액 입력부터 오늘까지, 잔액 입력·입출금·잔액 맞춤을 시간 순으로 늘어놓고 줄마다 잔액을 보여 줍니다 */
+const accOpen=new Set();
+function passbook(name){
+  const today=todayISO(), ss=snapsOf(name); if(!ss.length) return [];
+  const s0=ss.length>1?ss[ss.length-2]:ss[0];
+  const seg=(d,k)=>ss.filter(s=>s.d<d||(s.d===d&&(+s.ts||0)<k)).length;
+  const ev=[], cardG={};
+  allTx().forEach(t=>effects(t).forEach(e=>{
+    if(e.acct!==name||e.d>today||!afterSnap(e,t,s0)) return; const k=txKey(t);
+    if(e.card){ const pc=payCode(t), g=e.d+"|"+pc+"|"+seg(e.d,k); const c=cardG[g]||(cardG[g]={kind:"card",d:e.d,k,v:0,n:0,lbl:`${(methodOf(pc)||{}).name||pc} 카드값`}); c.v+=e.v; c.n++; c.k=Math.max(c.k,k); return; }
+    ev.push({kind:isRecon(t)?"rc":"tx",d:e.d,k,v:e.v,t});
+  }));
+  Object.values(cardG).forEach(c=>ev.push(c));
+  ss.filter(s=>s!==s0&&(s.d>s0.d||(s.d===s0.d&&(+s.ts||0)>(+s0.ts||0)))).forEach(s=>ev.push({kind:"snap",d:s.d,k:+s.ts||0,s}));
+  ev.sort((a,b)=>a.d.localeCompare(b.d)||a.k-b.k||(a.kind==="snap")-(b.kind==="snap"));
+  let bal=s0.bal; const rows=[{kind:"snap",d:s0.d,s:s0,bal}];
+  ev.forEach(x=>{ if(x.kind==="snap"){ bal=x.s.bal; x.bal=bal; } else { bal+=x.v; x.bal=bal; } rows.push(x); });
+  return rows.reverse();
+}
+function passbookHTML(name){
+  const rows=passbook(name); if(!rows.length) return "";
+  const lis=rows.map(x=>{
+    const d=x.d.slice(5).replace("-","/");
+    if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span></li>`;
+    const sign=x.v>0?"+":"−", amt=`<span class="v num ${x.v>0?"p":""}">${sign}${won(Math.abs(x.v))}</span>`, r=`<span class="r num">잔액 ${won(x.bal)}</span>`;
+    if(x.kind==="card") return `<li><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}${r}</li>`;
+    const t=x.t, lbl = x.kind==="rc" ? "잔액 맞춤" : esc(t.desc||t.cat||"(적요 없음)");
+    const sub = x.kind==="rc" ? `${esc(t.cat||"")} · ${t.lock?"직접 고친 금액":"설명 안 되는 차이"}` : t.t==="move" ? `${esc(t.from||"")} → ${esc(t.to||"")}` : esc(t.cat||"");
+    return `<li data-ym="${t.d.slice(0,7)}" data-id="${esc(t.id)}" class="${x.kind==="rc"?"rc":""}"><span class="d">${d}</span><span class="l">${lbl}</span>${amt}<span class="s">${sub}</span>${r}</li>`;
+  }).join("");
+  const n=rows.filter(x=>x.kind!=="snap").length;
+  return `<details data-pb="${esc(name)}" ${accOpen.has(name)?"open":""}><summary>내역 ${n}건 · ${rows[rows.length-1].d.slice(5).replace("-","/")} 잔액 입력부터</summary><ul class="pb">${lis}</ul></details>`;
+}
 function renderAcc(){
   const today=todayISO();
   let liquid=0, upcoming=0, missing=[];
@@ -1489,11 +1529,14 @@ function renderAcc(){
     return `<div class="acc ${tr?"":"need"}"><div class="top"><span class="nm">${esc(a.name)}${a.name===mainAcct()?' <span class="tag">주 통장</span>':""}${instOf(a)?`<span style="display:block;font-size:12px;font-weight:400;color:var(--muted)">${esc(instOf(a))}</span>`:""}</span><span class="chip ${a.kind==="corp"?"corp":a.liquid?"in":"plain"}">${esc(KIND[a.kind]||a.kind)}${a.liquid?" · 가용":""}</span></div>`+
       (tr ? `<div class="bal num">${won(tr.bal)}</div><div class="meta"><span>${tr.snap.d.slice(5).replace("-","/")} 입력 <b class="num">${won(tr.snap.bal)}</b> 이후 입금 <b class="num">${won(tr.flow.inn)}</b> · 출금 <b class="num">${won(tr.flow.out)}</b></span>${up?`<span>카드 결제 예정 <b class="num">${won(up)}</b></span>`:""}${a.maturity?`<span>만기 ${esc(a.maturity)}</span>`:""}</div>`
           : `<div class="meta"><span>아직 잔액을 입력하지 않았습니다.</span></div>`)+
-      (ss.length?`<details><summary>입력한 잔액 ${ss.length}건</summary><ul>${hist}</ul></details>`:"")+
+      passbookHTML(a.name)+
+      (ss.length>1?`<details><summary>입력한 잔액 ${ss.length}건</summary><ul>${hist}</ul></details>`:"")+
       `<div class="acts"><button class="btn small" data-bal="${esc(a.name)}">잔액 입력</button></div></div>`;
   });
   $("accGrid").innerHTML=cards.join("");
   $("accGrid").querySelectorAll("[data-bal]").forEach(b=>b.onclick=()=>openBal(b.dataset.bal));
+  $("accGrid").querySelectorAll("details[data-pb]").forEach(dt=>dt.ontoggle=()=>{ dt.open?accOpen.add(dt.dataset.pb):accOpen.delete(dt.dataset.pb); });
+  $("accGrid").querySelectorAll(".pb li[data-id]").forEach(li=>li.onclick=()=>openTx(li.dataset.ym,li.dataset.id));
 
   const st=personalStats(); const recv=sumOf(allPending());
   const base=st.a6.n?st.a6:st.a3; const net=base.inc-base.out;
