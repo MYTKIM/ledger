@@ -1464,8 +1464,12 @@ $("saveBud").onclick=async()=>{
 /* ---------- 계좌·자금 ---------- */
 function snapsOf(name){ return (accounts.snaps[name]||[]).slice().sort((a,b)=>a.d.localeCompare(b.d)||(a.ts||0)-(b.ts||0)); }
 function lastSnap(name, upto){ const ss=snapsOf(name).filter(s=>!upto||s.d<=upto); return ss[ss.length-1]||null; }
-function flowSplit(name, after, upto){ let inn=0,out=0,card=0; allTx().forEach(t=>effects(t).forEach(e=>{ if(e.acct!==name||e.d<=after||e.d>upto) return; if(e.v>0) inn+=e.v; else { out-=e.v; if(e.card) card-=e.v; } })); return {inn,out,card,net:inn-out}; }
-function tracked(name, upto){ const s=lastSnap(name, upto); if(!s) return null; const f=flowSplit(name, s.d, upto); return {snap:s, flow:f, bal:s.bal+f.net}; }
+/* 잔액 입력 시점 앞뒤 판단: 날짜가 같으면 기록한 시각(ts)으로 가립니다.
+   잔액을 입력한 뒤에 같은 날짜로 넣은 기록은 그 잔액 이후의 입출금으로 칩니다. 잔액 맞춤 기록은 제 잔액 시점에 둡니다. */
+function txKey(t){ return isRecon(t)&&t.snapTs ? t.snapTs : (+t.ts||0); }
+function afterSnap(e, t, s){ return e.d>s.d || (e.d===s.d && txKey(t)>(+s.ts||0)); }
+function flowSplit(name, s, upto){ let inn=0,out=0,card=0; allTx().forEach(t=>effects(t).forEach(e=>{ if(e.acct!==name||!afterSnap(e,t,s)||e.d>upto) return; if(e.v>0) inn+=e.v; else { out-=e.v; if(e.card) card-=e.v; } })); return {inn,out,card,net:inn-out}; }
+function tracked(name, upto){ const s=lastSnap(name, upto); if(!s) return null; const f=flowSplit(name, s, upto); return {snap:s, flow:f, bal:s.bal+f.net}; }
 function cardUpcoming(name){ const today=todayISO(); let v=0; allTx().forEach(t=>effects(t).forEach(e=>{ if(e.acct===name&&e.card&&e.d>today) v-=e.v; })); return v; }
 function personalStats(){
   const full=Object.keys(months).filter(k=>k<CUR_YM&&monthTx(k).length).sort();
@@ -1531,7 +1535,7 @@ function openBal(name){
 function isRecon(t){ return t.src==="recon"; }
 function reconOf(acct, s){ return allTx().find(t=>isRecon(t) && t.ac===acct && (t.snapTs ? t.snapTs===s.ts : t.d===s.d)) || null; }
 function snapGap(acct, prev, s){
-  let net=0; allTx().forEach(t=>{ if(isRecon(t) && t.ac===acct) return; effects(t).forEach(e=>{ if(e.acct===acct && e.d>prev.d && e.d<=s.d) net+=e.v; }); });
+  let net=0; allTx().forEach(t=>{ if(isRecon(t) && t.ac===acct) return; effects(t).forEach(e=>{ if(e.acct===acct && afterSnap(e,t,prev) && !afterSnap(e,t,s)) net+=e.v; }); });
   return Math.round(s.bal - (prev.bal + net));
 }
 let reconTimer=null, reconBusy=false;
@@ -1568,7 +1572,7 @@ function calcBal(){
   if(!name||!d){ box.innerHTML=""; return; }
   const s=lastSnap(name,d);
   if(!s){ box.innerHTML=`<div class="hint">이 계좌의 첫 잔액입니다. 이 금액을 출발점으로 삼고, 이후 기록을 더하고 빼서 잔액을 추적합니다.</div><div class="actions"><span></span><div class="r"><button class="btn primary" id="bSave" ${amt?"":"disabled"}>기준 잔액으로 저장</button></div></div>`; $("bSave").onclick=()=>saveBal(name,d,amt,null); return; }
-  const f=flowSplit(name,s.d,d); const exp=s.bal+f.net; const diff=amt-exp;
+  const f=flowSplit(name,s,d); const exp=s.bal+f.net; const diff=amt-exp;
   let h=`<div class="diffbox"><div class="line"><span>${s.d.slice(5).replace("-","/")}에 입력한 잔액</span><span class="num">${won(s.bal)}</span></div><div class="line"><span>그 뒤 기록된 입금</span><span class="num">+${won(f.inn)}</span></div><div class="line"><span>그 뒤 기록된 출금${f.card?` (카드값 ${won(f.card)} 포함)`:""}</span><span class="num">−${won(f.out)}</span></div><div class="line total"><span>기록으로 추적한 잔액</span><span class="num">${won(exp)}</span></div>${amt?`<div class="line total"><span>입력한 잔액과의 차이</span><span class="num ${diff>=0?"good":"bad"}">${diff>0?"+":diff<0?"−":""}${won(Math.abs(diff))}</span></div>`:""}</div>`;
   if(!amt){ box.innerHTML=h; return; }
   if(diff===0) h+=`<div class="hint">기록과 정확히 맞습니다.</div><div class="actions"><span></span><div class="r"><button class="btn primary" id="bRec">잔액 저장</button></div></div>`;
