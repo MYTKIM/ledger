@@ -246,6 +246,8 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .dchips{display:flex;flex-wrap:wrap;gap:6px}
 .dchips .chip{padding:2px 4px 2px 8px}
 .dchips .chip button{border:0;background:none;color:inherit;opacity:.6;padding:0 4px}
+.notice.due{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:var(--surface);border:1px solid var(--corp);color:var(--ink)}
+.notice.due span{font-size:13px}
 .st-done{color:var(--in);font-weight:500} .st-wait{color:var(--corp);font-weight:500} .st-manual{color:var(--me);font-weight:500} .st-miss{color:var(--warn);font-weight:500}
 .matrix{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%}
 .matrix th,.matrix td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:right;background:var(--surface)}
@@ -279,7 +281,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .pb .d{color:var(--muted);font-size:12px} .pb .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pb .v{text-align:right;font-weight:600} .pb .v.p{color:var(--in)} .pb .r{grid-column:3;text-align:right;font-size:11.5px;color:var(--muted)}
 .pb li.snap{background:var(--sunk);border-radius:6px;border-top-color:transparent} .pb li.snap .l{font-weight:600}
-.pb li.rc .l{color:var(--warn)} .pb .s{grid-column:2;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pb li.rc .l{color:var(--warn)} .pb .s{grid-column:2;font-size:11.5px;color:var(--muted);line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
 .xf-list{display:grid;gap:10px}
 .xf{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px;background:var(--surface)}
 .xf .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
@@ -317,6 +319,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     </div>
   </header>
   <div id="notice" class="notice" hidden></div>
+  <div id="dueBar" class="notice due" hidden></div>
 
   <div class="grid" id="ledgerView">
     <div class="col">
@@ -814,6 +817,31 @@ function saveConfig(){ if(!configRef) return Promise.resolve(); return configRef
 let accQ=Promise.resolve();
 function saveAccounts(){ if(!accRef) return Promise.resolve(); const body=JSON.parse(JSON.stringify(accounts)); accQ=accQ.catch(()=>{}).then(()=>accRef.set(body)).catch(e=>showNotice("계좌 정보를 저장하지 못했습니다 ("+(e&&e.code||"오류")+").")); return accQ; }
 function showNotice(msg){ const n=$("notice"); n.textContent=msg; n.hidden=!msg; }
+/* 오늘 예정 알림: 앱을 열거나 다시 볼 때, 오늘(과 아직 기록 안 된 지난 3일) 예정된 집행·자동이체를 화면 위에 띄웁니다.
+   알림을 허용한 기기에서는 하루 한 번 기기 알림도 보냅니다. 앱이 꺼져 있을 때 스스로 울리지는 못합니다. */
+function dueToday(){
+  const today=todayISO(), from=(()=>{ const d=new Date(); d.setDate(d.getDate()-3); return d.toISOString().slice(0,10); })(), out=[];
+  budgets.items.filter(hasDay).forEach(b=>occurrences(b,from,today).forEach(o=>{ if(!SL.occ.has(b.id+"|"+o.d)) out.push({lbl:b.desc||b.key.slice(2), amt:o.amt, d:o.d, auto:!!b.auto}); }));
+  (accounts.xfers||[]).forEach(x=>occurrences(xfAsBudget(x),today,today).forEach(o=>out.push({lbl:`${x.name||"자동이체"} (${x.from} → ${x.to})`, amt:o.amt, d:o.d, auto:!!x.auto})));
+  return out.sort((a,b)=>a.d.localeCompare(b.d));
+}
+let dueShown="";
+function checkDue(){
+  if(!(loaded.months&&loaded.bud&&loaded.acc)) return;
+  const due=dueToday(), today=todayISO(), el=$("dueBar");
+  if(!due.length){ el.hidden=true; return; }
+  el.hidden=false;
+  el.innerHTML=`<b>오늘 챙길 집행 ${due.length}건</b> `+due.map(x=>`<span>${x.d!==today?`(${+x.d.slice(5,7)}/${+x.d.slice(8)} 예정) `:""}${esc(x.lbl)} ${won(x.amt)}${x.auto?" · 자동 기록":""}</span>`).join(" · ")+` <button type="button" class="btn small" id="dueGo">예정된 집행 보기</button>`+(("Notification" in window)&&Notification.permission==="default"?` <button type="button" class="btn small" id="dueAsk">기기 알림 받기</button>`:"");
+  $("dueGo").onclick=()=>{ location.hash="#budget"; setTimeout(()=>{ const t=$("schTbl"); if(t) t.scrollIntoView({behavior:"smooth",block:"center"}); },120); };
+  if($("dueAsk")) $("dueAsk").onclick=async()=>{ try{ await Notification.requestPermission(); }catch(_){ } checkDue(); };
+  let last=""; try{ last=localStorage.getItem("dueNotified")||""; }catch(_){}
+  if(last!==today && dueShown!==today && ("Notification" in window) && Notification.permission==="granted"){
+    dueShown=today; try{ localStorage.setItem("dueNotified",today); }catch(_){}
+    const body=due.map(x=>`${x.lbl} ${won(x.amt)}`).join("\n");
+    (navigator.serviceWorker&&navigator.serviceWorker.ready ? navigator.serviceWorker.ready.then(r=>r.showNotification("우진 장부 · 오늘 집행 "+due.length+"건",{body, tag:"due-"+today})) : Promise.reject()).catch(()=>{ try{ new Notification("우진 장부 · 오늘 집행 "+due.length+"건",{body}); }catch(_){} });
+  }
+}
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkDue(); });
 
 async function boot(){
   render();
@@ -846,6 +874,7 @@ function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym)
 function sumOf(list){ return list.reduce((a,t)=>a+(+t.amt||0),0); }
 
 function render(){
+  SL=computeSchLinks(); setTimeout(checkDue,0);
   const [y,m] = curYM.split("-");
   $("mYear").textContent = y; $("mLabel").textContent = (+m)+"월";
   const tx = monthTx(curYM);
@@ -1084,7 +1113,28 @@ const typeOfKey=k=>String(k).startsWith("i:")?"in":"out";
 function itemForT(type,cat){ return budgets.items.find(b=>b.key===bKey(type,cat)) || null; }
 function itemFor(cat){ return itemForT("out",cat); }
 function allocT(type,cat,ym){ if(hasPlan(ym)) return +(plans[ym][type==="in"?"inc":"out"][cat]||0); return itemAlloc(itemForT(type,cat), ym); }
-function usedT(type,cat,ym){ return monthTx(ym).reduce((a,t)=>a+(t.t===type&&(t.cat||"미분류")===cat?(+t.amt||0):0),0); }
+/* 예정 집행과 실제 기록 잇기
+   - 자동 기록(sch-…), 예정 집행 표의 '기록하기'로 넣은 기록(schOf), 또는 같은 계정·같은 금액으로 예정일 앞뒤 20일 안에 들어온 기록을 그 집행으로 봅니다.
+   - 이어진 기록은 예산 사용액을 '예정된 달'로 칩니다. 예: 10/31 예정을 11/3에 내면 10월 예산에서 씁니다. 장부·대시보드는 실제 날짜 그대로입니다. */
+let SL={occ:new Map(), tx:new Map(), into:{}};
+function dayDiff(a,b){ return Math.round((Date.parse(a)-Date.parse(b))/864e5); }
+function computeSchLinks(){
+  const occ=new Map(), txm=new Map(), into={}, all=allTx(), today=todayISO();
+  const lo=(()=>{ const d=new Date(); d.setDate(d.getDate()-400); return d.toISOString().slice(0,10); })(), hi=(()=>{ const d=new Date(); d.setDate(d.getDate()+90); return d.toISOString().slice(0,10); })();
+  const list=[]; budgets.items.filter(hasDay).forEach(b=>occurrences(b,lo,hi).forEach(o=>list.push({b,o,k:b.id+"|"+o.d})));
+  const link=(x,t)=>{ occ.set(x.k,t); const ym=x.o.d.slice(0,7); if(t.d.slice(0,7)!==ym){ txm.set(t.id,ym); (into[ym]=into[ym]||[]).push(t); } else txm.set(t.id,ym); };
+  const byId=new Map(all.map(t=>[t.id,t]));
+  list.forEach(x=>{ const t=byId.get("sch-"+x.b.id+"-"+x.o.d) || all.find(t=>t.schOf===x.k); if(t) link(x,t); });
+  list.filter(x=>!occ.has(x.k) && x.o.d<=hi).sort((a,b)=>a.o.d.localeCompare(b.o.d)).forEach(x=>{
+    const type=typeOfKey(x.b.key), cat=x.b.key.slice(2);
+    let best=null, bd=99; all.forEach(t=>{ if(t.t!==type||(t.cat||"미분류")!==cat||+t.amt!==+x.o.amt||txm.has(t.id)||t.schOf||isRecon(t)) return; const dd=Math.abs(dayDiff(t.d,x.o.d)); if(dd<=20&&dd<bd){ best=t; bd=dd; } });
+    if(best) link(x,best);
+  });
+  return {occ, tx:txm, into};
+}
+function usedT(type,cat,ym){ let a=0; const hit=t=>t.t===type&&(t.cat||"미분류")===cat;
+  monthTx(ym).forEach(t=>{ if(hit(t) && (SL.tx.get(t.id)||ym)===ym) a+=+t.amt||0; });
+  (SL.into[ym]||[]).forEach(t=>{ if(hit(t)) a+=+t.amt||0; }); return a; }
 function budgetCatsT(type,ym){
   const s=new Set(); monthTx(ym).forEach(t=>{ if(t.t===type) s.add(t.cat||"미분류"); });
   const pk=type==="in"?"inc":"out";
@@ -1322,19 +1372,34 @@ function renderBudAcct(ym){
   }).join("")+`</tbody>`;
 }
 function renderSchedule(){
-  const today=todayISO(); const d0=new Date(); d0.setDate(d0.getDate()-14); const d1=new Date(); d1.setDate(d1.getDate()+60);
+  const today=todayISO(); const d0=new Date(); d0.setDate(d0.getDate()-45); const d1=new Date(); d1.setDate(d1.getDate()+60); const d14=new Date(); d14.setDate(d14.getDate()-14);
   const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
-  const rows=[]; budgets.items.filter(hasDay).forEach(b=>occurrences(b, iso(d0), iso(d1)).forEach(o=>rows.push({b,o})));
+  const rows=[]; budgets.items.filter(hasDay).forEach(b=>occurrences(b, iso(d0), iso(d1)).forEach(o=>{ /* 2주보다 오래된 것은 아직 기록 안 된 것만 */ if(o.d<iso(d14) && SL.occ.has(b.id+"|"+o.d)) return; rows.push({b,o}); }));
   rows.sort((a,b)=>a.o.d.localeCompare(b.o.d));
   const ending=budgets.items.filter(b=>b.end && b.end>=today && b.end<=iso(d1));
-  $("schSub").textContent = budgets.items.some(hasDay) ? `지난 2주와 앞으로 60일. 자동 기록은 집행일 당일이나 그 뒤에 앱을 열 때 들어갑니다.${ending.length?` 기한이 곧 끝나는 예산: ${ending.map(b=>b.key.slice(2)+" ("+b.end+")").join(", ")}`:""}` : "집행일이 정해진 예산이 없습니다. ‘예산 편집’에서 항목마다 집행일과 기한을 넣을 수 있습니다.";
+  $("schSub").textContent = budgets.items.some(hasDay) ? `지난 2주(기록 안 된 것은 45일)와 앞으로 60일. 늦게 냈어도 같은 계정·금액의 기록이 앞뒤 20일 안에 있으면 그 집행으로 보고, 예산은 예정된 달에서 씁니다. 자동 기록은 집행일 당일이나 그 뒤에 앱을 열 때 들어갑니다.${ending.length?` 기한이 곧 끝나는 예산: ${ending.map(b=>b.key.slice(2)+" ("+b.end+")").join(", ")}`:""}` : "집행일이 정해진 예산이 없습니다. ‘예산 편집’에서 항목마다 집행일과 기한을 넣을 수 있습니다.";
   if(!rows.length){ $("schTbl").innerHTML=`<tbody><tr><td style="color:var(--muted)">이 기간에 예정된 집행이 없습니다.</td></tr></tbody>`; return; }
   $("schTbl").innerHTML=`<thead><tr><th>집행일</th><th>항목</th><th>적요</th><th class="r">금액</th><th>결제 → 계좌</th><th>상태</th></tr></thead><tbody>`+rows.map(({b,o})=>{
-    const id="sch-"+b.id+"-"+o.d, rec=monthTx(o.d.slice(0,7)).some(t=>t.id===id), posted=(b.posted||[]).includes(o.d);
-    let st; if(rec) st=`<span class="st-done">기록됨</span>`; else if(o.d>today) st= b.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-manual">직접 기록</span>`; else if(b.auto && posted) st=`<span class="st-manual">기록 후 삭제됨</span>`; else if(b.auto && o.d<(b.autoFrom||today)) st=`<span class="st-manual">자동 기록 전 일정</span>`; else st= b.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span>`;
+    const lt=SL.occ.get(b.id+"|"+o.d), rec=!!lt, posted=(b.posted||[]).includes(o.d);
+    let st; if(rec) st=`<span class="st-done" role="button" tabindex="0" data-open="${lt.d.slice(0,7)}|${esc(lt.id)}" style="cursor:pointer;text-decoration:underline dotted">기록됨${lt.d!==o.d?` · ${+lt.d.slice(5,7)}/${+lt.d.slice(8)} 집행`:""}</span>`; else if(o.d>today) st= b.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-manual">직접 기록</span>`; else if(b.auto && posted) st=`<span class="st-manual">기록 후 삭제됨</span>`; else if(b.auto && o.d<(b.autoFrom||today)) st=`<span class="st-manual">자동 기록 전 일정</span>`; else st= b.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span> <button type="button" class="btn small" data-rec="${esc(b.id)}|${o.d}">기록하기</button>`;
+    if(!rec && !b.auto && o.d>today) st+=` <button type="button" class="btn small" data-rec="${esc(b.id)}|${o.d}">미리 기록</button>`;
     const m=methodOf(b.m);
     return `<tr><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(b.key.slice(2))}<span class="tag">${esc(schedTxt(b))}</span></td><td>${esc(b.desc||"")}</td><td class="r num ${typeOfKey(b.key)==="in"?"good":""}">${typeOfKey(b.key)==="in"?"+":""}${won(o.amt)}</td><td>${typeOfKey(b.key)==="in" ? `입금 → ${esc(b.acct||mainAcct())}` : budgetAcct(b)!=="미지정"?`${b.m?esc(b.m)+" → ":""}${esc(budgetAcct(b))}`:'<span style="color:var(--muted)">미지정</span>'}</td><td>${st}</td></tr>`;
   }).join("")+`</tbody>`;
+  $("schTbl").querySelectorAll("[data-rec]").forEach(btn=>btn.onclick=()=>{ const [bid,d]=btn.dataset.rec.split("|"); const b=budgets.items.find(x=>x.id===bid); if(b) recordOcc(b,{d,amt:occAmt(b)}); });
+  $("schTbl").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>{ const [ym,id]=el.dataset.open.split("|"); openTx(ym,id); });
+}
+/* 예정 집행을 오늘 날짜로 기록: 계정·금액·적요·결제수단(계좌)을 채운 새 기록 창을 엽니다 */
+function recordOcc(b,o){
+  const inc=typeOfKey(b.key)==="in";
+  openTx(); setType(inc?"in":"out");
+  fillCatSelect(inc?"in":"out", b.key.slice(2));
+  $("iAmt").value=(+o.amt).toLocaleString("ko-KR"); $("iDesc").value=b.desc||b.key.slice(2);
+  $("iDate").value = o.d>todayISO() ? o.d : todayISO();
+  if(inc){ form.ac=b.acct||mainAcct(); fillAccts(); } else if(b.m){ form.m=b.m; fillMethods(); }
+  autoEnt(); form.schOf=b.id+"|"+o.d;
+  $("txTitle").textContent=`예정 집행 기록 · ${+o.d.slice(5,7)}/${+o.d.slice(8)} 예정분`;
+  updateHint(false);
 }
 
 let bDraft=null;
@@ -1501,17 +1566,18 @@ function passbook(name){
   ev.forEach(x=>{ if(x.kind==="snap"){ bal=x.s.bal; x.bal=bal; } else { bal+=x.v; x.bal=bal; } rows.push(x); });
   return rows.reverse();
 }
+function whenTxt(ts){ if(!ts) return ""; const d=new Date(+ts); return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function passbookHTML(name){
   const rows=passbook(name); if(!rows.length) return "";
   const lis=rows.map(x=>{
     const d=x.d.slice(5).replace("-","/");
-    if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span>${x.s.ts?`<span class="s">입력 ${new Date(+x.s.ts).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>`:""}</li>`;
+    if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span>${x.s.ts?`<span class="s">${whenTxt(x.s.ts)} 입력</span>`:""}</li>`;
     const sign=x.v>0?"+":"−", amt=`<span class="v num ${x.v>0?"p":""}">${sign}${won(Math.abs(x.v))}</span>`, r=`<span class="r num">잔액 ${won(x.bal)}</span>`;
     if(x.kind==="card") return `<li><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}${r}</li>`;
     const t=x.t, lbl = x.kind==="rc" ? "잔액 맞춤" : esc(t.desc||t.cat||"(적요 없음)");
     const sub = x.kind==="rc" ? `${esc(t.cat||"")} · ${t.lock?"직접 고친 금액":"설명 안 되는 차이"}` : t.t==="move" ? `${esc(t.from||"")} → ${esc(t.to||"")}` : t.fromAc ? `${esc(t.cat||"")} · ${esc(t.fromAc)} → ${esc(txAcct(t))}` : esc(t.cat||"");
     const tag = t.src==="sched" ? `<b style="color:var(--warn)">${String(t.id).startsWith("xf-")?"자동이체로 기록":"예산 자동 기록"}</b> · ` : "";
-    return `<li data-ym="${t.d.slice(0,7)}" data-id="${esc(t.id)}" class="${x.kind==="rc"?"rc":""}"><span class="d">${d}</span><span class="l">${lbl}</span>${amt}<span class="s">${tag}${x.kind==="rc"?"":`입력 ${new Date(+t.ts||0).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})} · `}${sub}</span>${r}</li>`;
+    return `<li data-ym="${t.d.slice(0,7)}" data-id="${esc(t.id)}" class="${x.kind==="rc"?"rc":""}"><span class="d">${d}</span><span class="l">${lbl}</span>${amt}<span class="s">${tag}${x.kind==="rc"?"":`${whenTxt(t.ts)} 입력 · `}${sub}</span>${r}</li>`;
   }).join("");
   const n=rows.filter(x=>x.kind!=="snap").length;
   return `<details data-pb="${esc(name)}" ${accOpen.has(name)?"open":""}><summary>내역 ${n}건 · ${rows[rows.length-1].d.slice(5).replace("-","/")} 잔액 입력부터</summary><ul class="pb">${lis}</ul></details>`;
@@ -2032,6 +2098,7 @@ $("txForm").onsubmit=async e=>{
   const ym=d.slice(0,7);
   const base = editing ? monthTx(editing.ym).find(x=>x.id===editing.id) : null;
   const tx = {...(base||{}), id: base?base.id:uid(), d, t:form.t, amt, desc:$("iDesc").value.trim(), cat:$("iCat").value, m: (form.t==="move"||form.t==="in")?"":form.m, ent: form.t==="move"?"me":form.ent, src: base?base.src:"manual", ts: base&&base.ts?base.ts:Date.now()};
+  if(!base && form.schOf) tx.schOf=form.schOf;
   if(form.t==="move"){ tx.from=$("iFrom").value; tx.to=$("iTo").value; delete tx.io; } else { delete tx.from; delete tx.to; delete tx.io; }
   if(form.t==="in"){ if(form.ac) tx.ac=form.ac; else delete tx.ac; delete tx.mx; delete tx.via; const fa=$("iFromAc").value; if(fa && fa!==form.ac && !isRecon(tx)) tx.fromAc=fa; else delete tx.fromAc; }
   else { delete tx.fromAc; if(base && base.t==="in" && !isRecon(base)) delete tx.ac; }
