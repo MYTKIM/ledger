@@ -1505,12 +1505,13 @@ function passbookHTML(name){
   const rows=passbook(name); if(!rows.length) return "";
   const lis=rows.map(x=>{
     const d=x.d.slice(5).replace("-","/");
-    if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span></li>`;
+    if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span>${x.s.ts?`<span class="s">입력 ${new Date(+x.s.ts).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>`:""}</li>`;
     const sign=x.v>0?"+":"−", amt=`<span class="v num ${x.v>0?"p":""}">${sign}${won(Math.abs(x.v))}</span>`, r=`<span class="r num">잔액 ${won(x.bal)}</span>`;
     if(x.kind==="card") return `<li><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}${r}</li>`;
     const t=x.t, lbl = x.kind==="rc" ? "잔액 맞춤" : esc(t.desc||t.cat||"(적요 없음)");
     const sub = x.kind==="rc" ? `${esc(t.cat||"")} · ${t.lock?"직접 고친 금액":"설명 안 되는 차이"}` : t.t==="move" ? `${esc(t.from||"")} → ${esc(t.to||"")}` : t.fromAc ? `${esc(t.cat||"")} · ${esc(t.fromAc)} → ${esc(txAcct(t))}` : esc(t.cat||"");
-    return `<li data-ym="${t.d.slice(0,7)}" data-id="${esc(t.id)}" class="${x.kind==="rc"?"rc":""}"><span class="d">${d}</span><span class="l">${lbl}</span>${amt}<span class="s">${sub}</span>${r}</li>`;
+    const tag = t.src==="sched" ? `<b style="color:var(--warn)">${String(t.id).startsWith("xf-")?"자동이체로 기록":"예산 자동 기록"}</b> · ` : "";
+    return `<li data-ym="${t.d.slice(0,7)}" data-id="${esc(t.id)}" class="${x.kind==="rc"?"rc":""}"><span class="d">${d}</span><span class="l">${lbl}</span>${amt}<span class="s">${tag}${x.kind==="rc"?"":`입력 ${new Date(+t.ts||0).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})} · `}${sub}</span>${r}</li>`;
   }).join("");
   const n=rows.filter(x=>x.kind!=="snap").length;
   return `<details data-pb="${esc(name)}" ${accOpen.has(name)?"open":""}><summary>내역 ${n}건 · ${rows[rows.length-1].d.slice(5).replace("-","/")} 잔액 입력부터</summary><ul class="pb">${lis}</ul></details>`;
