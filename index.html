@@ -598,6 +598,8 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="hint" id="flowHint"></div>
       <div class="hint" id="reconBox" hidden></div>
       <label class="check" id="settleRow"><input type="checkbox" id="iSettle"> 법인에서 아직 정산받지 않음</label>
+      <div class="hint" id="settleNote" hidden><div>저장하면 <b>법인통장 → 받은 계좌</b> 정산 이체를 함께 기록합니다. 법인통장 잔액은 줄고 받은 계좌는 늘어나며, 수입·지출 합계는 그대로입니다.</div>
+        <div class="two" style="margin-top:8px"><div class="f"><label for="iSettleDate">정산받은 날</label><input id="iSettleDate" type="date"></div><div class="f"><label for="iSettleTo">받은 계좌</label><select id="iSettleTo"></select></div></div></div>
       <div class="actions">
         <button type="button" class="btn danger" id="delBtn" hidden>삭제</button>
         <div class="r"><button type="button" class="btn" data-close>취소</button><button type="submit" class="btn primary" id="saveBtn">저장</button></div>
@@ -2215,6 +2217,12 @@ function setType(t){ form.t=t; segSet("typeSeg",t); fillCatSelect(t, ""); if(!fo
 function autoEnt(){ const c=$("iCat").value; form.ent = (form.t==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me"; segSet("entInSeg",form.ent); }
 segBind("typeSeg", v=>setType(v));
 segBind("entInSeg", v=>{ form.ent=v; form.entTouched=true; updateHint(true); });
+$("iSettle").addEventListener("change",()=>{
+  const base = editing ? monthTx(editing.ym).find(x=>x.id===editing.id) : null;
+  const show = !!(base && base.st==="pending" && !base.settledBy && !$("iSettle").checked);
+  $("settleNote").hidden=!show;
+  if(show){ $("iSettleDate").value=todayISO(); acctOptions($("iSettleTo"), mainAcct(), true); }
+});
 $("iFrom").onchange=$("iTo").onchange=()=>{ $("iPk").value="";
   if((isPerson($("iFrom").value)||isPerson($("iTo").value)) && ["법인 정산","계좌 이체","적금 가입·납입","적금 만기·해지",""].includes($("iCat").value)) $("iCat").value="맡은 돈·빌려 준 돈";
   updateHint(false); };
@@ -2252,6 +2260,7 @@ function openTx(ym, id){
   fillMethods(); updateHint(!t);
   showReconBox(t);
   if(t) $("iSettle").checked = t.st==="pending";
+  $("settleNote").hidden=true;
   openOv("txOv"); setTimeout(()=>$(t?"iDesc":"iAmt").focus(),30);
 }
 $("fab").onclick=()=>openTx(); $("openImport").onclick=()=>openImport(); $("openSettings").onclick=()=>openSettings();
@@ -2273,10 +2282,27 @@ $("txForm").onsubmit=async e=>{
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
   if(eligible && !$("iSettle").checked && !(base&&base.settledOn)) tx.settledOn = todayISO();
-  if(editing && editing.ym!==ym){ months[editing.ym]=monthTx(editing.ym).filter(x=>x.id!==editing.id); saveMonth(editing.ym); }
+  const touched=new Set([ym]); let note="";
+  /* 정산 대기였던 기록을 '정산받음'으로 바꾸면: 법인통장 → 주 통장 정산 이체를 함께 남깁니다 (정산 입금 기록과 같은 방식) */
+  if(base && base.st==="pending" && tx.st==="done" && !base.settledBy){
+    const sd=$("iSettleDate").value||todayISO(), mid=uid(), from=corpAcct(), to=$("iSettleTo").value||mainAcct();
+    tx.settledOn=sd; tx.settledBy=mid; const sym=sd.slice(0,7);
+    months[sym]=monthTx(sym).concat([{id:mid, d:sd, t:"move", amt:tx.amt, desc:`법인 정산 입금 (${+tx.d.slice(5,7)}/${+tx.d.slice(8)} ${tx.desc||tx.cat||""})`.trim(), cat:"법인 정산", m:"", from, to, ent:"me", src:"manual", settles:[tx.id], ts:Date.now()}]); touched.add(sym);
+    note=`정산받음으로 바꾸고 ${from} → ${to} ${won(tx.amt)} 정산 이체를 ${+sd.slice(5,7)}/${+sd.slice(8)}로 기록했습니다.`;
+  }
+  /* 정산받은 기록을 다시 '정산 대기'로 돌리면: 이어진 정산 이체에서 이 건을 뺍니다 (이 건만 정산한 이체면 이체를 지움) */
+  if(base && base.settledBy && tx.st==="pending"){
+    const sid=base.settledBy; delete tx.settledBy; delete tx.settledOn;
+    Object.keys(months).forEach(k=>{ const mvt=monthTx(k).find(x=>x.id===sid); if(!mvt) return;
+      const rest=(mvt.settles||[]).filter(id=>id!==tx.id);
+      months[k] = rest.length ? monthTx(k).map(x=>x.id===sid?{...x, settles:rest, amt:Math.max(0,(+x.amt||0)-(+base.amt||0)), u:Date.now()}:x) : monthTx(k).filter(x=>x.id!==sid);
+      touched.add(k); note = rest.length ? `정산 이체에서 이 건(${won(base.amt)})을 뺐습니다.` : "이 건만 정산했던 정산 이체를 지웠습니다."; });
+  }
+  if(editing && editing.ym!==ym){ months[editing.ym]=monthTx(editing.ym).filter(x=>x.id!==editing.id); touched.add(editing.ym); }
   const arr = monthTx(ym).filter(x=>x.id!==tx.id); arr.push(tx); months[ym]=arr;
   closeOv("txOv"); if(!base) curYM=ym; render();
-  try{ await saveMonth(ym); }catch(_){}
+  try{ await saveMonths(touched); }catch(_){}
+  if(note) showNotice(note);
 };
 $("delBtn").onclick=async()=>{
   if(!editing) return;
