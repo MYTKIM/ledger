@@ -289,6 +289,10 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .dchips .chip button{border:0;background:none;color:inherit;opacity:.6;padding:0 4px}
 .notice.due{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:var(--surface);border:1px solid var(--corp);color:var(--ink)}
 .notice.due span{font-size:13px}
+.notice.due .due-done{color:var(--muted);cursor:pointer} .notice.due .due-done:hover{text-decoration:underline}
+.notice.due .due-left.late{color:var(--warn)}
+.notice.due.alldone{border-color:var(--line);padding-top:6px;padding-bottom:6px}
+.notice.due .due-x{margin-left:auto;border:0;background:none;font-size:18px;line-height:1;color:var(--muted);cursor:pointer;padding:2px 6px}
 .st-done{color:var(--in);font-weight:500} .st-wait{color:var(--corp);font-weight:500} .st-manual{color:var(--me);font-weight:500} .st-miss{color:var(--warn);font-weight:500}
 .matrix{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%}
 .matrix th,.matrix td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:right;background:var(--surface)}
@@ -922,26 +926,43 @@ function saveAccounts(){ if(!accRef) return Promise.resolve(); const body=JSON.p
 function showNotice(msg){ const n=$("notice"); n.textContent=msg; n.hidden=!msg; }
 /* 오늘 예정 알림: 앱을 열거나 다시 볼 때, 오늘(과 아직 기록 안 된 지난 3일) 예정된 집행·자동이체를 화면 위에 띄웁니다.
    알림을 허용한 기기에서는 하루 한 번 기기 알림도 보냅니다. 앱이 꺼져 있을 때 스스로 울리지는 못합니다. */
+/* 오늘 챙길 집행: 오늘 것(기록 여부와 함께)과, 아직 기록 안 된 지난 3일 것 */
 function dueToday(){
   const today=todayISO(), from=(()=>{ const d=new Date(); d.setDate(d.getDate()-3); return d.toISOString().slice(0,10); })(), out=[];
-  budgets.items.filter(hasDay).forEach(b=>occurrences(b,from,today).forEach(o=>{ if(!SL.occ.has(b.id+"|"+o.d)) out.push({lbl:b.desc||b.key.slice(2), amt:o.amt, d:o.d, auto:!!b.auto}); }));
-  (accounts.xfers||[]).forEach(x=>occurrences(xfAsBudget(x),today,today).forEach(o=>out.push({lbl:`${x.name||"자동이체"} (${x.from} → ${x.to})`, amt:o.amt, d:o.d, auto:!!x.auto, done:(x.posted||[]).includes(o.d)})));
-  return out.sort((a,b)=>a.d.localeCompare(b.d));
+  budgets.items.filter(hasDay).forEach(b=>occurrences(b,from,today).forEach(o=>{ const lt=SL.occ.get(b.id+"|"+o.d);
+    const recToday = lt && lt.ts && (()=>{ const t=new Date(+lt.ts); return t.getFullYear()+"-"+pad(t.getMonth()+1)+"-"+pad(t.getDate()); })()===today;
+    if(lt && o.d!==today && !recToday) return; /* 지난 예정분은 오늘 기록한 경우만 함께 보여 줌 */
+    out.push({lbl:b.desc||b.key.slice(2), amt:o.amt, d:o.d, auto:!!b.auto, done:!!lt, open: lt?lt.d.slice(0,7)+"|"+lt.id:"", rec: !lt&&!b.auto ? b.id+"|"+o.d : ""}); }));
+  (accounts.xfers||[]).forEach(x=>occurrences(xfAsBudget(x),today,today).forEach(o=>{ if(x.autoFrom && o.d<x.autoFrom) return; const id="xf-"+x.id+"-"+o.d, tx=monthTx(o.d.slice(0,7)).find(t=>t.id===id);
+    out.push({lbl:`${x.name||"자동이체"} (${x.from} → ${x.to})`, amt:o.amt, d:o.d, auto:!!x.auto, done:!!tx||(x.posted||[]).includes(o.d), open: tx?o.d.slice(0,7)+"|"+id:"", rec:""}); }));
+  return out.sort((a,b)=>(a.done-b.done)||a.d.localeCompare(b.d));
 }
 let dueShown="";
 function checkDue(){
   if(!(loaded.months&&loaded.bud&&loaded.acc)) return;
   const due=dueToday(), today=todayISO(), el=$("dueBar");
-  if(!due.length){ el.hidden=true; return; }
-  el.hidden=false;
-  el.innerHTML=`<b>오늘 챙길 집행 ${due.length}건</b> `+due.map(x=>`<span>${x.d!==today?`(${+x.d.slice(5,7)}/${+x.d.slice(8)} 예정) `:""}${esc(x.lbl)} ${won(x.amt)}${x.done?" · 장부에 자동 기록됨 ✓":x.auto?" · 자동 기록 예정":""}</span>`).join(" · ")+` <button type="button" class="btn small" id="dueGo">예정된 집행 보기</button>`+(("Notification" in window)&&Notification.permission==="default"?` <button type="button" class="btn small" id="dueAsk">기기 알림 받기</button>`:"");
-  $("dueGo").onclick=()=>{ location.hash="#budget"; setTimeout(()=>{ const t=$("schTbl"); if(t) t.scrollIntoView({behavior:"smooth",block:"center"}); },120); };
+  let dis=""; try{ dis=localStorage.getItem("dueDismiss")||""; }catch(_){}
+  const left=due.filter(x=>!x.done), done=due.filter(x=>x.done);
+  if(!due.length || (!left.length && dis===today)){ el.hidden=true; return; }
+  el.hidden=false; el.classList.toggle("alldone", !left.length);
+  if(!left.length){
+    el.innerHTML=`<span>✓ <b>오늘 집행 모두 기록됨</b> (${done.length}건)</span>`+done.map(x=>`<span class="due-done" role="button" tabindex="0" data-open="${esc(x.open)}">${esc(x.lbl)} ${won(x.amt)}</span>`).join("")+`<button type="button" class="due-x" id="dueX" aria-label="오늘은 그만 보기">×</button>`;
+  } else {
+    el.innerHTML=`<b>오늘 챙길 집행 ${due.length}건</b><span style="color:var(--muted)">${done.length?`${done.length}건 기록됨 · `:""}${left.length}건 남음</span><span style="flex-basis:100%;height:0"></span>`+
+      left.map(x=>`<span class="due-left${x.d<today?" late":""}">${x.d<today?`(${+x.d.slice(5,7)}/${+x.d.slice(8)} 예정) `:""}<b>${esc(x.lbl)}</b> ${won(x.amt)}${x.rec?` <button type="button" class="btn small" data-rec="${esc(x.rec)}">기록하기</button>`:x.auto?` <span style="color:var(--muted)">· 자동 기록 예정</span>`:""}</span>`).join("")+
+      done.map(x=>`<span class="due-done" ${x.open?`role="button" tabindex="0" data-open="${esc(x.open)}"`:""}>✓ ${esc(x.lbl)} ${won(x.amt)}</span>`).join("")+
+      ` <button type="button" class="btn small" id="dueGo">예정된 집행 보기</button>`+(("Notification" in window)&&Notification.permission==="default"?` <button type="button" class="btn small" id="dueAsk">기기 알림 받기</button>`:"");
+  }
+  el.querySelectorAll("[data-open]").forEach(s=>{ if(s.dataset.open) s.onclick=()=>{ const [ym,id]=s.dataset.open.split("|"); openTx(ym,id); }; });
+  el.querySelectorAll("[data-rec]").forEach(btn=>btn.onclick=()=>{ const [bid,d]=btn.dataset.rec.split("|"); const b=budgets.items.find(x=>x.id===bid); if(b) recordOcc(b,{d,amt:occAmt(b)}); });
+  if($("dueX")) $("dueX").onclick=()=>{ try{ localStorage.setItem("dueDismiss",today); }catch(_){} el.hidden=true; };
+  if($("dueGo")) $("dueGo").onclick=()=>{ location.hash="#budget"; setTimeout(()=>{ const t=$("schTbl"); if(t) t.scrollIntoView({behavior:"smooth",block:"center"}); },120); };
   if($("dueAsk")) $("dueAsk").onclick=async()=>{ try{ await Notification.requestPermission(); }catch(_){ } checkDue(); };
   let last=""; try{ last=localStorage.getItem("dueNotified")||""; }catch(_){}
-  if(last!==today && dueShown!==today && ("Notification" in window) && Notification.permission==="granted"){
+  if(left.length && last!==today && dueShown!==today && ("Notification" in window) && Notification.permission==="granted"){
     dueShown=today; try{ localStorage.setItem("dueNotified",today); }catch(_){}
-    const body=due.map(x=>`${x.lbl} ${won(x.amt)}`).join("\n");
-    (navigator.serviceWorker&&navigator.serviceWorker.ready ? navigator.serviceWorker.ready.then(r=>r.showNotification("우진 장부 · 오늘 집행 "+due.length+"건",{body, tag:"due-"+today})) : Promise.reject()).catch(()=>{ try{ new Notification("우진 장부 · 오늘 집행 "+due.length+"건",{body}); }catch(_){} });
+    const body=left.map(x=>`${x.lbl} ${won(x.amt)}`).join("\n");
+    (navigator.serviceWorker&&navigator.serviceWorker.ready ? navigator.serviceWorker.ready.then(r=>r.showNotification("우진 장부 · 오늘 집행 "+left.length+"건",{body, tag:"due-"+today})) : Promise.reject()).catch(()=>{ try{ new Notification("우진 장부 · 오늘 집행 "+left.length+"건",{body}); }catch(_){} });
   }
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkDue(); });
