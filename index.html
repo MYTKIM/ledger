@@ -194,6 +194,9 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 .welcome h3{margin:0 0 6px;font-size:16px}
 .welcome p{margin:0 0 14px;color:var(--muted);max-width:60ch}
 
+.totop{position:fixed;left:max(18px,calc(env(safe-area-inset-left,0px) + 18px));bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:20;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:12px 16px;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,.12);cursor:pointer}
+.totop[hidden]{display:none}
+#schTbl tr.today td{background:var(--sunk)}
 .fab{position:fixed;right:max(18px,calc(env(safe-area-inset-right,0px) + 18px));bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:20;background:var(--ink);color:var(--paper);border:0;border-radius:999px;padding:14px 20px;font-weight:600;font-size:15px;box-shadow:0 6px 20px rgba(0,0,0,.22)}
 
 .overlay{position:fixed;inset:0;background:rgba(10,14,12,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
@@ -542,6 +545,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   </div>
 </div>
 
+<button type="button" id="toTop" class="totop" hidden aria-label="맨 위로">↑ 맨 위로</button>
 <button class="fab" id="fab">+ 기록하기</button>
 
 <!-- 법인 정산 입금 -->
@@ -921,7 +925,7 @@ function showNotice(msg){ const n=$("notice"); n.textContent=msg; n.hidden=!msg;
 function dueToday(){
   const today=todayISO(), from=(()=>{ const d=new Date(); d.setDate(d.getDate()-3); return d.toISOString().slice(0,10); })(), out=[];
   budgets.items.filter(hasDay).forEach(b=>occurrences(b,from,today).forEach(o=>{ if(!SL.occ.has(b.id+"|"+o.d)) out.push({lbl:b.desc||b.key.slice(2), amt:o.amt, d:o.d, auto:!!b.auto}); }));
-  (accounts.xfers||[]).forEach(x=>occurrences(xfAsBudget(x),today,today).forEach(o=>out.push({lbl:`${x.name||"자동이체"} (${x.from} → ${x.to})`, amt:o.amt, d:o.d, auto:!!x.auto})));
+  (accounts.xfers||[]).forEach(x=>occurrences(xfAsBudget(x),today,today).forEach(o=>out.push({lbl:`${x.name||"자동이체"} (${x.from} → ${x.to})`, amt:o.amt, d:o.d, auto:!!x.auto, done:(x.posted||[]).includes(o.d)})));
   return out.sort((a,b)=>a.d.localeCompare(b.d));
 }
 let dueShown="";
@@ -930,7 +934,7 @@ function checkDue(){
   const due=dueToday(), today=todayISO(), el=$("dueBar");
   if(!due.length){ el.hidden=true; return; }
   el.hidden=false;
-  el.innerHTML=`<b>오늘 챙길 집행 ${due.length}건</b> `+due.map(x=>`<span>${x.d!==today?`(${+x.d.slice(5,7)}/${+x.d.slice(8)} 예정) `:""}${esc(x.lbl)} ${won(x.amt)}${x.auto?" · 자동 기록":""}</span>`).join(" · ")+` <button type="button" class="btn small" id="dueGo">예정된 집행 보기</button>`+(("Notification" in window)&&Notification.permission==="default"?` <button type="button" class="btn small" id="dueAsk">기기 알림 받기</button>`:"");
+  el.innerHTML=`<b>오늘 챙길 집행 ${due.length}건</b> `+due.map(x=>`<span>${x.d!==today?`(${+x.d.slice(5,7)}/${+x.d.slice(8)} 예정) `:""}${esc(x.lbl)} ${won(x.amt)}${x.done?" · 장부에 자동 기록됨 ✓":x.auto?" · 자동 기록 예정":""}</span>`).join(" · ")+` <button type="button" class="btn small" id="dueGo">예정된 집행 보기</button>`+(("Notification" in window)&&Notification.permission==="default"?` <button type="button" class="btn small" id="dueAsk">기기 알림 받기</button>`:"");
   $("dueGo").onclick=()=>{ location.hash="#budget"; setTimeout(()=>{ const t=$("schTbl"); if(t) t.scrollIntoView({behavior:"smooth",block:"center"}); },120); };
   if($("dueAsk")) $("dueAsk").onclick=async()=>{ try{ await Notification.requestPermission(); }catch(_){ } checkDue(); };
   let last=""; try{ last=localStorage.getItem("dueNotified")||""; }catch(_){}
@@ -941,6 +945,8 @@ function checkDue(){
   }
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkDue(); });
+$("toTop").onclick=()=>window.scrollTo({top:0,behavior:"smooth"});
+window.addEventListener("scroll",()=>{ $("toTop").hidden = window.scrollY < 500; }, {passive:true});
 
 async function boot(){
   render();
@@ -1513,16 +1519,22 @@ function renderSchedule(){
   const today=todayISO(); const d0=new Date(); d0.setDate(d0.getDate()-45); const d1=new Date(); d1.setDate(d1.getDate()+60); const d14=new Date(); d14.setDate(d14.getDate()-14);
   const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
   const rows=[]; budgets.items.filter(hasDay).forEach(b=>occurrences(b, iso(d0), iso(d1)).forEach(o=>{ /* 2주보다 오래된 것은 아직 기록 안 된 것만 */ if(o.d<iso(d14) && SL.occ.has(b.id+"|"+o.d)) return; rows.push({b,o}); }));
+  /* 자동이체(적금 등)도 함께 보여 줍니다 */
+  (accounts.xfers||[]).forEach(x=>occurrences(xfAsBudget(x), iso(d0), iso(d1)).forEach(o=>{ const done=(x.posted||[]).includes(o.d); if(o.d<iso(d14) && done) return; if(x.autoFrom && o.d<x.autoFrom && !done) return; /* 등록 전 이체일은 보여 주지 않음 */ rows.push({xf:x,o}); }));
   rows.sort((a,b)=>a.o.d.localeCompare(b.o.d));
   const ending=budgets.items.filter(b=>b.end && b.end>=today && b.end<=iso(d1));
   $("schSub").textContent = budgets.items.some(hasDay) ? `지난 2주(기록 안 된 것은 45일)와 앞으로 60일. 늦게 냈어도 같은 계정·금액의 기록이 앞뒤 20일 안에 있으면 그 집행으로 보고, 예산은 예정된 달에서 씁니다. 자동 기록은 집행일 당일이나 그 뒤에 앱을 열 때 들어갑니다.${ending.length?` 기한이 곧 끝나는 예산: ${ending.map(b=>b.key.slice(2)+" ("+b.end+")").join(", ")}`:""}` : "집행일이 정해진 예산이 없습니다. ‘예산 편집’에서 항목마다 집행일과 기한을 넣을 수 있습니다.";
   if(!rows.length){ $("schTbl").innerHTML=`<tbody><tr><td style="color:var(--muted)">이 기간에 예정된 집행이 없습니다.</td></tr></tbody>`; return; }
-  $("schTbl").innerHTML=`<thead><tr><th>집행일</th><th>항목</th><th>적요</th><th class="r">금액</th><th>결제 → 계좌</th><th>상태</th></tr></thead><tbody>`+rows.map(({b,o})=>{
+  $("schTbl").innerHTML=`<thead><tr><th>집행일</th><th>항목</th><th>적요</th><th class="r">금액</th><th>결제 → 계좌</th><th>상태</th></tr></thead><tbody>`+rows.map(r=>{
+    if(r.xf){ const x=r.xf, o=r.o, id="xf-"+x.id+"-"+o.d, tx=monthTx(o.d.slice(0,7)).find(t=>t.id===id);
+      const st = tx ? `<span class="st-done" role="button" tabindex="0" data-open="${o.d.slice(0,7)}|${esc(id)}" style="cursor:pointer;text-decoration:underline dotted">자동 기록됨</span>` : (x.posted||[]).includes(o.d) ? `<span class="st-done">기록됨 (지운 기록)</span>` : o.d>today ? (x.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-wait">직접 기록</span>`) : (x.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span>`);
+      return `<tr class="${o.d===today?"today":""}"><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(x.name||"자동이체")}<span class="tag">자동이체 · ${esc(xfTxt(x))}</span></td><td></td><td class="r num">${won(o.amt)}</td><td>${esc(x.from)} → ${esc(x.to)}</td><td>${st}</td></tr>`; }
+    const {b,o}=r;
     const lt=SL.occ.get(b.id+"|"+o.d), rec=!!lt, posted=(b.posted||[]).includes(o.d);
     let st; if(rec) st=`<span class="st-done" role="button" tabindex="0" data-open="${lt.d.slice(0,7)}|${esc(lt.id)}" style="cursor:pointer;text-decoration:underline dotted">기록됨${lt.d!==o.d?` · ${+lt.d.slice(5,7)}/${+lt.d.slice(8)} 집행`:""}</span>`; else if(o.d>today) st= b.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-manual">직접 기록</span>`; else if(b.auto && posted) st=`<span class="st-manual">기록 후 삭제됨</span>`; else if(b.auto && o.d<(b.autoFrom||today)) st=`<span class="st-manual">자동 기록 전 일정</span>`; else st= b.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span> <button type="button" class="btn small" data-rec="${esc(b.id)}|${o.d}">기록하기</button>`;
     if(!rec && !b.auto && o.d>today) st+=` <button type="button" class="btn small" data-rec="${esc(b.id)}|${o.d}">미리 기록</button>`;
     const m=methodOf(b.m);
-    return `<tr><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(b.key.slice(2))}<span class="tag">${esc(schedTxt(b))}</span></td><td>${esc(b.desc||"")}</td><td class="r num ${typeOfKey(b.key)==="in"?"good":""}">${typeOfKey(b.key)==="in"?"+":""}${won(o.amt)}</td><td>${typeOfKey(b.key)==="in" ? `입금 → ${esc(b.acct||mainAcct())}` : budgetAcct(b)!=="미지정"?`${b.m?esc(b.m)+" → ":""}${esc(budgetAcct(b))}`:'<span style="color:var(--muted)">미지정</span>'}</td><td>${st}</td></tr>`;
+    return `<tr class="${o.d===today?"today":""}"><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(b.key.slice(2))}<span class="tag">${esc(schedTxt(b))}</span></td><td>${esc(b.desc||"")}</td><td class="r num ${typeOfKey(b.key)==="in"?"good":""}">${typeOfKey(b.key)==="in"?"+":""}${won(o.amt)}</td><td>${typeOfKey(b.key)==="in" ? `입금 → ${esc(b.acct||mainAcct())}` : budgetAcct(b)!=="미지정"?`${b.m?esc(b.m)+" → ":""}${esc(budgetAcct(b))}`:'<span style="color:var(--muted)">미지정</span>'}</td><td>${st}</td></tr>`;
   }).join("")+`</tbody>`;
   $("schTbl").querySelectorAll("[data-rec]").forEach(btn=>btn.onclick=()=>{ const [bid,d]=btn.dataset.rec.split("|"); const b=budgets.items.find(x=>x.id===bid); if(b) recordOcc(b,{d,amt:occAmt(b)}); });
   $("schTbl").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>{ const [ym,id]=el.dataset.open.split("|"); openTx(ym,id); });
