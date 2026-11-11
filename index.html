@@ -2084,7 +2084,7 @@ function renderDetail(){
   const kindTxt={cat:"계정",grp:"그룹",acct:"계좌",meth:"결제수단"}[spec.k];
   $("dtTitle").textContent = spec.lbl || (Array.isArray(spec.v)?`${kindTxt} ${spec.v.length}개`:String(spec.v));
   const months=[...new Set(list.map(t=>t.d.slice(0,7)))];
-  $("dtSum").innerHTML = `<span>${esc(ymRangeTxt(spec.ym))} · ${spec.t==="in"?"수입":"지출"}${spec.ent&&spec.ent!=="all"?(spec.ent==="corp"?" · 법인":" · 개인"):""}</span><span><b class="num">${won(tot)}</b> · ${list.length}건</span>${months.length>1?`<span>월평균 ${won(tot/months.length)}</span>`:""}`;
+  $("dtSum").innerHTML = `<span>${esc(ymRangeTxt(spec.ym))} · ${spec.t==="in"?"수입":"지출"}${spec.ent&&spec.ent!=="all"?(spec.ent==="corp"?" · 법인":" · 개인"):""}</span><span><b class="num">${won(tot)}</b> · ${list.length}건</span>${spec.k==="ws" ? (()=>{ const w=wsOf(spec.v); if(!w) return ""; const pre=sumOf(list.filter(t=>t.d<w.start)), dur=sumOf(list.filter(t=>t.d>=w.start&&t.d<=(w.end||w.start))), post=tot-pre-dur; return `<span>${esc(wsPeriod(w))}</span><span>미리 낸 돈 <b class="num">${won(pre)}</b> · 기간 중 <b class="num">${won(dur)}</b>${post?` · 끝난 뒤 <b class="num">${won(post)}</b>`:""}</span>`; })() : months.length>1?`<span>월평균 ${won(tot/months.length)}</span>`:""}`;
   // 계정별 나눔: 그룹·계좌·결제수단이나 여러 계정일 때
   const by={}; all.forEach(t=>{ const c=t.cat||"미분류"; by[c]=(by[c]||0)+(+t.amt||0); });
   const cats=Object.entries(by).sort((a,b)=>b[1]-a[1]);
