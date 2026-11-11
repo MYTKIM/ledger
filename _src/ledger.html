@@ -141,6 +141,8 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 .row .d b{display:block;font-size:17px;color:var(--ink);font-weight:600;line-height:1.1}
 .row .t{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .amt{font-size:15px;font-weight:600;text-align:right;white-space:nowrap}
+#wsNew:not([hidden]){display:grid}
+.chip.ws{background:#efe7fb;color:#5b3a99} @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .chip.ws{background:#3a2d55;color:#d9c8ff} }
 .row .amt.in{color:var(--in)} .row .amt.move{color:var(--muted)} .row .amt.move::before{content:"⇄ ";font-weight:400}
 .row .meta{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;font-size:12px;color:var(--muted);min-width:0;grid-column:2/-1}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:999px;font-size:11.5px;font-weight:500;white-space:nowrap}
@@ -374,6 +376,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
             <span class="seg" id="entSeg"><button data-v="all" aria-pressed="true">전체</button><button data-v="corp" aria-pressed="false">법인</button><button data-v="me" aria-pressed="false">개인</button><button data-v="pending" aria-pressed="false">정산 대기</button></span>
             <select id="fMethod" aria-label="결제수단 필터"><option value="">모든 결제수단</option></select>
             <select id="fCat" aria-label="계정 필터"><option value="">모든 계정</option></select>
+            <select id="fWs" aria-label="워크샵 필터"><option value="">워크샵 구분 없이</option></select>
             <input id="fText" type="search" placeholder="적요 검색" aria-label="적요 검색">
           </div>
         </div>
@@ -409,6 +412,11 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="stack" id="incStack"></div>
         <div class="scroll-x"><table class="dt" id="incTbl"></table></div>
       </div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h3>워크샵별 비용</h3><button type="button" class="btn small" id="wsEdit">워크샵 관리</button></div>
+      <p class="sub">미리 낸 숙박·교통부터 기간 중 비용까지, 워크샵으로 표시한 기록을 모읍니다. 기간과 상관없이 전체 기록에서 셉니다. 줄을 누르면 거래를 봅니다.</p>
+      <div class="scroll-x"><table class="dt" id="wsTbl"></table></div>
     </div>
     <div class="panel">
       <h3>항목별 지출 순위</h3>
@@ -552,10 +560,13 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="f" id="methodRow"><span class="lbl" id="mLbl">결제수단</span><div class="methods" id="iMethods" role="group" aria-labelledby="mLbl"></div></div>
       <div class="f" id="inAcctRow" hidden><span class="lbl" id="iaLbl">들어온 계좌</span><div class="methods" id="iAccts" role="group" aria-labelledby="iaLbl"></div></div>
       <div class="f" id="inFromRow" hidden><label for="iFromAc">보낸 곳</label><select id="iFromAc"></select></div>
+      <div class="f" id="payViaRow" hidden><label for="iPayVia" id="pvLbl">페이로 낸 돈이 실제로 나간 수단</label><select id="iPayVia"></select></div>
       <div class="two" id="otherRow" hidden>
         <div class="f"><label for="iMx">수단 이름</label><input id="iMx" placeholder="예: 알리페이, 현지 현금"></div>
         <div class="f"><label for="iVia">실제로 돈이 나간 곳</label><select id="iVia"></select></div>
       </div>
+      <div class="f" id="wsRow"><label for="iWs">워크샵</label><select id="iWs"></select>
+        <div id="wsNew" hidden style="grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="iWsName" placeholder="워크샵 이름 (예: 11월 제주 리더십)" style="grid-column:1/-1"><input id="iWsStart" type="date" aria-label="시작일"><input id="iWsEnd" type="date" aria-label="끝나는 날"></div></div>
       <div class="f" id="entRow"><span class="lbl">귀속</span><span class="seg" id="entInSeg"><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="true">개인</button></span></div>
       <div class="hint" id="flowHint"></div>
       <div class="hint" id="reconBox" hidden></div>
@@ -636,6 +647,19 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <button class="btn small" id="addA" style="justify-self:start">계좌 추가</button>
       <div class="two"><div class="f"><label for="aBuf">비상금으로 남겨 둘 생활비 (개월)</label><input id="aBuf" inputmode="numeric"></div></div>
       <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveAcc">저장</button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 워크샵 관리 -->
+<div class="overlay" id="wsOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="wsTitle">
+    <h3><span id="wsTitle">워크샵 관리</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form">
+      <p class="hint" style="margin:0">워크샵을 미리 만들어 두면, 기록을 넣을 때 ‘워크샵’에서 고를 수 있습니다. 기록 창에서 ‘새 워크샵 만들기’로 바로 만들 수도 있습니다. 워크샵을 지우면 그 표시만 없어지고 기록은 그대로 남습니다.</p>
+      <div id="wsList" class="xf-list"></div>
+      <button type="button" class="btn small" id="wsAdd" style="justify-self:start">워크샵 추가</button>
+      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="wsSave">저장</button></div></div>
     </div>
   </div>
 </div>
@@ -766,7 +790,7 @@ let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 let months = {};            // ym -> [tx]
 let curYM = CUR_YM;
 let db = null, monthsRef = null, configRef = null;
-const view = {catEnt:"all", ent:"all", method:"", cat:"", text:"", weeks:new Set(), wkYM:""};
+const view = {catEnt:"all", ent:"all", method:"", cat:"", text:"", ws:"", weeks:new Set(), wkYM:""};
 /* 주차: 달력처럼 일요일 시작. 1주차는 1일부터 첫 토요일까지 */
 function weeksOf(ym){
   const [y,m]=ym.split("-").map(Number), L=lastDay(y,m), out=[]; let d=1;
@@ -786,7 +810,10 @@ let plans = {}; let plansRef = null;   // ym -> {out:{cat:amt}, inc:{cat:amt}}
 const OTHER_M = {code:"기타", name:"기타 수단", kind:"other", acct:"미정", own:"me"};
 const methodOf = code => config.methods.find(x=>x.code===code) || (code==="기타" ? OTHER_M : undefined);
 /* 기타 수단(알리페이 등)은 via에 실제로 돈이 나간 결제수단·계좌를 둡니다 */
-const payCode = t => t.m==="기타" ? (t.via||"") : t.m;
+/* 결제 경로: 기타는 via, 네이버·카카오페이 등 페이는 건마다 고른 via(없으면 페이에 연결된 기본 수단) */
+const isPayM = code => { const m=methodOf(code); return !!m && kindOf(m)==="pay"; };
+const payCode = t => t.m==="기타" ? (t.via||"") : (t.via && isPayM(t.m) ? t.via : t.m);
+const effVia = t => isPayM(t.m) ? (t.via || (methodOf(t.m)||{}).link || "") : "";
 /* 결제수단 종류: card(카드, 결제일에 출금) · pay(네이버·카카오페이 등, 연결된 카드나 계좌로 결제) · bank(계좌이체) · cash(현금) */
 const KINDS=[["card","카드"],["pay","간편결제"],["bank","계좌이체"],["cash","현금"]];
 const KIND_LBL={card:"카드",pay:"간편결제",bank:"계좌이체",cash:"현금",other:"기타"};
@@ -826,8 +853,9 @@ const isCorpCat = cat => /^지발연/.test(cat||"");
 const catSegs = c => String(c||"").split(/\s*-\s*/).map(x=>x.trim()).filter(Boolean);
 const catSort = (a,b) => { const A=catSegs(a), B=catSegs(b); for(let i=0;i<Math.min(A.length,B.length);i++){ const c=A[i].localeCompare(B[i],"ko"); if(c) return c; } return A.length-B.length; };
 const groupOf = cat => { const s=(cat||"기타").split(/\s*-\s*/)[0].trim(); return s||"기타"; };
-function needsSettle(tx){ if(tx.t!=="out"||tx.ent!=="corp") return false; if(tx.m==="기타") return !(resolve(tx.via)||{}).own || (resolve(tx.via)||{}).own!=="corp"; const r=resolve(tx.m); return !!r && r.own!=="corp"; }
-function txMethodTxt(t){ if(t.m!=="기타") return chainTxt(t.m); const v=resolve(t.via); return `기타 · ${esc(t.mx||"이름 없음")}`+(v?" → "+v.chain.map(m=>esc(m.name||m.code)).join(" → "):""); }
+function needsSettle(tx){ if(tx.t!=="out"||tx.ent!=="corp") return false; if(tx.m==="기타") return !(resolve(tx.via)||{}).own || (resolve(tx.via)||{}).own!=="corp"; const r=resolve(payCode(tx)); return !!r && r.own!=="corp"; }
+function txMethodTxt(t){ if(t.m!=="기타" && !(t.via && isPayM(t.m))) return chainTxt(t.m);
+  if(t.m!=="기타"){ const pm=methodOf(t.m); return `${esc(t.m)}${pm&&pm.name&&pm.name!==t.m?" · "+esc(pm.name):""} → ${chainTxt(t.via)}`; } const v=resolve(t.via); return `기타 · ${esc(t.mx||"이름 없음")}`+(v?" → "+v.chain.map(m=>esc(m.name||m.code)).join(" → "):""); }
 
 /* ---------- 저장소 ---------- */
 const writeQ = {}, pendingLocal = {};
@@ -887,7 +915,7 @@ async function boot(){
   budRef = db.doc("config/budgets");
   budRef.onSnapshot(s=>{ if(s.exists && !budPending){ const d=s.data(); budgets={items:(d.items||[]).map(x=>JSON.parse(JSON.stringify(x)))}; } loaded.bud=true; render(); maybeRunSchedules(); }, e=>showNotice("예산을 읽지 못했습니다 ("+e.code+")."));
   accRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); accounts={buffer:d.buffer==null?3:d.buffer, list:(d.list||DEFAULT_ACCOUNTS.list).map(x=>({...x})), snaps:JSON.parse(JSON.stringify(d.snaps||{})), xfers:JSON.parse(JSON.stringify(d.xfers||[])), people:JSON.parse(JSON.stringify(d.people||[]))}; maybeRunSchedules(); } loaded.acc=true; render(); }, e=>showNotice("계좌 정보를 읽지 못했습니다 ("+e.code+")."));
-  configRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); config={methods:(d.methods||DEFAULT_CONFIG.methods).map(x=>({...x})), outCats:[...(d.outCats||DEFAULT_CONFIG.outCats)], inCats:[...(d.inCats||DEFAULT_CONFIG.inCats)]}; render(); } }, e=>showNotice("설정을 읽지 못했습니다 ("+e.code+")."));
+  configRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); config={methods:(d.methods||DEFAULT_CONFIG.methods).map(x=>({...x})), outCats:[...(d.outCats||DEFAULT_CONFIG.outCats)], inCats:[...(d.inCats||DEFAULT_CONFIG.inCats)], workshops:(d.workshops||[]).map(x=>({...x}))}; render(); } }, e=>showNotice("설정을 읽지 못했습니다 ("+e.code+")."));
   let first = true;
   monthsRef.onSnapshot(snap=>{
     const next={}; snap.docs.forEach(d=>{ const b=d.data(); if(b && Array.isArray(b.tx)) next[d.id]=b.tx.map(x=>({...x})); });
@@ -969,9 +997,15 @@ function renderCat(outs){
 }
 function renderFilters(tx){
   const ms=[...new Set(tx.map(t=>t.m||""))].filter(Boolean).sort();
-  const fm=$("fMethod"); const keepM=view.method;
-  fm.innerHTML=`<option value="">모든 결제수단</option>`+ms.map(c=>`<option value="${esc(c)}">${esc(c)} · ${esc((methodOf(c)||{}).name||"등록 안 됨")}</option>`).join("");
-  fm.value=ms.includes(keepM)?keepM:""; view.method=fm.value;
+  const fm=$("fMethod"); const keepM=view.method; const vals=[];
+  fm.innerHTML=`<option value="">모든 결제수단</option>`+ms.map(c=>{ vals.push(c);
+    let h=`<option value="${esc(c)}">${esc(c)} · ${esc((methodOf(c)||{}).name||"등록 안 됨")}${isPayM(c)?" (전체)":""}</option>`;
+    if(isPayM(c)){ const vs=[...new Set(tx.filter(t=>t.m===c).map(effVia))].sort(); vs.forEach(v=>{ const k=c+">"+v; vals.push(k); h+=`<option value="${esc(k)}">　└ ${esc(c)} → ${esc(v?v+" · "+((methodOf(v)||{}).name||""):"미정")}</option>`; }); }
+    return h; }).join("");
+  fm.value=vals.includes(keepM)?keepM:""; view.method=fm.value;
+  const fw=$("fWs"), wsIn=[...new Set(tx.map(t=>t.ws).filter(id=>id&&wsOf(id)))];
+  fw.innerHTML=`<option value="">워크샵 구분 없이</option><option value="__only">워크샵 비용만</option><option value="__excl">워크샵 비용 빼고</option>`+wsIn.map(id=>`<option value="${esc(id)}">${esc(wsOf(id).name)}</option>`).join("");
+  fw.value=[...fw.options].some(o=>o.value===view.ws)?view.ws:""; view.ws=fw.value;
   const cs=[...new Set(tx.map(t=>t.cat||""))].filter(Boolean).sort();
   const fc=$("fCat"); const keepC=view.cat;
   fc.innerHTML=`<option value="">모든 계정</option>`+cs.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
@@ -984,7 +1018,8 @@ function renderLedger(tx){
   let list = view.ent==="pending" ? allPending() : tx.slice();
   if(view.ent==="corp") list=list.filter(t=>t.ent==="corp");
   if(view.ent==="me") list=list.filter(t=>t.ent!=="corp");
-  if(view.method) list=list.filter(t=>t.m===view.method);
+  if(view.method){ if(view.method.includes(">")){ const [mm,vv]=view.method.split(">"); list=list.filter(t=>t.m===mm && effVia(t)===vv); } else list=list.filter(t=>t.m===view.method); }
+  if(view.ws==="__only") list=list.filter(t=>t.ws&&wsOf(t.ws)); else if(view.ws==="__excl") list=list.filter(t=>!(t.ws&&wsOf(t.ws))); else if(view.ws) list=list.filter(t=>t.ws===view.ws);
   if(view.cat) list=list.filter(t=>t.cat===view.cat);
   if(view.text){ const q=view.text.toLowerCase(); list=list.filter(t=>(t.desc||"").toLowerCase().includes(q)||(t.cat||"").toLowerCase().includes(q)); }
   // 주차 버튼: 다른 조건을 적용한 뒤의 주별 건수를 보여 주고, 켠 주차만 남깁니다
@@ -1006,6 +1041,9 @@ function renderLedger(tx){
     $("welcomeImp").onclick=openImport; return;
   }
   if(!list.length){ wrap.innerHTML=`<div class="ledger"><div class="foot">조건에 맞는 기록이 없습니다.</div></div>`; return; }
+  const filtOn = view.method||view.cat||view.text||view.ws||view.weeks.size||view.ent!=="all";
+  const sumOut=list.filter(t=>t.t==="out").reduce((a,t)=>a+(+t.amt||0),0), sumIn=list.filter(t=>t.t==="in").reduce((a,t)=>a+(+t.amt||0),0);
+  const sumBar = filtOn && view.ent!=="pending" && list.length ? `<div class="hint" style="margin:0 0 10px">조건에 맞는 <b>${list.length}건</b> · 지출 <b class="num">${won(sumOut)}</b>${sumIn?` · 수입 <b class="num">${won(sumIn)}</b>`:""}</div>` : "";
   const stBar = view.ent==="pending" ? `<div class="actions" style="margin:0 0 10px"><span class="hint" style="background:none;padding:0">개인 카드·현금으로 먼저 낸 법인 비용입니다. 법인에서 돌려받았으면 기록하세요.</span><div class="r"><button type="button" class="btn primary small" id="stOpen2">정산 입금 기록</button></div></div>` : "";
   let html=`<div class="ledger">`, lastDay=null, showDay=view.ent!=="pending";
   list.forEach(t=>{
@@ -1014,7 +1052,7 @@ function renderLedger(tx){
     const m=methodOf(t.m), acct=txAcct(t);
     const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : isRecon(t) ? `<span class="chip plain">잔액 맞춤 · ${t.lock?"수동":"자동"}</span>` : "";
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
-    const st = t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "";
+    const st = (t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "") + (t.ws&&wsOf(t.ws) ? `<span class="chip ws">워크샵 · ${esc(wsOf(t.ws).name)}</span>` : "");
     const mv = t.t==="move" ? effects(t) : null;
     const flow = t.t==="move" ? `<span class="flow">${esc(isPerson(t.from)?dispAcct(t.from):(mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc(isPerson(t.to)?dispAcct(t.to):(mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.t==="in" ? (NOT_ACCT(acct) ? `<span class="flow">입금 계좌 미지정</span>` : `<span class="flow">${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}<b>${esc(acct)}</b></span>`) : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
     const cls = t.t==="in"?"in":t.t==="move"?"move":"";
@@ -1022,7 +1060,7 @@ function renderLedger(tx){
   });
   const shown=sumOf(list.filter(t=>t.t==="out")), shownIn=sumOf(list.filter(t=>t.t==="in"));
   html+=`<div class="foot"><span>${list.length}건 표시</span><span class="num">지출 ${won(shown)}${shownIn?" · 수입 "+won(shownIn):""}</span></div></div>`;
-  wrap.innerHTML=stBar+html;
+  wrap.innerHTML=stBar+sumBar+html;
   if($("stOpen2")) $("stOpen2").onclick=openSettle;
   wrap.querySelectorAll(".row").forEach(b=>b.onclick=()=>openTx(b.dataset.ym,b.dataset.id));
 }
@@ -1055,7 +1093,36 @@ function shareTable(rows,total,label,dtf){
   const maxP=Math.max(...show.map(r=>pct(r[1],total)));
   return `<thead><tr><th>${label}</th><th class="r">금액</th><th>비율</th></tr></thead><tbody>`+show.map((r,i)=>`<tr${dtf?dtAttr(dtf(r[2]||r[0], r[2]?r[0]:null)):""}><td><span class="sw" style="background:${PAL[Math.min(i,PAL.length-1)]}"></span>${esc(r[0])}</td><td class="r num">${won(r[1])}</td><td>${pbar(pct(r[1],total),maxP)}</td></tr>`).join("")+`</tbody><tfoot><tr><td>합계</td><td class="r num">${won(total)}</td><td></td></tr></tfoot>`;
 }
+function renderWs(){
+  const t=$("wsTbl"); if(!t) return; const L=wsList(), all=allTx().filter(x=>x.ws && x.t==="out");
+  if(!L.length){ t.innerHTML=`<tbody><tr><td class="foot">아직 워크샵이 없습니다. 기록 창의 ‘워크샵’에서 새로 만들거나 ‘워크샵 관리’에서 추가하세요.</td></tr></tbody>`; return; }
+  const rows=L.map(w=>{ const xs=all.filter(x=>x.ws===w.id), tot=sumOf(xs), corp=sumOf(xs.filter(x=>x.ent==="corp")), pre=sumOf(xs.filter(x=>x.d<w.start));
+    const by={}; xs.forEach(x=>{ const c=(x.cat||"미분류").replace(/^지발연\s*-\s*/,""); by[c]=(by[c]||0)+(+x.amt||0); });
+    const top=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([c,v])=>`${esc(c)} ${won(v)}`).join(" · ");
+    return {w,n:xs.length,tot,corp,pre,top}; }).sort((a,b)=>b.w.start.localeCompare(a.w.start));
+  t.innerHTML=`<thead><tr><th>워크샵</th><th>기간</th><th class="r">건수</th><th class="r">합계</th><th class="r">법인</th><th class="r">미리 낸 돈</th><th>많이 쓴 항목</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr ${r.n?`data-dt='${esc(JSON.stringify({k:"ws",v:r.w.id,t:"out",ym:allYms(),lbl:"워크샵 · "+r.w.name}))}' style="cursor:pointer"`:""}><td><b>${esc(r.w.name)}</b></td><td>${esc(wsPeriod(r.w))}</td><td class="r num">${r.n}</td><td class="r num"><b>${won(r.tot)}</b></td><td class="r num">${won(r.corp)}</td><td class="r num">${r.pre?won(r.pre):"—"}</td><td style="font-size:12.5px;color:var(--muted)">${r.top||"—"}</td></tr>`).join("")+`</tbody>`;
+}
+let wDraft=null;
+$("wsEdit").onclick=()=>{ wDraft=JSON.parse(JSON.stringify(wsList())); renderWsEdit(); openOv("wsOv"); };
+function renderWsEdit(){
+  $("wsList").innerHTML = wDraft.length ? wDraft.map((w,i)=>{ const n=allTx().filter(x=>x.ws===w.id).length; return `<div class="xf"><div class="g">
+      <label>이름<input data-i="${i}" data-k="name" value="${esc(w.name||"")}"></label>
+      <label>시작일<input type="date" data-i="${i}" data-k="start" value="${esc(w.start||"")}"></label>
+      <label>끝나는 날<input type="date" data-i="${i}" data-k="end" value="${esc(w.end||"")}"></label>
+      <label>메모 (선택)<input data-i="${i}" data-k="note" value="${esc(w.note||"")}" placeholder="예: 해외, 고객사"></label>
+    </div><div class="ft"><span>표시한 기록 ${n}건</span><button type="button" class="btn small" data-wdel="${i}">삭제</button></div></div>`; }).join("") : `<div class="foot">아직 워크샵이 없습니다.</div>`;
+  $("wsList").querySelectorAll("[data-k]").forEach(el=>el.oninput=el.onchange=()=>{ wDraft[+el.dataset.i][el.dataset.k]=el.value.trim(); });
+  $("wsList").querySelectorAll("[data-wdel]").forEach(b=>b.onclick=()=>{ wDraft.splice(+b.dataset.wdel,1); renderWsEdit(); });
+}
+$("wsAdd").onclick=()=>{ const d=todayISO(); wDraft.push({id:uid(), name:"", start:d, end:d, note:""}); renderWsEdit(); };
+$("wsSave").onclick=async()=>{
+  if(wDraft.some(w=>!w.name||!w.start)){ showNotice("워크샵마다 이름과 시작일을 넣어 주세요."); return; } showNotice("");
+  wDraft.forEach(w=>{ if(!w.end||w.end<w.start) w.end=w.start; });
+  config.workshops=wDraft; closeOv("wsOv"); render(); await saveConfig();
+};
 function renderDash(){
+  renderWs();
   const keys=periodKeys(perMode,curYM), have=dataMonths(keys), nMon=Math.max(1,have.length);
   const A=agg(keys), P=agg(prevKeys(keys));
   const lbl = perMode==="1" ? `${+curYM.slice(5)}월` : perMode==="3" ? `${+keys[0].slice(5)}~${+curYM.slice(5)}월` : `${curYM.slice(0,4)}년 1~${+curYM.slice(5)}월`;
@@ -1920,8 +1987,8 @@ $("saveAcc").onclick=async()=>{
 /* ---------- 항목 상세 팝업 ----------
    누를 수 있는 곳에는 data-dt="{조건}"을 붙입니다.
    조건: k(cat 계정 | grp 그룹 | acct 계좌 | meth 결제수단), v(값 또는 값 목록), t(out|in), ym(달 목록), ent(all|corp|me), lbl(제목) */
-function methLabel(t){ return t.m==="기타"?"기타 수단 (알리페이 등)":t.m?(t.m+" · "+((methodOf(t.m)||{}).name||"")):"미지정"; }
-function dtKey(k,t){ return k==="cat" ? (t.cat||"미분류") : k==="grp" ? groupKey(t.cat) : k==="acct" ? txAcct(t) : methLabel(t); }
+function methLabel(t){ if(t.m==="기타") return "기타 수단 (알리페이 등)"; if(!t.m) return "미지정"; const base=t.m+" · "+((methodOf(t.m)||{}).name||""); const v=effVia(t); return v ? `${base} → ${v}` : base; }
+function dtKey(k,t){ return k==="ws" ? (t.ws||"") : k==="cat" ? (t.cat||"미분류") : k==="grp" ? groupKey(t.cat) : k==="acct" ? txAcct(t) : methLabel(t); }
 function dtAttr(spec){ return ` data-dt="${esc(JSON.stringify(spec))}" role="button" tabindex="0"`; }
 let dtl=null;
 function dtMatch(spec){
@@ -1936,7 +2003,9 @@ function dtMatch(spec){
 function ymRangeTxt(ks){ if(!ks.length) return ""; const a=ks[0], b=ks[ks.length-1]; const f=k=>`${k.slice(0,4)}년 ${+k.slice(5)}월`; return a===b ? f(a) : `${f(a)} ~ ${a.slice(0,4)===b.slice(0,4)?+b.slice(5)+"월":f(b)}`; }
 function openDetail(spec){ dtl={spec, sub:null}; renderDetail(); openOv("dtOv"); }
 function renderDetail(){
-  if(!dtl) return; const spec=dtl.spec, all=dtMatch(spec);
+  if(!dtl) return; const spec=dtl.spec, all0=dtMatch(spec);
+  const hasWs = spec.k!=="ws" && all0.some(t=>t.ws&&wsOf(t.ws));
+  const all = !hasWs||!dtl.ws ? all0 : dtl.ws==="only" ? all0.filter(t=>t.ws&&wsOf(t.ws)) : all0.filter(t=>!(t.ws&&wsOf(t.ws)));
   const list = dtl.sub ? all.filter(t=>(t.cat||"미분류")===dtl.sub) : all;
   const tot=list.reduce((a,t)=>a+(+t.amt||0),0);
   const kindTxt={cat:"계정",grp:"그룹",acct:"계좌",meth:"결제수단"}[spec.k];
@@ -1948,6 +2017,9 @@ function renderDetail(){
   const cats=Object.entries(by).sort((a,b)=>b[1]-a[1]);
   $("dtBreak").innerHTML = cats.length>1 ? `<span class="chip plain" data-sub="" aria-pressed="${!dtl.sub}">전체</span>`+cats.map(([c,v])=>`<span class="chip plain" data-sub="${esc(c)}" aria-pressed="${dtl.sub===c}">${esc(c.replace(/^지발연\s*-\s*/,""))} ${won(v)}</span>`).join("") : "";
   $("dtBreak").querySelectorAll("[data-sub]").forEach(x=>x.onclick=()=>{ dtl.sub=x.dataset.sub||null; renderDetail(); });
+  if(hasWs){ const wsAmt=sumOf(all0.filter(t=>t.ws&&wsOf(t.ws)));
+    $("dtBreak").insertAdjacentHTML("afterbegin",`<span style="font-size:12px;color:var(--muted);margin-right:2px">워크샵</span><span class="chip plain" data-wsf="" aria-pressed="${!dtl.ws}">포함</span><span class="chip plain" data-wsf="excl" aria-pressed="${dtl.ws==="excl"}">빼고</span><span class="chip plain" data-wsf="only" aria-pressed="${dtl.ws==="only"}">워크샵만 ${won(wsAmt)}</span><span style="flex-basis:100%;height:0"></span>`);
+    $("dtBreak").querySelectorAll("[data-wsf]").forEach(x=>x.onclick=()=>{ dtl.ws=x.dataset.wsf||null; dtl.sub=null; renderDetail(); }); }
   if(!list.length){ $("dtList").innerHTML=`<div class="foot">해당하는 거래가 없습니다.</div>`; return; }
   let html="", last=null; const multi=months.length>1;
   list.forEach(t=>{
@@ -2088,6 +2160,7 @@ function segSet(id, v){ $(id).querySelectorAll("button").forEach(x=>x.setAttribu
 segBind("catSeg", v=>{ view.catEnt=v; render(); });
 segBind("entSeg", v=>{ view.ent=v; render(); });
 $("fMethod").onchange=e=>{ view.method=e.target.value; render(); };
+$("fWs").onchange=e=>{ view.ws=e.target.value; render(); };
 $("fCat").onchange=e=>{ view.cat=e.target.value; render(); };
 $("fText").oninput=e=>{ view.text=e.target.value.trim(); render(); };
 const pendGo=()=>{ view.ent="pending"; segSet("entSeg","pending"); render(); $("ledgerWrap").scrollIntoView({behavior:"smooth",block:"start"}); };
@@ -2116,6 +2189,27 @@ function fillMethods(){
     + (config.methods.some(m=>m.code==="기타") ? "" : `<span class="mgrp">기타</span><button type="button" data-v="기타" aria-pressed="${form.m==="기타"?"true":"false"}">기타<small>목록에 없는 수단</small></button>`);
   box.querySelectorAll("button").forEach(b=>b.onclick=()=>{ form.m=b.dataset.v; fillMethods(); updateHint(true); });
 }
+/* 페이(네이버·카카오페이)의 실제 결제수단: 기본은 페이에 연결된 수단, 같은 페이로 마지막에 쓴 수단을 먼저 고릅니다 */
+/* 워크샵: 미리 낸 숙박·교통부터 기간 중 비용까지 한 워크샵으로 묶어 봅니다 */
+function wsList(){ return config.workshops||[]; }
+function wsOf(id){ return wsList().find(w=>w.id===id); }
+function wsPeriod(w){ if(!w) return ""; const f=d=>d?`${+d.slice(5,7)}/${+d.slice(8)}`:""; const n=w.start&&w.end?Math.round((Date.parse(w.end)-Date.parse(w.start))/864e5):0; return `${w.start.slice(0,4)} ${f(w.start)}${w.end&&w.end!==w.start?"~"+f(w.end):""} · ${n?`${n}박 ${n+1}일`:"당일"}`; }
+function wsOptions(d, val){
+  const sel=$("iWs"), L=wsList().slice(), cur=w=>w.start<=d&&d<=(w.end||w.start);
+  const inP=L.filter(cur), up=L.filter(w=>!cur(w)&&w.start>d).sort((a,b)=>a.start.localeCompare(b.start)), past=L.filter(w=>!cur(w)&&w.start<=d).sort((a,b)=>b.start.localeCompare(a.start));
+  const o=w=>`<option value="${esc(w.id)}">${esc(w.name)} (${esc(wsPeriod(w))})</option>`;
+  sel.innerHTML=`<option value="">해당 없음</option>`+(inP.length?`<optgroup label="이 날짜가 기간 안">${inP.map(o).join("")}</optgroup>`:"")+(up.length?`<optgroup label="다가올 워크샵 (미리 결제)">${up.map(o).join("")}</optgroup>`:"")+(past.length?`<optgroup label="지난 워크샵">${past.slice(0,12).map(o).join("")}</optgroup>`:"")+`<option value="__new">＋ 새 워크샵 만들기…</option>`;
+  sel.value = val && [...sel.options].some(x=>x.value===val) ? val : "";
+}
+$("iWs").onchange=()=>{ const nw=$("iWs").value==="__new"; $("wsNew").hidden=!nw; if(nw){ const d=$("iDate").value||todayISO(); if(!$("iWsStart").value) $("iWsStart").value=d; if(!$("iWsEnd").value) $("iWsEnd").value=d; $("iWsName").focus(); } };
+$("iDate").addEventListener("change",()=>{ const v=$("iWs").value; if(v!=="__new") wsOptions($("iDate").value||todayISO(), v); });
+function payViaOptions(sel, code, val){
+  const pm=methodOf(code)||{}, link=pm.link||"", lm=methodOf(link);
+  sel.innerHTML=`<option value="">기본: ${esc(link?(link+" · "+((lm||{}).name||"")):"연결 안 됨")}</option>`+KINDS.filter(([k])=>k!=="pay").map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k && m.code!==link); return ms.length?`<optgroup label="${lbl}">`+ms.map(m=>`<option value="${esc(m.code)}">${esc(m.code)} · ${esc(m.name||"")}</option>`).join("")+`</optgroup>`:""; }).join("");
+  sel.value=val||""; sel.dataset.m=code;
+}
+function lastPayVia(code){ let best=null; allTx().forEach(t=>{ if(t.m===code && t.t==="out" && (!best || (t.ts||0)>(best.ts||0))) best=t; }); return best ? (best.via||"") : ""; }
+$("iPayVia").onchange=()=>updateHint(true);
 function viaOptions(sel,val){
   sel.innerHTML=`<option value="">정하지 않음 (잔액 계산에서 뺌)</option>`+KINDS.filter(([k])=>k!=="pay").map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k); return ms.length?`<optgroup label="${lbl}">`+ms.map(m=>`<option value="${esc(m.code)}">${esc(m.code)} · ${esc(m.name)} → ${esc(acctOf(m.code))}</option>`).join("")+`</optgroup>`:""; }).join("");
   sel.value=val||"";
@@ -2125,7 +2219,7 @@ function acctOptions(sel,val,noPeople){ const names=[...new Set(accounts.list.ma
   sel.innerHTML=`<option value="">외부 (추적 안 함)</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")+(ppl.length?`<optgroup label="사람 (맡은 돈·빌려 준 돈)">${ppl.map(n=>`<option value="@${esc(n)}">${esc(n)}</option>`).join("")}</optgroup>`:""); sel.value=val||""; }
 function updateHint(autoSettle){
   const t=form.t, m=methodOf(form.m);
-  $("moveRow").hidden = t!=="move"; $("methodRow").hidden = t==="move" || t==="in"; $("entRow").hidden = t==="move"; $("inAcctRow").hidden = t!=="in"; $("inFromRow").hidden = t!=="in";
+  $("moveRow").hidden = t!=="move"; $("wsRow").hidden = t==="move"; $("methodRow").hidden = t==="move" || t==="in"; $("entRow").hidden = t==="move"; $("inAcctRow").hidden = t!=="in"; $("inFromRow").hidden = t!=="in";
   if(t==="in"){ $("otherRow").hidden=true; $("settleRow").hidden=true; $("iCat").previousElementSibling.textContent="계정 (수입 항목)"; const h=$("flowHint"); h.className="hint"; const a0=+($("iAmt").value.replace(/[^\d]/g,""))||0;
     const fa=$("iFromAc").value;
     h.innerHTML = (form.ac ? `${a0?won(a0)+"이 ":""}<b>${esc(form.ac)}</b>(으)로 들어온 것으로 기록합니다. 계좌·자금 탭의 잔액에도 더해집니다.` : "들어온 계좌를 고르면 그 통장 잔액에도 반영됩니다.")
@@ -2147,7 +2241,11 @@ function updateHint(autoSettle){
   const isOther = form.m==="기타" && t!=="move";
   $("otherRow").hidden = !isOther;
   if(isOther && !$("iVia").options.length) viaOptions($("iVia"), "");
-  const code = isOther ? $("iVia").value : form.m;
+  const isPay = t==="out" && isPayM(form.m);
+  $("payViaRow").hidden = !isPay;
+  if(isPay && $("iPayVia").dataset.m!==form.m) payViaOptions($("iPayVia"), form.m, editing ? "" : lastPayVia(form.m));
+  if(isPay) $("pvLbl").textContent = `${(methodOf(form.m)||{}).name||form.m}로 낸 돈이 실제로 나간 수단`;
+  const code = isOther ? $("iVia").value : (isPay && $("iPayVia").value) ? $("iPayVia").value : form.m;
   const rv=resolve(code);
   if(isOther && !rv){ const h=$("flowHint"); h.className="hint warn"; $("settleRow").hidden = !(t==="out"&&form.ent==="corp"); if(autoSettle) $("iSettle").checked = t==="out"&&form.ent==="corp"; h.innerHTML=`<b>${esc($("iMx").value||"기타 수단")}</b>으로 기록합니다. 실제로 돈이 나간 곳을 고르지 않으면 통장 잔액 계산에서는 빠집니다.`; return; }
   const corpByMe = t==="out" && form.ent==="corp" && rv && rv.own!=="corp";
@@ -2155,7 +2253,7 @@ function updateHint(autoSettle){
   if(autoSettle) $("iSettle").checked = corpByMe;
   const h=$("flowHint"); h.className="hint";
   if(!m){ h.innerHTML = "결제수단을 고르면 어느 계좌에서 돈이 나가는지 함께 기록됩니다."; return; }
-  const ac=esc(rv.acct), via = isOther ? `${esc($("iMx").value||"기타 수단")} → ${rv.chain.map(m=>esc(m.name||m.code)).join(" → ")} 경로로 ` : rv.chain.length>1 ? `${chainTxt(form.m)} 경로로 ` : "", when = rv.pay ? ` (다음 달 ${rv.pay}일 카드 결제일에)` : "";
+  const ac=esc(rv.acct), via = isOther ? `${esc($("iMx").value||"기타 수단")} → ${rv.chain.map(m=>esc(m.name||m.code)).join(" → ")} 경로로 ` : (isPay && $("iPayVia").value) ? `${esc(m.name||m.code)} → ${chainTxt($("iPayVia").value)} 경로로 ` : rv.chain.length>1 ? `${chainTxt(form.m)} 경로로 ` : "", when = rv.pay ? ` (다음 달 ${rv.pay}일 카드 결제일에)` : "";
   if(t==="in") h.innerHTML=`<b>${ac}</b>으로 들어온 돈으로 기록합니다.`;
   else if(t==="move") h.innerHTML=`<b>${esc(m.acct)}</b> 기준 이체·정산입니다. 수입·지출 합계에는 넣지 않습니다.`;
   else if(corpByMe){ h.className="hint warn"; h.innerHTML=`개인 수단(<b>${esc(isOther?($("iMx").value||"기타 수단"):m.name)}</b>)으로 낸 법인 비용입니다. ${via}<b>${ac}</b>에서 ${amt?won(amt)+"이 ":""}나가고${when}, 법인에서 정산받을 돈으로 잡힙니다.`; }
@@ -2216,6 +2314,8 @@ function openTx(ym, id){
     $("iPk").innerHTML=`<option value=""></option><option value="hold"></option><option value="loan"></option>`; $("iPk").value = t&&t.pk ? t.pk : ""; }
   if(!t) autoEnt();
   $("iMx").value = t&&t.m==="기타" ? (t.mx||"") : ""; viaOptions($("iVia"), t&&t.m==="기타" ? (t.via||"") : "");
+  $("iPayVia").dataset.m=""; if(t && isPayM(t.m)) payViaOptions($("iPayVia"), t.m, t.via||"");
+  wsOptions(t ? t.d : todayISO(), t ? (t.ws||"") : ""); $("wsNew").hidden=true; $("iWsName").value=$("iWsStart").value=$("iWsEnd").value="";
   if(!t){ form.ac=""; } fillAccts(); fillFromAc(t&&t.t==="in" ? (t.fromAc||"") : "");
   fillMethods(); updateHint(!t);
   showReconBox(t);
@@ -2237,7 +2337,13 @@ $("txForm").onsubmit=async e=>{
   if(form.t==="move"){ tx.from=$("iFrom").value; tx.to=$("iTo").value; delete tx.io; if((isPerson(tx.from)||isPerson(tx.to)) && $("iPk").value) tx.pk=$("iPk").value; else delete tx.pk; } else { delete tx.from; delete tx.to; delete tx.io; delete tx.pk; }
   if(form.t==="in"){ if(form.ac) tx.ac=form.ac; else delete tx.ac; delete tx.mx; delete tx.via; const fa=$("iFromAc").value; if(fa && fa!==form.ac && !isRecon(tx)) tx.fromAc=fa; else delete tx.fromAc; }
   else { delete tx.fromAc; if(base && base.t==="in" && !isRecon(base)) delete tx.ac; }
-  if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; } else { delete tx.mx; delete tx.via; }
+  if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; }
+  else if(form.t==="out" && isPayM(form.m) && $("iPayVia").value){ delete tx.mx; tx.via=$("iPayVia").value; }
+  else { delete tx.mx; delete tx.via; }
+  /* 워크샵 */
+  if(form.t!=="move"){ let w=$("iWs").value;
+    if(w==="__new"){ const nm=$("iWsName").value.trim(); if(!nm){ $("iWsName").focus(); return; } const W={id:uid(), name:nm, start:$("iWsStart").value||d, end:$("iWsEnd").value||$("iWsStart").value||d}; config.workshops=(config.workshops||[]).concat([W]); saveConfig(); w=W.id; }
+    if(w) tx.ws=w; else delete tx.ws; } else delete tx.ws;
   if(base && isRecon(base) && (tx.amt!==base.amt || tx.t!==base.t)) tx.lock=true;
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
