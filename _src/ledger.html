@@ -158,6 +158,11 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 .welcome h3{margin:0 0 6px;font-size:16px}
 .welcome p{margin:0 0 14px;color:var(--muted);max-width:60ch}
 
+.jump{display:flex;gap:6px;align-items:center;overflow-x:auto;scrollbar-width:none;margin:0 0 14px;padding:2px 0}
+.jump::-webkit-scrollbar{display:none}
+.jump .jl{font-size:12px;color:var(--muted);white-space:nowrap;margin-right:2px}
+.jump button{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 11px;font-size:12.5px;white-space:nowrap;cursor:pointer}
+.jump button:hover{background:var(--sunk)}
 .totop{position:fixed;left:max(18px,calc(env(safe-area-inset-left,0px) + 18px));bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:20;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:12px 16px;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,.12);cursor:pointer}
 .totop[hidden]{display:none}
 #schTbl tr.today td{background:var(--sunk)}
@@ -334,6 +339,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   </header>
   <div id="notice" class="notice" hidden></div>
   <div id="dueBar" class="notice due" hidden></div>
+  <nav id="jumpBar" class="jump" aria-label="이 화면 바로 가기" hidden></nav>
 
   <div class="grid" id="ledgerView">
     <div class="col">
@@ -960,7 +966,7 @@ function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym)
 function sumOf(list){ return list.reduce((a,t)=>a+(+t.amt||0),0); }
 
 function render(){
-  SL=computeSchLinks(); setTimeout(checkDue,0);
+  SL=computeSchLinks(); setTimeout(checkDue,0); setTimeout(buildJump,0);
   const [y,m] = curYM.split("-");
   $("mYear").textContent = y; $("mLabel").textContent = (+m)+"월";
   const tx = monthTx(curYM);
@@ -1227,8 +1233,19 @@ function route(){
   $("vLedger").setAttribute("aria-current",v==="ledger"?"page":"false"); $("vDash").setAttribute("aria-current",v==="dash"?"page":"false"); $("vAcc").setAttribute("aria-current",v==="acc"?"page":"false");
   $("fab").hidden = v==="acc" || v==="bud";
   if(v==="dash") renderDash(); if(v==="acc") renderAcc(); if(v==="bud") renderBud();
+  setTimeout(buildJump,0);
 }
 window.addEventListener("hashchange",route);
+/* 화면 위 바로 가기: 지금 화면의 큰 제목들을 버튼으로 늘어놓고, 누르면 그 자리로 내려갑니다 */
+function buildJump(){
+  const view=["ledgerView","dashView","accView","budView"].map(id=>$(id)).find(v=>v&&!v.hidden), bar=$("jumpBar"); if(!view){ bar.hidden=true; return; }
+  const hs=[...view.querySelectorAll("section > h2, .panel > h3, .panel > .ph > h3, .ledger-head > h2, .panel > h2")].filter(h=>h.offsetParent!==null);
+  const items=hs.map((h,i)=>{ const c=h.cloneNode(true); c.querySelectorAll(".aside,button,.x,.tag").forEach(x=>x.remove()); const t=c.textContent.replace(/\s+/g," ").trim(); if(!h.id) h.id="jmp-"+view.id+"-"+i; return t?{id:h.id,t}:null; }).filter(Boolean);
+  if(items.length<2){ bar.hidden=true; return; }
+  bar.hidden=false;
+  bar.innerHTML=`<span class="jl">바로 가기</span>`+items.map(x=>`<button type="button" data-jump="${x.id}">${esc(x.t.length>16?x.t.slice(0,15)+"…":x.t)}</button>`).join("");
+  bar.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>{ const el=document.getElementById(b.dataset.jump); if(el){ const y=el.getBoundingClientRect().top+window.scrollY-12; window.scrollTo({top:y,behavior:"smooth"}); } });
+}
 
 /* ---------- 예산 ---------- */
 /* 예산 항목 키: 지출 "c:계정", 수입 "i:계정" */
