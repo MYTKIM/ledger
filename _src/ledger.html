@@ -696,7 +696,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="xfTitle">
     <h3><span id="xfTitle">자동이체 (적금 등)</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
-      <p class="hint" style="margin:0">은행에 걸어 둔 자동이체를 적어 두면, 이체일이 지난 뒤 앱을 열 때 <b>보낸 계좌 → 받은 계좌</b> 이체로 장부에 저절로 기록됩니다. 이체라서 수입·지출 합계에는 넣지 않고 두 계좌 잔액에만 반영합니다. 처음 저장한 날 이전의 이체는 자동으로 넣지 않습니다.</p>
+      <p class="hint" style="margin:0">은행에 걸어 둔 자동이체를 적어 두면, 이체일이 지난 뒤 앱을 열 때 <b>보낸 계좌 → 받은 계좌</b> 이체로 장부에 저절로 기록됩니다. 내 계좌끼리는 이체라서 수입·지출 합계에는 넣지 않고 두 계좌 잔액에만 반영합니다. 받는 곳이 <b>외부 계좌</b>(보험료, 관리비, 다른 사람 통장 등)면 지출로 기록하거나 이체로만 기록하도록 고를 수 있습니다. 처음 저장한 날 이전의 이체는 자동으로 넣지 않습니다.</p>
       <div id="xfList" class="xf-list"></div>
       <button type="button" class="btn small" id="xfAdd" style="justify-self:start">자동이체 추가</button>
       <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="xfSave">저장</button></div></div>
@@ -900,7 +900,7 @@ function dueToday(){
     if(lt && o.d!==today && !recToday) return; /* 지난 예정분은 오늘 기록한 경우만 함께 보여 줌 */
     out.push({lbl:b.desc||b.key.slice(2), amt:o.amt, d:o.d, auto:!!b.auto, done:!!lt, open: lt?lt.d.slice(0,7)+"|"+lt.id:"", rec: !lt&&!b.auto ? b.id+"|"+o.d : ""}); }));
   (accounts.xfers||[]).forEach(x=>occurrences(xfAsBudget(x),today,today).forEach(o=>{ if(x.autoFrom && o.d<x.autoFrom) return; const id="xf-"+x.id+"-"+o.d, tx=monthTx(o.d.slice(0,7)).find(t=>t.id===id);
-    out.push({lbl:`${x.name||"자동이체"} (${x.from} → ${x.to})`, amt:o.amt, d:o.d, auto:!!x.auto, done:!!tx||(x.posted||[]).includes(o.d), open: tx?o.d.slice(0,7)+"|"+id:"", rec:""}); }));
+    out.push({lbl:`${x.name||"자동이체"} (${x.from} → ${xfTo(x)})`, amt:o.amt, d:o.d, auto:!!x.auto, done:!!tx||(x.posted||[]).includes(o.d), open: tx?o.d.slice(0,7)+"|"+id:"", rec:""}); }));
   return out.sort((a,b)=>(a.done-b.done)||a.d.localeCompare(b.d));
 }
 let dueShown="";
@@ -1483,7 +1483,13 @@ async function runSchedules(){
       if(!x.auto || !x.from || !x.to || x.from===x.to) return; const posted=new Set(x.posted||[]); let ch=false;
       occurrences(xfAsBudget(x), x.autoFrom||today, today).forEach(o=>{
         if(posted.has(o.d)) return; const ym=o.d.slice(0,7), id="xf-"+x.id+"-"+o.d;
-        if(!monthTx(ym).some(t=>t.id===id)){ months[ym]=monthTx(ym).concat([{id, d:o.d, t:"move", amt:o.amt, desc:x.name||"자동이체", cat:x.name||"자동이체", m:"", from:x.from, to:x.to, ent:"me", src:"sched", ts:Date.now()}]); touched.add(ym); made++; }
+        if(!monthTx(ym).some(t=>t.id===id)){
+          let tx={id, d:o.d, t:"move", amt:o.amt, desc:x.name||"자동이체", cat:x.name||"자동이체", m:"", from:x.from, to:x.to, ent:"me", src:"sched", ts:Date.now()};
+          if(x.to==="__ext"){ const desc=(x.name||"자동이체")+(x.note?` · ${x.note}`:"");
+            if(x.kind==="move") tx={...tx, desc, to:""};
+            else { const bm=bankMethodOf(x.from); tx={id, d:o.d, t:"out", amt:o.amt, desc, cat:x.cat||"미분류", m:bm?bm.code:"", ent:isCorpCat(x.cat||"")?"corp":"me", src:"sched", ts:Date.now()}; if(!bm) tx.ac=x.from; if(needsSettle(tx)) tx.st="pending"; } }
+          if(x.note && x.to!=="__ext") tx.desc=(x.name||"자동이체")+` · ${x.note}`;
+          months[ym]=monthTx(ym).concat([tx]); touched.add(ym); made++; }
         posted.add(o.d); ch=true;
       });
       if(ch){ x.posted=[...posted].sort().slice(-120); changedXf=true; }
@@ -1526,7 +1532,7 @@ function renderSchedule(){
   $("schTbl").innerHTML=`<thead><tr><th>집행일</th><th>항목</th><th>적요</th><th class="r">금액</th><th>결제 → 계좌</th><th>상태</th></tr></thead><tbody>`+rows.map(r=>{
     if(r.xf){ const x=r.xf, o=r.o, id="xf-"+x.id+"-"+o.d, tx=monthTx(o.d.slice(0,7)).find(t=>t.id===id);
       const st = tx ? `<span class="st-done" role="button" tabindex="0" data-open="${o.d.slice(0,7)}|${esc(id)}" style="cursor:pointer;text-decoration:underline dotted">자동 기록됨</span>` : (x.posted||[]).includes(o.d) ? `<span class="st-done">기록됨 (지운 기록)</span>` : o.d>today ? (x.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-wait">직접 기록</span>`) : (x.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span>`);
-      return `<tr class="${o.d===today?"today":""}"><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(x.name||"자동이체")}<span class="tag">자동이체 · ${esc(xfTxt(x))}</span></td><td></td><td class="r num">${won(o.amt)}</td><td>${esc(x.from)} → ${esc(x.to)}</td><td>${st}</td></tr>`; }
+      return `<tr class="${o.d===today?"today":""}"><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(x.name||"자동이체")}<span class="tag">자동이체 · ${esc(xfTxt(x))}</span></td><td></td><td class="r num">${won(o.amt)}</td><td>${esc(x.from)} → ${esc(xfTo(x))}</td><td>${st}</td></tr>`; }
     const {b,o}=r;
     const lt=SL.occ.get(b.id+"|"+o.d), rec=!!lt, posted=(b.posted||[]).includes(o.d);
     let st; if(rec) st=`<span class="st-done" role="button" tabindex="0" data-open="${lt.d.slice(0,7)}|${esc(lt.id)}" style="cursor:pointer;text-decoration:underline dotted">기록됨${lt.d!==o.d?` · ${+lt.d.slice(5,7)}/${+lt.d.slice(8)} 집행`:""}</span>`; else if(o.d>today) st= b.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-manual">직접 기록</span>`; else if(b.auto && posted) st=`<span class="st-manual">기록 후 삭제됨</span>`; else if(b.auto && o.d<(b.autoFrom||today)) st=`<span class="st-manual">자동 기록 전 일정</span>`; else st= b.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span> <button type="button" class="btn small" data-rec="${esc(b.id)}|${o.d}">기록하기</button>`;
@@ -1710,7 +1716,10 @@ function personLedger(P){
   return {hold, loan, paid, rows};
 }
 function peopleTotals(){ let hold=0, loan=0; (accounts.people||[]).forEach(P=>{ const L=personLedger(P); hold+=L.hold; loan+=L.loan; }); return {hold, loan}; }
-function xfLines(name){ return (accounts.xfers||[]).filter(x=>x.from===name||x.to===name).map(x=>{ const nx=xfNext(x); return `<span>자동이체 ${esc(x.name||"")} · ${xfTxt(x)} ${x.to===name?"← "+esc(x.from):"→ "+esc(x.to)}${nx?` · 다음 ${nx.slice(5).replace("-","/")}`:" · 끝남"}</span>`; }).join(""); }
+/* 자동이체 받는 곳: 내 계좌 또는 외부 계좌(__ext) */
+function xfTo(x){ return x.to==="__ext" ? `외부 계좌${x.note?" ("+x.note+")":""}` : x.to; }
+function bankMethodOf(acct){ return config.methods.find(m=>kindOf(m)==="bank" && m.acct===acct); }
+function xfLines(name){ return (accounts.xfers||[]).filter(x=>x.from===name||x.to===name).map(x=>{ const nx=xfNext(x); return `<span>자동이체 ${esc(x.name||"")} · ${xfTxt(x)} ${x.to===name?"← "+esc(x.from):"→ "+esc(xfTo(x))}${nx?` · 다음 ${nx.slice(5).replace("-","/")}`:" · 끝남"}</span>`; }).join(""); }
 function passbook(name){
   const today=todayISO(), ss=snapsOf(name); if(!ss.length) return [];
   const s0=ss.length>1?ss[ss.length-2]:ss[0];
@@ -1992,7 +2001,10 @@ function renderXf(){
       <label>이름<input data-i="${i}" data-k="name" value="${esc(x.name||"")}" placeholder="예: 농협 특판 적금"></label>
       <label>금액 (원)<input data-i="${i}" data-k="amt" inputmode="numeric" value="${x.amt?(+x.amt).toLocaleString("ko-KR"):""}"></label>
       <label>보낸 계좌<select data-i="${i}" data-k="from">${opt(x.from)}</select></label>
-      <label>받은 계좌<select data-i="${i}" data-k="to">${opt(x.to)}</select></label>
+      <label>받은 계좌<select data-i="${i}" data-k="to">${opt(x.to==="__ext"?"":x.to)}<option value="__ext" ${x.to==="__ext"?"selected":""}>외부 계좌 (내 계좌 아님)</option></select></label>
+      ${x.to==="__ext"?`<label>기록 방식<select data-i="${i}" data-k="kind"><option value="out" ${x.kind!=="move"?"selected":""}>지출로 기록 (계정 고르기)</option><option value="move" ${x.kind==="move"?"selected":""}>이체로만 기록 (합계 제외)</option></select></label>
+      ${x.kind!=="move"?`<label>지출 계정<select data-i="${i}" data-k="cat"><option value="">고르세요</option>${config.outCats.map(c=>`<option value="${esc(c)}" ${x.cat===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label>`:""}`:""}
+      <label style="grid-column:1/-1">비고 (어떤 통장인지 등, 선택)<input data-i="${i}" data-k="note" value="${esc(x.note||"")}" placeholder="${x.to==="__ext"?"예: 삼성생명 보험료 납부 계좌 · 신한 110-…":"예: 1년 특판, 만기 후 저수지로"}"></label>
       <label>이체일<select data-i="${i}" data-k="dayRule">${rules.map(([k,l])=>`<option value="${k}" ${(x.dayRule||"date")===k?"selected":""}>${l}</option>`).join("")}</select></label>
       ${(x.dayRule||"date")==="date"?`<label>매달 며칠<input data-i="${i}" data-k="day" inputmode="numeric" value="${esc(x.day||"")}" placeholder="예: 11"></label>`:""}
       <label>시작일 (선택)<input type="date" data-i="${i}" data-k="start" value="${esc(x.start||"")}"></label>
@@ -2003,14 +2015,14 @@ function renderXf(){
   $("xfList").querySelectorAll("[data-k]").forEach(el=>el.onchange=el.oninput=ev=>{ const x=xDraft[+el.dataset.i], k=el.dataset.k;
     if(k==="auto") x.auto=el.checked; else if(k==="amt"){ const n=el.value.replace(/[^\d]/g,""); x.amt=+n||0; if(el.type!=="date") el.value=n?(+n).toLocaleString("ko-KR"):""; }
     else if(k==="day") x.day=+el.value.replace(/[^\d]/g,"")||""; else x[k]=el.value;
-    if(k==="dayRule" || (ev.type==="change" && ["day","start","end"].includes(k))) setTimeout(renderXf,0); });
+    if(k==="dayRule" || k==="to" || k==="kind" || (ev.type==="change" && ["day","start","end"].includes(k))) setTimeout(renderXf,0); });
   $("xfList").querySelectorAll("[data-xdel]").forEach(b=>b.onclick=()=>{ xDraft.splice(+b.dataset.xdel,1); renderXf(); });
 }
 $("xfAdd").onclick=()=>{ xDraft.push({id:uid(), name:"", amt:0, from:mainAcct(), to:"", dayRule:"date", day:"", auto:true}); renderXf(); };
 $("xfSave").onclick=async()=>{
   const today=todayISO();
-  const bad=xDraft.find(x=>!x.amt||!x.from||!x.to||x.from===x.to||((x.dayRule||"date")==="date"&&!(+x.day)));
-  if(bad){ showNotice("자동이체마다 금액, 서로 다른 보낸·받은 계좌, 이체일을 채워 주세요."); return; }
+  const bad=xDraft.find(x=>!x.amt||!x.from||!x.to||x.from===x.to||((x.dayRule||"date")==="date"&&!(+x.day))||(x.to==="__ext"&&x.kind!=="move"&&!x.cat));
+  if(bad){ showNotice("자동이체마다 금액, 서로 다른 보낸·받은 계좌, 이체일을 채워 주세요. 외부 계좌로 보내며 지출로 기록할 때는 지출 계정도 골라 주세요."); return; }
   showNotice("");
   xDraft.forEach(x=>{ if(!x.autoFrom) x.autoFrom=today; });
   accounts.xfers=xDraft; closeOv("xfOv"); render(); await saveAccounts(); runSchedules();
