@@ -2567,12 +2567,13 @@ document.querySelectorAll(".overlay").forEach(ov=>{
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".overlay").forEach(o=>o.hidden=true); });
 
 /* ---------- 기록 입력 ---------- */
-function fillCatSelect(type, val){
-  const sel=$("iCat"); const list = type==="in" ? config.inCats : config.outCats;
+function fillCatSelect(type, val, own){
+  const sel=$("iCat"); sel.dataset.own = own||""; const list = type==="in" ? config.inCats : config.outCats;
   const all = list.includes(val)||!val ? list : [val, ...list];
   const groups={}; [...all].sort(catSort).forEach(c=>{ const g=catSegs(c)[0]||"기타"; (groups[g]=groups[g]||[]).push(c); });
   sel.innerHTML = (type==="move"?`<option value="법인 정산">법인 정산</option><option value="적금 가입·납입">적금 가입·납입</option><option value="적금 만기·해지">적금 만기·해지</option><option value="계좌 이체">계좌 이체</option><option value="맡은 돈·빌려 준 돈">맡은 돈·빌려 준 돈</option>`:"") +
-    Object.keys(groups).map(g=>`<optgroup label="${esc(g)}">${groups[g].map(c=>{ const sg=catSegs(c); return `<option value="${esc(c)}">${esc(sg.length>1?sg.slice(1).join(" › "):c)}</option>`; }).join("")}</optgroup>`).join("");
+    Object.keys(groups).sort((a,b)=> own&&type==="out" ? ((isCorpCat(groups[a][0])===(own==="corp"))?0:1)-((isCorpCat(groups[b][0])===(own==="corp"))?0:1) : 0)
+      .map(g=>`<optgroup label="${esc(g)}${own&&type==="out"&&isCorpCat(groups[g][0])!==(own==="corp")?(own==="corp"?" — 법인카드로 낸 개인 비용 (드묾)":" — 개인 수단으로 먼저 낸 법인 비용 (정산 대기)"):""}">${groups[g].map(c=>{ const sg=catSegs(c); return `<option value="${esc(c)}">${esc(sg.length>1?sg.slice(1).join(" › "):c)}</option>`; }).join("")}</optgroup>`).join("");
   if(val) sel.value=val;
 }
 function fillMethods(){
@@ -2640,6 +2641,8 @@ function updateHint(autoSettle){
   if(isPay && $("iPayVia").dataset.m!==form.m) payViaOptions($("iPayVia"), form.m, editing ? "" : lastPayVia(form.m));
   if(isPay) $("pvLbl").textContent = `${(methodOf(form.m)||{}).name||form.m}로 낸 돈이 실제로 나간 수단`;
   const code = isOther ? $("iVia").value : (isPay && $("iPayVia").value) ? $("iPayVia").value : form.m;
+  /* 결제수단의 성격(법인/개인)에 맞춰 계정 목록 순서를 바꿈: 맞는 쪽이 위, 반대쪽은 아래 묶음 */
+  if(t==="out"){ const rv0=resolve(code), own=rv0&&!NOT_ACCT(rv0.acct) ? (rv0.own==="corp"?"corp":"me") : ""; if(($("iCat").dataset.own||"")!==own) fillCatSelect("out", $("iCat").value, own); }
   const rv=resolve(code);
   if(isOther && !rv){ const h=$("flowHint"); h.className="hint warn"; $("settleRow").hidden = !(t==="out"&&form.ent==="corp"); if(autoSettle) $("iSettle").checked = t==="out"&&form.ent==="corp"; h.innerHTML=`<b>${esc($("iMx").value||"기타 수단")}</b>으로 기록합니다. 실제로 돈이 나간 곳을 고르지 않으면 통장 잔액 계산에서는 빠집니다.`; return; }
   const corpByMe = t==="out" && form.ent==="corp" && rv && rv.own!=="corp";
