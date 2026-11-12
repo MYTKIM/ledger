@@ -384,6 +384,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   </header>
   <div id="notice" class="notice" hidden></div>
   <div id="dueBar" class="notice due" hidden></div>
+  <div id="tbuBar" class="notice due" hidden></div>
   <nav id="jumpBar" class="jump" aria-label="이 화면 바로 가기" hidden></nav>
 
   <div class="grid" id="ledgerView">
@@ -1055,7 +1056,7 @@ function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym)
 function sumOf(list){ return list.reduce((a,t)=>a+(+t.amt||0),0); }
 
 function render(){
-  SL=computeSchLinks(); setTimeout(checkDue,0); setTimeout(buildJump,0);
+  SL=computeSchLinks(); setTimeout(checkDue,0); setTimeout(buildJump,0); setTimeout(renderTbuBar,0);
   const [y,m] = curYM.split("-");
   $("mYear").textContent = y; $("mLabel").textContent = (+m)+"월";
   const tx = vis(monthTx(curYM));
@@ -2362,6 +2363,15 @@ function syncTBU(){
   return touched;
 }
 async function syncTBUSave(){ const t=syncTBU(); if(t.size){ render(); await saveMonths(t); try{ await saveAccounts(); }catch(_){} } }
+/* 화면 위 알림: 아직 남은 미확인 차액(TBU) — 어느 달 장부에 있든 바로 열 수 있게 */
+function renderTbuBar(){
+  const el=$("tbuBar"); if(!el) return; const L=allTx().filter(t=>t.tbu).sort((a,b)=>a.d.localeCompare(b.d));
+  if(!L.length){ el.hidden=true; return; }
+  el.hidden=false;
+  el.innerHTML=`<b>카드 미확인 차액(TBU) ${L.length}건 · ${won(sumOf(L))}</b><span style="color:var(--muted)">사용한 달(청구 기간 말일)에 지출로 잡혀 있습니다. 눌러서 찾은 거래를 떼어 내세요.</span><span style="flex-basis:100%;height:0"></span>`+
+    L.map(t=>`<button type="button" class="btn small" data-tbu="${t.d.slice(0,7)}|${esc(t.id)}">${esc((methodOf(t.m)||{}).name||t.m)} ${t.bill?(+t.bill.slice(5,7))+"/"+(+t.bill.slice(8))+" 청구":""} · ${+t.d.slice(5,7)}월분 ${won(t.amt)} 열기</button>`).join("");
+  el.querySelectorAll("[data-tbu]").forEach(b=>b.onclick=()=>{ const [ym,id]=b.dataset.tbu.split("|"); openTx(ym,id); });
+}
 function lastPayDate(card){ const t=todayISO(); const pd=payDateOf(card, t.slice(0,7)); return pd<=t ? pd : payDateOf(card, ymAdd(t.slice(0,7),-1)); }
 function cbTx(card,d){ return allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)===d); }
 function openCB(card, d){
