@@ -337,6 +337,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .pb li.snap{background:var(--sunk);border-radius:6px;border-top-color:transparent} .pb li.snap .l{font-weight:600}
 .pb li.rc .l{color:var(--warn)} .pb .s{grid-column:2;font-size:11.5px;color:var(--muted);line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
 .xf-list{display:grid;gap:10px}
+.bulkv select{max-width:260px;width:100%} .bulkv td:first-child{min-width:170px;word-break:keep-all} .bulkv table{width:100%}
 .panel .ph{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .panel .ph h3{margin:0}
 .xf{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px;background:var(--surface)}
@@ -656,7 +657,22 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <p class="hint" style="margin:0">계정 이름의 <b>-</b>(하이픈)으로 대그룹 › 소그룹 › 항목을 나눕니다. 예: <b>생활비-마트-코스트코</b>, <b>생활비-온라인-쿠팡</b>, <b>우진-의료비</b>. 이름을 바꾸거나 다른 그룹으로 옮기면 지난 거래, 예산, 시트 계획에도 함께 반영됩니다. ‘지발연’으로 시작하는 계정은 새 기록에서 법인으로 분류됩니다.</p>
       <div class="cat-edit" style="border:1px solid var(--line);border-radius:10px"><input id="catNew" placeholder="새 계정 이름 (예: 생활비-마트-이마트)" aria-label="새 계정 이름"><button type="button" class="btn primary small" id="catAdd">계정 추가</button></div>
       <div id="catMsg" class="hint" hidden></div>
+      <button type="button" class="btn small" id="bulkOpen" style="justify-self:start">계정 일괄 정리 (목록 붙여 넣기)</button>
       <div class="cat-tree" id="catTree"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 계정 일괄 정리 -->
+<div class="overlay" id="bulkOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="bulkTitle">
+    <h3><span id="bulkTitle">계정 일괄 정리</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form">
+      <p class="hint" style="margin:0">정리한 계정 목록을 붙여 넣으세요. 한 줄에 <b>새 이름 ← 지금 이름</b>입니다. <b>A + B</b>는 둘을 합치고, <b>←</b>가 없는 줄은 새 계정, <b>(삭제) ← 이름</b>은 지웁니다. <b>■ 수입</b> 아래 줄은 수입 계정, 나머지는 지출 계정입니다. [ ]로 시작하는 줄과 괄호 안 메모(※ …)는 건너뜁니다. 미리 보기에서 확인하고 고친 뒤 반영하세요. 과거 기록·예산·시트 계획·자동이체·사람 묶음도 함께 새 이름으로 바뀝니다.</p>
+      <textarea id="bulkText" rows="10" style="width:100%;font-family:var(--mono,monospace);font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--paper);color:var(--ink)" placeholder="지발연-인건비-급여 ← 지발연-급여&#10;지발연-인건비-사회보험 ← 지발연-국민연금&#10;..."></textarea>
+      <div class="actions" style="margin:0"><span></span><div class="r"><button type="button" class="btn" id="bulkPrev">미리 보기</button></div></div>
+      <div id="bulkView" class="bulkv"></div>
+      <div class="actions"><span class="hint" style="background:none;padding:0" id="bulkSum"></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="bulkApply" disabled>반영하기</button></div></div>
     </div>
   </div>
 </div>
@@ -2287,7 +2303,9 @@ async function applyCatRename(type, map){
   if(type==="in") config.inCats=fix(config.inCats); else config.outCats=fix(config.outCats);
   Object.values(map).forEach(v=>{ const l=type==="in"?config.inCats:config.outCats; if(!l.includes(v)) l.push(v); });
   let budCh=false, plansCh=[], accCh=false;
-  { const seen=new Set(); budgets.items=budgets.items.filter(b=>{ if(typeOfKey(b.key)===type){ const c=b.key.slice(2); if(map[c]!==undefined){ b.key=bKey(type,map[c]); budCh=true; } } if(seen.has(b.key)) return false; seen.add(b.key); return true; }); }
+  { const seen=new Map(); budgets.items=budgets.items.filter(b=>{ if(typeOfKey(b.key)===type){ const c=b.key.slice(2); if(map[c]!==undefined){ b.key=bKey(type,map[c]); budCh=true; } }
+      if(seen.has(b.key)){ const k0=seen.get(b.key); /* 합쳐진 계정의 예산: 같은 주기면 금액을 더함 */ if(k0.period===b.period && (b.period==="month"||b.period==="year")){ k0.amount=(+k0.amount||0)+(+b.amount||0); } return false; }
+      seen.set(b.key,b); return true; }); }
   Object.keys(plans).forEach(k=>{ const o=plans[k][type==="in"?"inc":"out"]; let ch=false; Object.keys(o).forEach(c=>{ if(map[c]!==undefined){ o[map[c]]=(o[map[c]]||0)+o[c]; delete o[c]; ch=true; } }); if(ch) plansCh.push(k); });
   Object.values(accounts.snaps).forEach(ss=>ss.forEach(sn=>{ const f=type==="in"?"inCat":"outCat"; if(sn[f]&&map[sn[f]]!==undefined){ sn[f]=map[sn[f]]; accCh=true; } }));
   render();
@@ -2297,6 +2315,86 @@ async function applyCatRename(type, map){
   for(const k of plansCh){ try{ await plansRef.doc(k).set({ym:k,out:plans[k].out,inc:plans[k].inc}); }catch(_){} }
   if(accCh) await saveAccounts();
 }
+/* ---------- 계정 일괄 정리 ---------- */
+let bulk=null;
+function catCount(type){ const c={}; allTx().forEach(t=>{ if(isRecon(t)||!t.cat) return; if(type==="in"?t.t==="in":t.t!=="in") c[t.cat]=(c[t.cat]||0)+1; }); return c; }
+function bulkParse(text){
+  const res={out:[], in:[]}; let type="out";
+  const lists={out:config.outCats.slice(), in:(config.inCats||[]).slice()};
+  const norm=x=>x.replace(/\s+/g," ").trim();
+  const resolve=(tok,ty)=>{ let t=norm(tok); const L=lists[ty]; const hit=x=>L.find(c=>norm(c)===x);
+    for(let i=0;i<4;i++){ const h=hit(t); if(h) return h; const m=t.match(/^(.*?)\s*\([^()]*\)\s*$/); if(!m) break; t=norm(m[1]); }
+    const h2=L.find(c=>norm(tok).startsWith(norm(c)+" ")||norm(tok).startsWith(norm(c)+"(")); return h2||null; };
+  text.split(/\r?\n/).forEach(raw=>{ const line=raw.replace(/\t+/g," ").trim(); if(!line) return;
+    if(line.startsWith("■")){ type=/수입/.test(line)?"in":"out"; return; }
+    if(line.startsWith("[")) return;
+    let left=line, right="";
+    const ix=line.indexOf("←"); if(ix>=0){ left=line.slice(0,ix); right=line.slice(ix+1); }
+    left=norm(left); right=norm(right);
+    const del = /^\(삭제\)$/.test(left);
+    if(del && !right) return;
+    const srcs=[], unknown=[];
+    if(right){ right.split(/\s\+\s/).forEach(tok=>{ tok=norm(tok); if(!tok) return; const r=resolve(tok,type); if(r) srcs.push(r); else unknown.push(tok.replace(/\s*\(※[^)]*\)\s*$/,"")); }); }
+    const same = !del && res[type].find(r=>!r.del && r.name===left);
+    if(same){ srcs.forEach(c=>{ if(!same.srcs.includes(c)) same.srcs.push(c); }); unknown.forEach(u=>same.unknown.push(u)); return; } /* 같은 새 이름은 한 줄로 합침 */
+    res[type].push({name:del?"":left, del, srcs, unknown, map:{} });
+  });
+  return res;
+}
+function bulkRender(){
+  const v=$("bulkView"); if(!bulk){ v.innerHTML=""; return; }
+  let html="", probs=0; const types=[["out","지출 계정"],["in","수입 계정"]];
+  types.forEach(([ty,lbl])=>{ const rows=bulk[ty], cnt=catCount(ty), used=new Set(); rows.forEach(r=>{ r.srcs.forEach(c=>used.add(c)); Object.values(r.map).forEach(c=>c&&used.add(c)); });
+    const all=ty==="in"?(config.inCats||[]):config.outCats, left=all.filter(c=>!used.has(c));
+    const opts=(sel)=>`<option value="">(없음 — 새 계정)</option>`+all.map(c=>`<option value="${esc(c)}" ${c===sel?"selected":""}>${esc(c)}${cnt[c]?` · ${cnt[c]}건`:""}</option>`).join("");
+    html+=`<h4 style="margin:14px 0 6px">${lbl}</h4><div class="scroll-x"><table class="dt"><thead><tr><th>새 이름</th><th>합쳐질 지금 계정 (기록 수)</th><th>상태</th></tr></thead><tbody>`;
+    rows.forEach((r,i)=>{ const n=r.srcs.reduce((a,c)=>a+(cnt[c]||0),0);
+      const srcTxt=r.srcs.map(c=>`${esc(c)}${cnt[c]?` <span style="color:var(--muted)">(${cnt[c]})</span>`:""}`).join(" + ");
+      const unk=r.unknown.map((u,j)=>`<div style="margin-top:4px">‘${esc(u)}’ → <select data-bmap="${ty}|${i}|${j}">${opts(r.map[j]||"")}</select></div>`).join("");
+      if(r.unknown.some((u,j)=>!r.map[j])) probs++;
+      if(r.del){ const tgt=r.delTo||""; html+=`<tr><td><b style="color:var(--warn)">삭제</b></td><td>${srcTxt}${unk}</td><td>${n?`기록 ${n}건 → <select data-bdel="${ty}|${i}"><option value="">지우지 않고 그대로 두기</option>${all.filter(c=>!r.srcs.includes(c)).map(c=>`<option value="${esc(c)}" ${c===tgt?"selected":""}>${esc(c)}(으)로 옮기고 지우기</option>`).join("")}${rows.filter(x=>!x.del&&x.name).map(x=>`<option value="${esc("new:"+x.name)}" ${("new:"+x.name)===tgt?"selected":""}>${esc(x.name)}(으)로 옮기고 지우기</option>`).join("")}</select>`:"기록 없음 · 지웁니다"}</td></tr>`; return; }
+      const same=r.srcs.length===1&&r.srcs[0]===r.name, isNew=!r.srcs.length&&!Object.values(r.map).some(Boolean);
+      html+=`<tr><td>${esc(r.name)}</td><td>${srcTxt||(r.unknown.length?"":"—")}${unk}</td><td>${isNew?`<span class="st-wait">새 계정</span>`:same?"그대로":r.srcs.length+Object.values(r.map).filter(Boolean).length>1?`<span class="st-done">합치기 · ${n}건</span>`:`<span class="st-done">이름 바꾸기 · ${n}건</span>`}</td></tr>`; });
+    if(left.length){ html+=`<tr><td colspan="3" style="background:var(--sunk)"><b>목록에 없는 지금 계정 ${left.length}개</b> — 그대로 둘지, 합칠지, 지울지 고르세요</td></tr>`+left.map(c=>{ const sel=(bulk.rest[ty]||{})[c]||""; return `<tr><td>${esc(c)}</td><td>${cnt[c]?`기록 ${cnt[c]}건`:"기록 없음"}</td><td><select data-brest="${ty}|${esc(c)}"><option value="">그대로 두기</option>${cnt[c]?"":`<option value="__del" ${sel==="__del"?"selected":""}>지우기</option>`}${rows.filter(x=>!x.del&&x.name).map(x=>`<option value="${esc(x.name)}" ${sel===x.name?"selected":""}>→ ${esc(x.name)}(으)로 합치기</option>`).join("")}</select></td></tr>`; }).join(""); }
+    html+=`</tbody></table></div>`; });
+  v.innerHTML=html;
+  v.querySelectorAll("[data-bmap]").forEach(sel=>sel.onchange=()=>{ const [ty,i,j]=sel.dataset.bmap.split("|"); bulk[ty][+i].map[+j]=sel.value; bulkRender(); });
+  v.querySelectorAll("[data-bdel]").forEach(sel=>sel.onchange=()=>{ const [ty,i]=sel.dataset.bdel.split("|"); bulk[ty][+i].delTo=sel.value; bulkRender(); });
+  v.querySelectorAll("[data-brest]").forEach(sel=>sel.onchange=()=>{ const ix=sel.dataset.brest.indexOf("|"), ty=sel.dataset.brest.slice(0,ix), c=sel.dataset.brest.slice(ix+1); (bulk.rest[ty]=bulk.rest[ty]||{})[c]=sel.value; bulkRender(); });
+  const n=["out","in"].reduce((a,ty)=>a+bulk[ty].length,0);
+  $("bulkSum").innerHTML = probs ? `<b style="color:var(--warn)">짝을 못 찾은 이름 ${probs}개</b>는 지금 계정을 고르거나 ‘새 계정’으로 두세요.` : `${n}줄을 읽었습니다.`;
+  $("bulkApply").disabled=false;
+}
+$("bulkOpen").onclick=()=>{ bulk=null; $("bulkView").innerHTML=""; $("bulkSum").textContent=""; $("bulkApply").disabled=true; openOv("bulkOv"); };
+$("bulkPrev").onclick=()=>{ const t=$("bulkText").value; if(!t.trim()) return; bulk=bulkParse(t); bulk.rest={out:{},in:{}}; bulkRender(); };
+$("bulkApply").onclick=async()=>{
+  if(!bulk) return; $("bulkApply").disabled=true;
+  const corpChanged=[];
+  for(const ty of ["out","in"]){
+    const rows=bulk[ty], map={}, del=new Set();
+    rows.forEach(r=>{ const srcs=r.srcs.concat(Object.values(r.map).filter(Boolean));
+      if(r.del){ if(!r.delTo){ srcs.forEach(c=>{ if(!catCount(ty)[c]) del.add(c); }); } else { const to=r.delTo.startsWith("new:")?r.delTo.slice(4):r.delTo; srcs.forEach(c=>{ map[c]=to; del.add(c); }); } return; }
+      srcs.forEach(c=>{ if(c!==r.name) map[c]=r.name; }); });
+    Object.entries(bulk.rest[ty]||{}).forEach(([c,v])=>{ if(v==="__del") del.add(c); else if(v) map[c]=v; });
+    /* 법인·개인이 바뀌는 계정: 그 기록의 법인/개인 표시도 새 계정에 맞춥니다 (정산 상태는 그대로) */
+    if(ty==="out") Object.entries(map).forEach(([a,b])=>{ if(isCorpCat(a)!==isCorpCat(b)) corpChanged.push([a,b]); });
+    if(Object.keys(map).length) await applyCatRename(ty, map);
+    // 목록 순서: 붙여 넣은 순서 + 그대로 둔 계정
+    const L=ty==="in"?(config.inCats||[]):config.outCats, newNames=rows.filter(r=>!r.del&&r.name).map(r=>r.name);
+    const keep=L.filter(c=>!newNames.includes(c) && !del.has(c) && map[c]===undefined);
+    const fin=[...new Set(newNames.concat(keep))];
+    if(ty==="in") config.inCats=fin; else config.outCats=fin;
+    // 자동이체·사람 묶음 이름도 바꿈
+    (accounts.xfers||[]).forEach(x=>{ if(x.cat && map[x.cat]!==undefined) x.cat=map[x.cat]; });
+    (accounts.people||[]).forEach(P=>{ if(P.cats) P.cats=[...new Set(P.cats.map(c=>map[c]!==undefined?map[c]:c))].filter(c=>!del.has(c)||map[c]!==undefined); });
+  }
+  if(corpChanged.length){ const touched=new Set(); const tgt=new Map(corpChanged.map(([a,b])=>[b,isCorpCat(b)]));
+    Object.keys(months).forEach(k=>{ let ch=false; const arr=monthTx(k).map(t=>{ if(t.t==="out" && tgt.has(t.cat)){ const want=tgt.get(t.cat)?"corp":"me"; if(t.ent!==want){ ch=true; return {...t, ent:want, u:Date.now()}; } } return t; }); if(ch){ months[k]=arr; touched.add(k); } });
+    await saveMonths(touched); }
+  await saveConfig(); await saveAccounts();
+  closeOv("bulkOv"); render(); renderCats();
+  showNotice(`계정 정리를 반영했습니다. 지출 계정 ${config.outCats.length}개 · 수입 계정 ${(config.inCats||[]).length}개.`+(corpChanged.length?` 법인·개인이 바뀐 계정 ${corpChanged.length}개는 기록의 법인/개인 표시도 맞췄습니다.`:""));
+};
 segBind("bTSeg", v=>{ bT=v; renderBudEdit(); });
 segBind("catTypeSeg", v=>{ catType=v; catMsg(""); renderCats(); });
 $("openCats").onclick=()=>{ catMsg(""); renderCats(); openOv("catOv"); };
