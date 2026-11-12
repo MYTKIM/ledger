@@ -1470,7 +1470,20 @@ function saveBudgets(){
   return budQ;
 }
 function maybeRunSchedules(){ if(loaded.months && loaded.bud && loaded.acc) runSchedules(); }
+/* 공통 계정 목록: 기록·예산·자동이체·사람에서 쓰는 계정은 모두 계정 관리 목록(지출·수입)에 있어야 합니다. 빠진 것은 채워 넣습니다. */
+function ensureCats(){
+  if(!config || !Array.isArray(config.outCats)) return false;
+  const outS=new Set(config.outCats), inS=new Set(config.inCats||[]), addO=[], addI=[];
+  const o=c=>{ c=(c||"").trim(); if(c && c!=="미분류" && !outS.has(c)){ outS.add(c); addO.push(c); } }, i=c=>{ c=(c||"").trim(); if(c && c!=="미분류" && !inS.has(c)){ inS.add(c); addI.push(c); } };
+  allTx().forEach(t=>{ if(isRecon(t)) return; if(t.t==="out") o(t.cat); else if(t.t==="in") i(t.cat); });
+  budgets.items.forEach(b=>{ if(!b.key) return; if(b.key.startsWith("c:")) o(b.key.slice(2)); else if(b.key.startsWith("i:")) i(b.key.slice(2)); });
+  (accounts.xfers||[]).forEach(x=>{ if((x.to==="__ext" && x.kind!=="move") || (isPerson(x.to) && pMode(personByName(pName(x.to)))==="flow")) o(x.cat||x.name); });
+  if(!addO.length && !addI.length) return false;
+  config.outCats=config.outCats.concat(addO); config.inCats=(config.inCats||[]).concat(addI); saveConfig();
+  return true;
+}
 async function runSchedules(){
+  ensureCats();
   if(schedRunning || !monthsRef) return; schedRunning=true;
   try{
     const today=todayISO(); const touched=new Set(); let changedBud=false, made=0;
@@ -2012,7 +2025,7 @@ function renderPplEdit(){
   $("pplList").querySelectorAll("[data-padd]").forEach(sel=>sel.onchange=()=>{ const P=pDraft[+sel.dataset.padd]; if(sel.value){ P.cats=(P.cats||[]).concat([sel.value]); renderPplEdit(); } });
   $("pplList").querySelectorAll("[data-pcat]").forEach(b=>b.onclick=()=>{ const [i,j]=b.dataset.pcat.split("|").map(Number); pDraft[i].cats.splice(j,1); renderPplEdit(); });
 }
-function pCatChoices(){ const set=new Set(config.outCats.concat(config.inCats||[])); allTx().forEach(t=>{ if(t.cat && !isRecon(t)) set.add(t.cat); }); (accounts.xfers||[]).forEach(x=>x.name&&set.add(x.name)); budgets.items.forEach(b=>b.key&&b.key.startsWith("c:")&&set.add(b.key.slice(2))); return [...set].sort(); }
+function pCatChoices(){ ensureCats(); return [...new Set(config.outCats.concat(config.inCats||[]))].sort(); }
 $("pplAdd").onclick=()=>{ pDraft.push({id:uid(), name:"", note:"", target:0, asOf:"", hold0:0, loan0:0, paid0:0}); renderPplEdit(); };
 $("pplSave").onclick=async()=>{
   const names=pDraft.map(P=>P.name).filter(Boolean);
@@ -2061,7 +2074,7 @@ $("xfSave").onclick=async()=>{
   if(bad){ showNotice("자동이체마다 금액, 서로 다른 보낸·받은 계좌, 이체일을 채워 주세요. 외부 계좌로 보내며 지출로 기록할 때는 지출 계정도 골라 주세요."); return; }
   showNotice("");
   xDraft.forEach(x=>{ if(!x.autoFrom) x.autoFrom=today; });
-  accounts.xfers=xDraft; closeOv("xfOv"); render(); await saveAccounts(); runSchedules();
+  accounts.xfers=xDraft; ensureCats(); closeOv("xfOv"); render(); await saveAccounts(); runSchedules();
 };
 
 /* 계좌 편집 */
