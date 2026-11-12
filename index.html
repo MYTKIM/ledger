@@ -1247,7 +1247,8 @@ function renderLedger(tx){
     const m=methodOf(t.m), acct=txAcct(t);
     const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : isRecon(t) ? `<span class="chip plain">잔액 맞춤 · ${t.lock?"수동":"자동"}</span>` : "";
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
-    const instChip = +t.inst>1 ? `<span class="chip plain">${t.inst}개월 할부</span>` : "";
+    const instChip = +t.inst>1 ? (()=>{ const sh=instShares(t); if(sh.length<2) return `<span class="chip plain">${t.inst}개월 할부</span>`; const f=x=>`${+x.d.slice(5,7)}/${+x.d.slice(8)}`;
+      return `<span class="chip plain" title="${esc(sh.map(x=>`${x.i}회 ${f(x)} ${won(x.amt)}`).join(" · "))}">${t.inst}개월 할부 · ${f(sh[0])}~${f(sh[sh.length-1])} 매달 ${won(sh[sh.length-1].amt)}</span>`; })() : "";
     const st = instChip + (t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "") + (t.ws&&wsOf(t.ws) ? `<span class="chip ws">워크샵 · ${esc(wsOf(t.ws).name)}</span>` : "");
     const mv = t.t==="move" ? effects(t) : null;
     const flow = t.t==="move" ? `<span class="flow">${esc(isPerson(t.from)?dispAcct(t.from):(mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc(isPerson(t.to)?dispAcct(t.to):(mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.t==="in" ? (NOT_ACCT(acct) ? `<span class="flow">입금 계좌 미지정</span>` : `<span class="flow">${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}<b>${esc(acct)}</b></span>`) : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
