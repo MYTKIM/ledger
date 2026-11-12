@@ -294,7 +294,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .sdel:hover{color:var(--warn);background:var(--sunk)} .sdel.sure{color:#fff;background:var(--warn);font-size:12px;padding:3px 7px}
 .pb{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:0;max-height:340px;overflow:auto}
 .acc details .pb li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:2px 8px;padding:5px 2px;border-top:1px solid var(--line);align-items:baseline}
-.pb li[data-id]{cursor:pointer} .pb li[data-id]:hover{background:var(--sunk)}
+.pb li[data-card]:hover{background:var(--sunk)} .pb li[data-id]{cursor:pointer} .pb li[data-id]:hover{background:var(--sunk)}
 .pb .d{color:var(--muted);font-size:12px} .pb .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pb .v{text-align:right;font-weight:600} .pb .v.p{color:var(--in)} .pb .r{grid-column:3;text-align:right;font-size:11.5px;color:var(--muted)}
 .pb.pp .s,.pb.pp .r{grid-column:2/-1;text-align:left}
@@ -647,7 +647,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="ledger" id="cbIn"></div>
       <details id="cbNearBox" hidden><summary style="cursor:pointer;font-weight:600;margin:6px 0">경계 날짜 거래 확인 <span style="font-weight:400;color:var(--muted);font-size:12.5px">— 차이가 날 때만: 청구 기간 앞뒤 7일 안의 거래 중 명세서에 있는 것</span></summary>
       <div class="ledger" id="cbNear"></div></details>
-      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>닫기</button><button type="button" class="btn primary" id="cbDone">확인 완료로 표시</button></div></div>
+      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>닫기</button><button type="button" class="btn" id="cbTbu" hidden>차액을 ‘미확인(TBU)’으로 남기기</button><button type="button" class="btn primary" id="cbDone">확인 완료로 표시</button></div></div>
     </div>
   </div>
 </div>
@@ -1527,7 +1527,7 @@ function ensureCats(){
   return true;
 }
 async function runSchedules(){
-  ensureCats();
+  ensureCats(); syncTBUSave();
   if(schedRunning || !monthsRef) return; schedRunning=true;
   try{
     const today=todayISO(); const touched=new Set(); let changedBud=false, made=0;
@@ -1829,7 +1829,7 @@ function passbookHTML(name){
     const d=x.d.slice(5).replace("-","/");
     if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span>${x.s.ts?`<span class="s">${whenTxt(x.s.ts)} 입력</span>`:"<span></span>"}<span class="r"><button type="button" class="sdel" data-sdel="${esc(name)}|${x.s.ts||""}|${x.s.d}" title="이 잔액 지우기">× 지우기</button></span></li>`;
     const sign=x.v>0?"+":"−", amt=`<span class="v num ${x.v>0?"p":""}">${sign}${won(Math.abs(x.v))}</span>`, r=`<span class="r num">잔액 ${won(x.bal)}</span>`;
-    if(x.kind==="card"){ const ok=(accounts.bills||[]).find(b=>b.card===x.pc&&b.d===x.d); return `<li data-card="${esc(x.pc)}|${x.d}" style="cursor:pointer"><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}<span class="s">${ok?(ok.ok?"✓ 청구액 확인됨":"청구액 "+won(ok.amt)+" · 차이 남음"):"눌러서 실제 청구액과 맞추기"}</span>${r}</li>`; }
+    if(x.kind==="card"){ const ok=(accounts.bills||[]).find(b=>b.card===x.pc&&b.d===x.d); return `<li data-card="${esc(x.pc)}|${x.d}" style="cursor:pointer"><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}<span class="s">${(()=>{ const tb=sumOf(cbTx(x.pc,x.d).filter(t=>t.tbu)); return tb?`<b style="color:var(--warn)">미확인 차액(TBU) ${won(tb)} 남음</b>`:ok?(ok.ok?"✓ 청구액 확인됨":"청구액 "+won(ok.amt)+" · 차이 남음"):"눌러서 실제 청구액과 맞추기"; })()}</span>${r}</li>`; }
     const t=x.t, lbl = x.kind==="rc" ? "잔액 맞춤" : esc(t.desc||t.cat||"(적요 없음)");
     const sub = x.kind==="rc" ? `${esc(t.cat||"")} · ${t.lock?"직접 고친 금액":"설명 안 되는 차이"}` : t.t==="move" ? `${esc(dispAcct(t.from))} → ${esc(dispAcct(t.to))}` : t.fromAc ? `${esc(t.cat||"")} · ${esc(t.fromAc)} → ${esc(txAcct(t))}` : esc(t.cat||"");
     const tag = t.src==="sched" ? `<b style="color:var(--warn)">${String(t.id).startsWith("xf-")?"자동이체로 기록":"예산 자동 기록"}</b> · ` : "";
@@ -2309,6 +2309,17 @@ const FEE_CAT="카드-수수료·연회비";
 let cbAdj=[];
 function cardCodes(){ return config.methods.filter(m=>kindOf(m)==="card" && +((resolve(m.code)||{}).pay||0)).map(m=>m.code); }
 function payDateOf(card, ym){ const p=+((resolve(card)||{}).pay||0); const [y,m]=ym.split("-").map(Number); return ym+"-"+pad(Math.min(p,lastDay(y,m))); }
+/* 미확인 차액(TBU): 실제 청구액 − 확인된 거래. 거래를 찾아 넣을수록 저절로 줄고, 0이 되면 지워집니다 */
+const TBU_CAT="카드-미확인 차액";
+function syncTBU(){
+  const touched=new Set();
+  (accounts.bills||[]).forEach(b=>{ const all=cbTx(b.card,b.d), tbu=all.find(t=>t.tbu), others=sumOf(all.filter(t=>!t.tbu));
+    if(!tbu) return; const want=Math.max(0,(+b.amt||0)-others), ym=tbu.d.slice(0,7);
+    if(want===0){ months[ym]=monthTx(ym).filter(t=>t.id!==tbu.id); touched.add(ym); b.ok=true; }
+    else if(+tbu.amt!==want){ months[ym]=monthTx(ym).map(t=>t.id===tbu.id?{...t, amt:want, u:Date.now()}:t); touched.add(ym); b.ok=false; } });
+  return touched;
+}
+async function syncTBUSave(){ const t=syncTBU(); if(t.size){ render(); await saveMonths(t); try{ await saveAccounts(); }catch(_){} } }
 function lastPayDate(card){ const t=todayISO(); const pd=payDateOf(card, t.slice(0,7)); return pd<=t ? pd : payDateOf(card, ymAdd(t.slice(0,7),-1)); }
 function cbTx(card,d){ return allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)===d); }
 function openCB(card, d){
@@ -2327,29 +2338,30 @@ function renderCB(){
   const pm=ymAdd(d.slice(0,7),-1), [py,pmo]=pm.split("-").map(Number), pS=pm+"-01", pE=pm+"-"+pad(lastDay(py,pmo));
   const sh=(iso,n)=>{ const x=new Date(iso+"T00:00"); x.setDate(x.getDate()+n); return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate()); };
   const near=allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)!==d && ((t.d>=sh(pS,-7)&&t.d<pS) || (t.d>pE&&t.d<=sh(pE,7)))).sort((a,b)=>a.d.localeCompare(b.d));
-  const adjSum=cbAdj.reduce((a,x)=>a+(+x.amt||0),0), diff=got? got-calc-adjSum : 0;
+  const adjSum=cbAdj.reduce((a,x)=>a+(+x.amt||0),0), diff=got? got-calc-adjSum : 0, tbuAmt=sumOf(inc.filter(t=>t.tbu));
   $("cbSum").className = !got ? "hint" : diff===0 ? "hint" : "hint warn";
-  $("cbSum").innerHTML = `앱이 계산한 ${+d.slice(5,7)}/${+d.slice(8)} 청구 <b class="num">${won(calc)}</b> (${inc.length}건)` + (got ? ` · 실제 청구 <b class="num">${won(got)}</b> · ${diff===0?"<b>✓ 맞습니다</b>":`차이 <b class="num">${diff>0?"+":"−"}${won(Math.abs(diff))}</b> ${diff>0?"— 앱에 빠진 금액이 있습니다":"— 앱에 더 들어간 거래가 있습니다"}`}` : " · 실제 청구액을 넣어 주세요");
-  const row=(t,btn)=>`<div class="cb-row"><button type="button" class="lnk" data-open="${t.d.slice(0,7)}|${esc(t.id)}"><span class="num" style="color:var(--muted)">${t.d.slice(5).replace("-","/")}</span> ${esc(t.desc||t.cat||"")} <span style="color:var(--muted);font-size:12px">${esc(t.cat||"")}${t.bill?" · 청구 직접 지정":""}</span></button><b class="num">${won(t.amt)}</b>${btn}</div>`;
+  $("cbSum").innerHTML = `앱이 계산한 ${+d.slice(5,7)}/${+d.slice(8)} 청구 <b class="num">${won(calc)}</b> (${inc.length}건)` + (got ? ` · 실제 청구 <b class="num">${won(got)}</b> · ${diff===0?(tbuAmt?`<b>✓ 청구액과 맞음</b> · 그중 <b style="color:var(--warn)">미확인 차액(TBU) ${won(tbuAmt)}</b> — 찾은 거래를 아래에서 기록하면 그만큼 줄어듭니다`:"<b>✓ 맞습니다</b>"):`차이 <b class="num">${diff>0?"+":"−"}${won(Math.abs(diff))}</b> ${diff>0?"— 앱에 빠진 금액이 있습니다":"— 앱에 더 들어간 거래가 있습니다"}`}` : " · 실제 청구액을 넣어 주세요");
+  const row=(t,btn)=>`<div class="cb-row"><button type="button" class="lnk" data-open="${t.d.slice(0,7)}|${esc(t.id)}"><span class="num" style="color:var(--muted)">${t.d.slice(5).replace("-","/")}</span> ${esc(t.desc||t.cat||"")} <span style="color:var(--muted);font-size:12px">${esc(t.cat||"")}${t.tbu?" · <b style=\"color:var(--warn)\">미확인 차액 — 거래를 찾으면 저절로 줄어듭니다</b>":t.bill?" · 청구 직접 지정":""}</span></button><b class="num">${won(t.amt)}</b>${btn}</div>`;
   const nextD=payDateOf(card, ymAdd(d.slice(0,7),1));
-  $("cbIn").innerHTML = inc.length ? inc.map(t=>row(t, `<button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${t.bill?"":nextD}">${t.bill?"원래 청구로":"다음 청구로"}</button>`)).join("") : `<div class="foot">이 결제일로 계산된 거래가 없습니다.</div>`;
+  $("cbIn").innerHTML = inc.length ? inc.map(t=>row(t, t.tbu?"":`<button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${t.bill?"":nextD}">${t.bill?"원래 청구로":"다음 청구로"}</button>`)).join("") : `<div class="foot">이 결제일로 계산된 거래가 없습니다.</div>`;
   $("cbNearBox").hidden = !(got && diff!==0) || !near.length;
+  $("cbTbu").hidden = !(got && diff>0) || inc.some(t=>t.tbu);
   $("cbNear").innerHTML = near.length ? near.map(t=>row(t, `<span style="font-size:12px;color:var(--muted)">${+effDate(t).slice(5,7)}/${+effDate(t).slice(8)} 청구</span> <button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${d}">이번 청구에 넣기</button>`)).join("") : `<div class="foot">청구 기간 앞뒤 7일 안에 다른 청구로 계산된 거래가 없습니다.</div>`;
   // 차이 기록
   const cats=[FEE_CAT].concat(config.outCats.filter(c=>c!==FEE_CAT));
-  $("cbAdj").innerHTML = (got && diff!==0 || cbAdj.length) ? `<div style="display:grid;gap:6px;margin:6px 0">
+  $("cbAdj").innerHTML = (got && diff!==0 || cbAdj.length || tbuAmt) ? `<div style="display:grid;gap:6px;margin:6px 0">
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:12.5px;color:var(--muted)">차이 기록:</span>${["연회비","해외 결제 수수료","할부 수수료","기타 빠진 거래"].map(k=>`<button type="button" class="btn small" data-cbq="${k}">＋ ${k}</button>`).join("")}</div>
       ${cbAdj.map((x,i)=>`<div class="cb-adj"><input type="date" data-ai="${i}" data-ak="d" value="${esc(x.d)}"><input data-ai="${i}" data-ak="desc" value="${esc(x.desc)}" placeholder="적요"><select data-ai="${i}" data-ak="cat">${cats.map(c=>`<option value="${esc(c)}" ${c===x.cat?"selected":""}>${esc(c)}</option>`).join("")}</select><input data-ai="${i}" data-ak="amt" inputmode="numeric" value="${x.amt?(+x.amt).toLocaleString("ko-KR"):""}" placeholder="금액"><button type="button" class="btn small" data-adel="${i}">×</button></div>`).join("")}
       ${cbAdj.length?`<div><button type="button" class="btn small primary" id="cbSaveAdj">${cbAdj.length}건 ${$("cbCard").value}로 기록 (이번 청구)</button></div>`:""}</div>` : "";
   $("cbOv").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{ const [ym,id]=b.dataset.open.split("|"); openTx(ym,id); });
-  $("cbOv").querySelectorAll("[data-bill]").forEach(b=>b.onclick=async()=>{ const [ym,id,v]=b.dataset.bill.split("|"); months[ym]=monthTx(ym).map(t=>{ if(t.id!==id) return t; const r={...t,u:Date.now()}; if(v) r.bill=v; else delete r.bill; return r; }); render(); renderCB(); await saveMonths(new Set([ym])); });
-  $("cbOv").querySelectorAll("[data-cbq]").forEach(b=>b.onclick=()=>{ const k=b.dataset.cbq, rest=Math.max(0,diff); cbAdj.push({d:k==="기타 빠진 거래"?ymAdd(d.slice(0,7),-1)+"-15":d, desc:`${(methodOf(card)||{}).name||card} ${k}`, cat:k==="기타 빠진 거래"?(config.outCats[0]||FEE_CAT):FEE_CAT, amt:rest}); renderCB(); });
+  $("cbOv").querySelectorAll("[data-bill]").forEach(b=>b.onclick=async()=>{ const [ym,id,v]=b.dataset.bill.split("|"); months[ym]=monthTx(ym).map(t=>{ if(t.id!==id) return t; const r={...t,u:Date.now()}; if(v) r.bill=v; else delete r.bill; return r; }); render(); await saveMonths(new Set([ym])); await syncTBUSave(); renderCB(); });
+  $("cbOv").querySelectorAll("[data-cbq]").forEach(b=>b.onclick=()=>{ const k=b.dataset.cbq, rest=diff>0?diff:Math.max(0,tbuAmt-cbAdj.reduce((a,x)=>a+(+x.amt||0),0)); cbAdj.push({d:k==="기타 빠진 거래"?ymAdd(d.slice(0,7),-1)+"-15":d, desc:`${(methodOf(card)||{}).name||card} ${k}`, cat:k==="기타 빠진 거래"?(config.outCats[0]||FEE_CAT):FEE_CAT, amt:rest}); renderCB(); });
   $("cbOv").querySelectorAll("[data-ak]").forEach(el=>el.onchange=()=>{ const x=cbAdj[+el.dataset.ai], k=el.dataset.ak; if(k==="amt"){ const n=el.value.replace(/[^\d]/g,""); x.amt=+n||0; } else x[k]=el.value; setTimeout(renderCB,0); });
   $("cbOv").querySelectorAll("[data-adel]").forEach(b=>b.onclick=()=>{ cbAdj.splice(+b.dataset.adel,1); renderCB(); });
   if($("cbSaveAdj")) $("cbSaveAdj").onclick=async()=>{
     const touched=new Set(); const card=$("cbCard").value, d=$("cbDate").value;
     cbAdj.filter(x=>+x.amt>0).forEach(x=>{ const ym=x.d.slice(0,7); const t={id:uid(), d:x.d, t:"out", amt:+x.amt, desc:x.desc||"카드 청구 차이", cat:x.cat||FEE_CAT, m:card, ent:isCorpCat(x.cat||"")?"corp":"me", src:"manual", bill:d, ts:Date.now()}; if(needsSettle(t)) t.st="pending"; months[ym]=monthTx(ym).concat([t]); touched.add(ym); });
-    cbAdj=[]; ensureCats(); render(); renderCB(); await saveMonths(touched); showNotice("카드 청구 차이를 기록했습니다.");
+    cbAdj=[]; ensureCats(); render(); await saveMonths(touched); await syncTBUSave(); renderCB(); showNotice("카드 청구 차이를 기록했습니다.");
   };
 }
 $("cbBtn").onclick=()=>openCB();
@@ -2357,6 +2369,16 @@ $("cbCard").addEventListener("change",()=>{ $("cbDate").value=lastPayDate($("cbC
 ["cbCard","cbDate"].forEach(id=>$(id).addEventListener("change",()=>{ const b=(accounts.bills||[]).find(x=>x.card===$("cbCard").value&&x.d===$("cbDate").value); $("cbAmt").value=b?(+b.amt).toLocaleString("ko-KR"):""; renderCB(); }));
 $("cbAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; renderCB(); });
 $("cbAmt").addEventListener("blur",()=>setTimeout(renderCB,0));
+$("cbTbu").onclick=async()=>{
+  const card=$("cbCard").value, d=$("cbDate").value, got=+($("cbAmt").value.replace(/[^\d]/g,""))||0; if(!got) return;
+  const inc=cbTx(card,d), diff=got-sumOf(inc); if(diff<=0) return;
+  const pm=ymAdd(d.slice(0,7),-1), [y,m]=pm.split("-").map(Number), td=pm+"-"+pad(lastDay(y,m));
+  const t={id:uid(), d:td, t:"out", amt:diff, desc:`${(methodOf(card)||{}).name||card} ${+d.slice(5,7)}/${+d.slice(8)} 청구 미확인 차액 (TBU)`, cat:TBU_CAT, m:card, ent:"me", src:"manual", bill:d, tbu:true, ts:Date.now()};
+  months[pm]=monthTx(pm).concat([t]);
+  accounts.bills=(accounts.bills||[]).filter(b=>!(b.card===card&&b.d===d)).concat([{card,d,amt:got,ok:false,ts:Date.now()}]);
+  ensureCats(); closeOv("cbOv"); render(); await saveMonths(new Set([pm])); await saveAccounts();
+  showNotice(`${won(diff)}을 ‘미확인 차액(TBU)’으로 ${+pm.slice(5)}월 말일에 기록했습니다. 빠진 거래를 찾아 넣을 때마다 이 금액이 저절로 줄고, 다 찾으면 사라집니다.`);
+};
 $("cbDone").onclick=async()=>{
   const card=$("cbCard").value, d=$("cbDate").value, got=+($("cbAmt").value.replace(/[^\d]/g,""))||0; if(!got){ $("cbAmt").focus(); return; }
   const calc=sumOf(cbTx(card,d)); accounts.bills=(accounts.bills||[]).filter(b=>!(b.card===card&&b.d===d)).concat([{card,d,amt:got,ok:got===calc,ts:Date.now()}]);
@@ -2673,6 +2695,7 @@ $("txForm").onsubmit=async e=>{
   closeOv("txOv"); if(!base) curYM=ym; render();
   try{ await saveMonths(touched); }catch(_){}
   if(note) showNotice(note);
+  syncTBUSave();
 };
 $("delBtn").onclick=async()=>{
   if(!editing) return;
@@ -2688,7 +2711,7 @@ $("delBtn").onclick=async()=>{
     showNotice(`정산 이체를 지워 ${gone.settles.length}건을 다시 정산 대기로 돌렸습니다.`);
   }
   closeOv("txOv"); render();
-  await saveMonths(touched);
+  await saveMonths(touched); syncTBUSave();
 };
 
 /* ---------- 설정 ---------- */
