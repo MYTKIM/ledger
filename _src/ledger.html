@@ -1128,7 +1128,7 @@ function barsHTML(rows, total){
 }
 function renderAcct(outs){
   const g={}; outs.forEach(t=>{ const a=txAcct(t); g[a]=g[a]||{name:a,c:0,m:0,n:0}; g[a][t.ent==="corp"?"c":"m"]+=+t.amt||0; g[a].n++; });
-  const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).map(r=>({...r,sub:r.n+"건",dt:{k:"acct",v:r.name,t:"out",ym:[curYM],lbl:`${r.name}에서 나간 돈`}}));
+  const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).map(r=>({...r,dt:{k:"acct",v:r.name,t:"out",ym:[curYM],lbl:`${r.name}에서 나간 돈`}}));
   $("byAcct").innerHTML=barsHTML(rows);
 }
 function renderInc(ins){
@@ -2254,11 +2254,11 @@ function renderDetail(){
   // 계정별 나눔: 그룹·계좌·결제수단이나 여러 계정일 때
   const by={}; all.forEach(t=>{ const c=t.cat||"미분류"; by[c]=(by[c]||0)+(+t.amt||0); });
   const cats=Object.entries(by).sort((a,b)=>b[1]-a[1]);
-  $("dtBreak").innerHTML = cats.length>1 ? `<span class="chip plain" data-sub="" aria-pressed="${!dtl.sub}">전체</span>`+cats.map(([c,v])=>`<span class="chip plain" data-sub="${esc(c)}" aria-pressed="${dtl.sub===c}">${esc(c.replace(/^지발연\s*-\s*/,""))} ${won(v)}</span>`).join("") : "";
-  $("dtBreak").querySelectorAll("[data-sub]").forEach(x=>x.onclick=()=>{ dtl.sub=x.dataset.sub||null; renderDetail(); });
+  $("dtBreak").innerHTML = cats.length>1 ? `<span style="font-size:12px;color:var(--muted);margin-right:2px">계정과목</span>`+cats.map(([c,v])=>`<span class="chip plain" data-sub="${esc(c)}" aria-pressed="${dtl.sub===c}">${esc(c.replace(/^지발연\s*-\s*/,""))} ${won(v)}</span>`).join("") : "";
+  $("dtBreak").querySelectorAll("[data-sub]").forEach(x=>x.onclick=()=>{ dtl.sub = dtl.sub===x.dataset.sub ? null : (x.dataset.sub||null); renderDetail(); }); /* 다시 누르면 풀림 */
   if(hasWs){ const wsAmt=sumOf(all0.filter(t=>t.ws&&wsOf(t.ws)));
-    $("dtBreak").insertAdjacentHTML("afterbegin",`<span style="font-size:12px;color:var(--muted);margin-right:2px">워크샵</span><span class="chip plain" data-wsf="" aria-pressed="${!dtl.ws}">포함</span><span class="chip plain" data-wsf="excl" aria-pressed="${dtl.ws==="excl"}">빼고</span><span class="chip plain" data-wsf="only" aria-pressed="${dtl.ws==="only"}">워크샵만 ${won(wsAmt)}</span><span style="flex-basis:100%;height:0"></span>`);
-    $("dtBreak").querySelectorAll("[data-wsf]").forEach(x=>x.onclick=()=>{ dtl.ws=x.dataset.wsf||null; dtl.sub=null; renderDetail(); }); }
+    $("dtBreak").insertAdjacentHTML("afterbegin",`<span style="font-size:12px;color:var(--muted);margin-right:2px">워크샵</span><span class="chip plain" data-wsf="excl" aria-pressed="${dtl.ws==="excl"}">빼고</span><span class="chip plain" data-wsf="only" aria-pressed="${dtl.ws==="only"}">워크샵만 ${won(wsAmt)}</span><span style="flex-basis:100%;height:0"></span>`);
+    $("dtBreak").querySelectorAll("[data-wsf]").forEach(x=>x.onclick=()=>{ dtl.ws = dtl.ws===x.dataset.wsf ? null : (x.dataset.wsf||null); dtl.sub=null; renderDetail(); }); }
   if(!list.length){ $("dtList").innerHTML=`<div class="foot">해당하는 거래가 없습니다.</div>`; return; }
   let html="", last=null; const multi=months.length>1;
   list.forEach(t=>{
