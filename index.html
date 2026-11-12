@@ -2372,6 +2372,13 @@ function renderTbuBar(){
     L.map(t=>`<button type="button" class="btn small" data-tbu="${t.d.slice(0,7)}|${esc(t.id)}">${esc((methodOf(t.m)||{}).name||t.m)} ${t.bill?(+t.bill.slice(5,7))+"/"+(+t.bill.slice(8))+" 청구":""} · ${+t.d.slice(5,7)}월분 ${won(t.amt)} 열기</button>`).join("");
   el.querySelectorAll("[data-tbu]").forEach(b=>b.onclick=()=>{ const [ym,id]=b.dataset.tbu.split("|"); openTx(ym,id); });
 }
+/* 카드 성격에 맞춰 계정 목록 정리: 개인 카드면 개인 계정을 먼저, 법인 계정은 아래 '정산 대기' 묶음으로. 법인카드는 그 반대. */
+function catOptsForCard(card, sel, exclude){
+  const own=((resolve(card)||{}).own)==="corp", L=config.outCats.filter(c=>!(exclude||[]).includes(c));
+  const mine=L.filter(c=>isCorpCat(c)===own), other=L.filter(c=>isCorpCat(c)!==own);
+  const o=c=>`<option value="${esc(c)}" ${c===sel?"selected":""}>${esc(c)}</option>`;
+  return `<optgroup label="${own?"법인 계정 (법인카드)":"개인 계정 (개인 카드)"}">${mine.map(o).join("")}</optgroup>`+(other.length?`<optgroup label="${own?"개인 비용 — 법인카드로 낸 경우 (드묾)":"법인 비용 — 개인 카드로 먼저 낸 경우 (정산 대기로 기록)"}">${other.map(o).join("")}</optgroup>`:"");
+}
 function lastPayDate(card){ const t=todayISO(); const pd=payDateOf(card, t.slice(0,7)); return pd<=t ? pd : payDateOf(card, ymAdd(t.slice(0,7),-1)); }
 function cbTx(card,d){ return allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)===d); }
 function openCB(card, d){
@@ -2403,11 +2410,11 @@ function renderCB(){
   const cats=[FEE_CAT].concat(config.outCats.filter(c=>c!==FEE_CAT));
   $("cbAdj").innerHTML = (got && diff!==0 || cbAdj.length || tbuAmt) ? `<div style="display:grid;gap:6px;margin:6px 0">
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:12.5px;color:var(--muted)">차이 기록:</span>${["연회비","해외 결제 수수료","할부 수수료","기타 빠진 거래"].map(k=>`<button type="button" class="btn small" data-cbq="${k}">＋ ${k}</button>`).join("")}</div>
-      ${cbAdj.map((x,i)=>`<div class="cb-adj"><input type="date" data-ai="${i}" data-ak="d" value="${esc(x.d)}"><input data-ai="${i}" data-ak="desc" value="${esc(x.desc)}" placeholder="적요"><select data-ai="${i}" data-ak="cat">${cats.map(c=>`<option value="${esc(c)}" ${c===x.cat?"selected":""}>${esc(c)}</option>`).join("")}</select><input data-ai="${i}" data-ak="amt" inputmode="numeric" value="${x.amt?(+x.amt).toLocaleString("ko-KR"):""}" placeholder="금액"><button type="button" class="btn small" data-adel="${i}">×</button></div>`).join("")}
+      ${cbAdj.map((x,i)=>`<div class="cb-adj"><input type="date" data-ai="${i}" data-ak="d" value="${esc(x.d)}"><input data-ai="${i}" data-ak="desc" value="${esc(x.desc)}" placeholder="적요"><select data-ai="${i}" data-ak="cat">${x.cat===FEE_CAT||!config.outCats.includes(x.cat)?`<option value="${esc(x.cat)}" selected>${esc(x.cat)}</option>`:""}${catOptsForCard(card, x.cat, [FEE_CAT,TBU_CAT])}</select><input data-ai="${i}" data-ak="amt" inputmode="numeric" value="${x.amt?(+x.amt).toLocaleString("ko-KR"):""}" placeholder="금액"><button type="button" class="btn small" data-adel="${i}">×</button></div>`).join("")}
       ${cbAdj.length?`<div><button type="button" class="btn small primary" id="cbSaveAdj">${cbAdj.length}건 ${$("cbCard").value}로 기록 (이번 청구)</button></div>`:""}</div>` : "";
   $("cbOv").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{ const [ym,id]=b.dataset.open.split("|"); openTx(ym,id); });
   $("cbOv").querySelectorAll("[data-bill]").forEach(b=>b.onclick=async()=>{ const [ym,id,v]=b.dataset.bill.split("|"); months[ym]=monthTx(ym).map(t=>{ if(t.id!==id) return t; const r={...t,u:Date.now()}; if(v) r.bill=v; else delete r.bill; return r; }); render(); await saveMonths(new Set([ym])); await syncTBUSave(); renderCB(); });
-  $("cbOv").querySelectorAll("[data-cbq]").forEach(b=>b.onclick=()=>{ const k=b.dataset.cbq, rest=diff>0?diff:Math.max(0,tbuAmt-cbAdj.reduce((a,x)=>a+(+x.amt||0),0)); cbAdj.push({d:k==="기타 빠진 거래"?ymAdd(d.slice(0,7),-1)+"-15":d, desc:`${(methodOf(card)||{}).name||card} ${k}`, cat:k==="기타 빠진 거래"?(config.outCats[0]||FEE_CAT):FEE_CAT, amt:rest}); renderCB(); });
+  $("cbOv").querySelectorAll("[data-cbq]").forEach(b=>b.onclick=()=>{ const k=b.dataset.cbq, rest=diff>0?diff:Math.max(0,tbuAmt-cbAdj.reduce((a,x)=>a+(+x.amt||0),0)); cbAdj.push({d:k==="기타 빠진 거래"?ymAdd(d.slice(0,7),-1)+"-15":d, desc:`${(methodOf(card)||{}).name||card} ${k}`, cat:k==="기타 빠진 거래"?(config.outCats.find(c=>isCorpCat(c)===(((resolve(card)||{}).own)==="corp") && c!==FEE_CAT && c!==TBU_CAT)||FEE_CAT):FEE_CAT, amt:rest}); renderCB(); });
   $("cbOv").querySelectorAll("[data-ak]").forEach(el=>el.onchange=()=>{ const x=cbAdj[+el.dataset.ai], k=el.dataset.ak; if(k==="amt"){ const n=el.value.replace(/[^\d]/g,""); x.amt=+n||0; } else x[k]=el.value; setTimeout(renderCB,0); });
   $("cbOv").querySelectorAll("[data-adel]").forEach(b=>b.onclick=()=>{ cbAdj.splice(+b.dataset.adel,1); renderCB(); });
   if($("cbSaveAdj")) $("cbSaveAdj").onclick=async()=>{
@@ -2711,7 +2718,7 @@ function openTx(ym, id){
   if(t) $("iSettle").checked = t.st==="pending";
   $("settleNote").hidden=true;
   $("tbuBox").hidden = !(t && t.tbu);
-  if(t && t.tbu){ $("tbD").value=t.d; $("tbDesc").value=""; $("tbAmt").value=""; $("tbCat").innerHTML=config.outCats.filter(c=>c!==TBU_CAT).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); }
+  if(t && t.tbu){ $("tbD").value=t.d; $("tbDesc").value=""; $("tbAmt").value=""; $("tbCat").innerHTML=catOptsForCard(t.m, "", [TBU_CAT]); }
   openOv("txOv"); setTimeout(()=>$(t?"iDesc":"iAmt").focus(),30);
 }
 $("fab").onclick=()=>openTx(); $("openImport").onclick=()=>openImport(); $("openSettings").onclick=()=>openSettings();
