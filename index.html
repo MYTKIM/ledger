@@ -1293,8 +1293,9 @@ function buildJump(){
   if(items.length<2){ bar.hidden=true; return; }
   bar.hidden=false;
   const custOn = (accounts.people||[]).some(P=>(P.cats||[]).length) || allTx().some(t=>t.pp);
+  const custL = monthTx(curYM).filter(isCustody), custN = custL.length;
   bar.innerHTML=`<span class="jl">바로 가기</span>`+items.map(x=>`<button type="button" data-jump="${x.id}">${esc(x.t.length>16?x.t.slice(0,15)+"…":x.t)}</button>`).join("")
-    +(custOn && (view0()==="ledger"||view0()==="dash") ? `<button type="button" id="custTgl" class="cust" aria-pressed="${!!view.noCust}" title="YJ·TY 등 맡은 돈으로 들어오고 나간 수입·지출을 합계·그래프·장부에서 빼고 봅니다">${view.noCust?"✓ 맡은 돈 빼고 보는 중":"맡은 돈 빼고 보기"}</button>`:"");
+    +(custOn && (view0()==="ledger"||view0()==="dash") ? `<button type="button" id="custTgl" class="cust" aria-pressed="${!!view.noCust}" title="${esc(custN?"이 달 해당: "+custL.map(t=>`${+t.d.slice(8)}일 ${t.desc||t.cat} ${won(t.amt)}`).join(", "):"이 달에는 사람에게 묶인 계정의 수입·지출이 없습니다. 사람 추가·편집의 ‘자동으로 묶을 계정’과 기록의 계정이 같은지 확인하세요.")}">${view.noCust?"✓ 맡은 돈 빼고 보는 중":"맡은 돈 빼고 보기"} · 이 달 ${custN}건</button>`:"");
   if($("custTgl")) $("custTgl").onclick=()=>{ view.noCust=!view.noCust; render(); };
   bar.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>{ const el=document.getElementById(b.dataset.jump); if(el){ const y=el.getBoundingClientRect().top+window.scrollY-12; window.scrollTo({top:y,behavior:"smooth"}); } });
 }
