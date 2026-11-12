@@ -1100,6 +1100,7 @@ function render(){
   if(!reconBusy) scheduleRecon();
   if(dtl && !$("dtOv").hidden) renderDetail();
   if(!$("catOv").hidden) renderCats();
+  if(!$("cbOv").hidden) renderCB(); /* 대사 화면에서 거래를 고치거나 지우면 바로 다시 그림 */
 }
 
 function renderTrend(){
