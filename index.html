@@ -337,6 +337,11 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .pb li.snap{background:var(--sunk);border-radius:6px;border-top-color:transparent} .pb li.snap .l{font-weight:600}
 .pb li.rc .l{color:var(--warn)} .pb .s{grid-column:2;font-size:11.5px;color:var(--muted);line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
 .xf-list{display:grid;gap:10px}
+.cb-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 10px;border-top:1px solid var(--line)}
+.cb-row:first-child{border-top:0} .cb-row .lnk{border:0;background:none;text-align:left;cursor:pointer;color:var(--ink);padding:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit}
+.cb-adj{display:grid;grid-template-columns:130px minmax(0,1.3fr) minmax(0,1.2fr) 110px auto;gap:6px}
+.cb-adj input,.cb-adj select{border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--paper);color:var(--ink);min-width:0;font-size:13px}
+@media (max-width:620px){ .cb-adj{grid-template-columns:1fr 1fr} .cb-row{grid-template-columns:1fr auto} }
 .bulkv select{max-width:260px;width:100%} .bulkv td:first-child{min-width:170px;word-break:keep-all} .bulkv table{width:100%}
 .panel .ph{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .panel .ph h3{margin:0}
@@ -541,7 +546,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   <div class="dash" id="accView" hidden>
     <div class="dash-bar">
       <p id="accNote">통장 잔액을 입력하면, 그 뒤의 기록을 더하고 빼서 지금 잔액을 추적합니다.</p>
-      <div class="tools"><button class="btn primary" id="balBtn">잔액 입력</button><button class="btn" id="settleBtn">정산 입금 기록</button><button class="btn" id="xfBtn">자동이체</button><button class="btn" id="accEditBtn">계좌 편집</button></div>
+      <div class="tools"><button class="btn primary" id="balBtn">잔액 입력</button><button class="btn" id="settleBtn">정산 입금 기록</button><button class="btn" id="cbBtn">카드 대금 맞추기</button><button class="btn" id="xfBtn">자동이체</button><button class="btn" id="accEditBtn">계좌 편집</button></div>
     </div>
     <div class="kpis" id="fKpis"></div>
     <div class="acc-grid" id="accGrid"></div>
@@ -659,6 +664,28 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div id="catMsg" class="hint" hidden></div>
       <button type="button" class="btn small" id="bulkOpen" style="justify-self:start">계정 일괄 정리 (목록 붙여 넣기)</button>
       <div class="cat-tree" id="catTree"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 카드 대금 맞추기 -->
+<div class="overlay" id="cbOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="cbTitle">
+    <h3><span id="cbTitle">카드 대금 맞추기</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form">
+      <p class="hint" style="margin:0">카드사 명세서의 <b>실제 청구액</b>을 넣으면, 앱이 그 결제일에 빠진다고 계산한 거래와 비교합니다. 청구 기간이 달라 다른 달로 계산된 거래는 <b>이번 청구에 넣기</b>로 옮기고, 수수료·연회비·빠진 거래는 아래에서 바로 기록하세요.</p>
+      <div class="two">
+        <div class="f"><label for="cbCard">카드</label><select id="cbCard"></select></div>
+        <div class="f"><label for="cbDate">결제일 (출금일)</label><input id="cbDate" type="date"></div>
+      </div>
+      <div class="f"><label for="cbAmt">명세서 실제 청구액 (원)</label><input id="cbAmt" class="big" inputmode="numeric"></div>
+      <div id="cbSum" class="hint"></div>
+      <div id="cbAdj"></div>
+      <h4 style="margin:6px 0 0">이번 청구에 들어간 거래</h4>
+      <div class="ledger" id="cbIn"></div>
+      <h4 style="margin:6px 0 0">앞뒤 청구로 계산된 거래 <span style="font-weight:400;color:var(--muted);font-size:12.5px">— 명세서에 있으면 이번 청구에 넣으세요</span></h4>
+      <div class="ledger" id="cbNear"></div>
+      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>닫기</button><button type="button" class="btn primary" id="cbDone">확인 완료로 표시</button></div></div>
     </div>
   </div>
 </div>
@@ -908,11 +935,12 @@ function txAcct(t){ return t.ac || acctOf(payCode(t)); }
 function lastDay(y,m){ return new Date(y,m,0).getDate(); }
 function effDate(t){
   if(t.t!=="out") return t.d; const r=resolve(payCode(t)); const pay=+((r&&r.pay)||0); if(!pay||t.ac) return t.d;
+  if(t.bill) return t.bill; /* 카드 대금 맞추기에서 정한 청구(결제일) */
   let [y,mo]=t.d.split("-").map(Number); mo+=1; if(mo>12){mo=1;y++;} return y+"-"+pad(mo)+"-"+pad(Math.min(pay,lastDay(y,mo)));
 }
 function effects(t){
   const a=+t.amt||0;
-  if(t.t==="out") return [{acct:txAcct(t), d:effDate(t), v:-a, card:effDate(t)!==t.d}];
+  if(t.t==="out"){ const ed=effDate(t); return [{acct:txAcct(t), d:ed, v:-a, card:ed!==t.d || (!!t.bill && !t.ac)}]; }
   if(t.t==="in"){ const r=[{acct:txAcct(t), d:t.d, v:a}];
     /* 가족 계좌에서 받은 수입(예: 아내 저수지통장 → 저수지통장 생활비): 수입으로 잡되 보낸 계좌 잔액에서도 뺍니다 */
     if(t.fromAc && !NOT_ACCT(t.fromAc) && t.fromAc!==r[0].acct) r.push({acct:t.fromAc, d:t.d, v:-a});
@@ -1006,7 +1034,7 @@ async function boot(){
   plansRef.onSnapshot(snap=>{ const n={}; snap.docs.forEach(d=>{ const b=d.data(); if(b) n[d.id]={out:{...(b.out||{})},inc:{...(b.inc||{})}}; }); plans=n; render(); }, e=>showNotice("시트 계획을 읽지 못했습니다 ("+e.code+")."));
   budRef = db.doc("config/budgets");
   budRef.onSnapshot(s=>{ if(s.exists && !budPending){ const d=s.data(); budgets={items:(d.items||[]).map(x=>JSON.parse(JSON.stringify(x)))}; } loaded.bud=true; render(); maybeRunSchedules(); }, e=>showNotice("예산을 읽지 못했습니다 ("+e.code+")."));
-  accRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); accounts={buffer:d.buffer==null?3:d.buffer, list:(d.list||DEFAULT_ACCOUNTS.list).map(x=>({...x})), snaps:JSON.parse(JSON.stringify(d.snaps||{})), xfers:JSON.parse(JSON.stringify(d.xfers||[])), people:JSON.parse(JSON.stringify(d.people||[]))}; maybeRunSchedules(); } loaded.acc=true; render(); }, e=>showNotice("계좌 정보를 읽지 못했습니다 ("+e.code+")."));
+  accRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); accounts={buffer:d.buffer==null?3:d.buffer, list:(d.list||DEFAULT_ACCOUNTS.list).map(x=>({...x})), snaps:JSON.parse(JSON.stringify(d.snaps||{})), xfers:JSON.parse(JSON.stringify(d.xfers||[])), people:JSON.parse(JSON.stringify(d.people||[])), bills:JSON.parse(JSON.stringify(d.bills||[]))}; maybeRunSchedules(); } loaded.acc=true; render(); }, e=>showNotice("계좌 정보를 읽지 못했습니다 ("+e.code+")."));
   configRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); config={methods:(d.methods||DEFAULT_CONFIG.methods).map(x=>({...x})), outCats:[...(d.outCats||DEFAULT_CONFIG.outCats)], inCats:[...(d.inCats||DEFAULT_CONFIG.inCats)], workshops:(d.workshops||[]).map(x=>({...x}))}; render(); } }, e=>showNotice("설정을 읽지 못했습니다 ("+e.code+")."));
   let first = true;
   monthsRef.onSnapshot(snap=>{
@@ -1824,7 +1852,7 @@ function passbook(name){
   const ev=[], cardG={};
   allTx().forEach(t=>effects(t).forEach(e=>{
     if(e.acct!==name||e.d>today||!afterSnap(e,t,s0)) return; const k=txKey(t);
-    if(e.card){ const pc=payCode(t), g=e.d+"|"+pc+"|"+seg(e.d,k); const c=cardG[g]||(cardG[g]={kind:"card",d:e.d,k,v:0,n:0,lbl:`${(methodOf(pc)||{}).name||pc} 카드값`}); c.v+=e.v; c.n++; c.k=Math.max(c.k,k); return; }
+    if(e.card){ const pc=payCode(t), g=e.d+"|"+pc+"|"+seg(e.d,k); const c=cardG[g]||(cardG[g]={kind:"card",d:e.d,k,v:0,n:0,pc,lbl:`${(methodOf(pc)||{}).name||pc} 카드값`}); c.v+=e.v; c.n++; c.k=Math.max(c.k,k); return; }
     ev.push({kind:isRecon(t)?"rc":"tx",d:e.d,k,v:e.v,t});
   }));
   Object.values(cardG).forEach(c=>ev.push(c));
@@ -1841,7 +1869,7 @@ function passbookHTML(name){
     const d=x.d.slice(5).replace("-","/");
     if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span>${x.s.ts?`<span class="s">${whenTxt(x.s.ts)} 입력</span>`:"<span></span>"}<span class="r"><button type="button" class="sdel" data-sdel="${esc(name)}|${x.s.ts||""}|${x.s.d}" title="이 잔액 지우기">× 지우기</button></span></li>`;
     const sign=x.v>0?"+":"−", amt=`<span class="v num ${x.v>0?"p":""}">${sign}${won(Math.abs(x.v))}</span>`, r=`<span class="r num">잔액 ${won(x.bal)}</span>`;
-    if(x.kind==="card") return `<li><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}${r}</li>`;
+    if(x.kind==="card"){ const ok=(accounts.bills||[]).find(b=>b.card===x.pc&&b.d===x.d); return `<li data-card="${esc(x.pc)}|${x.d}" style="cursor:pointer"><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}<span class="s">${ok?(ok.ok?"✓ 청구액 확인됨":"청구액 "+won(ok.amt)+" · 차이 남음"):"눌러서 실제 청구액과 맞추기"}</span>${r}</li>`; }
     const t=x.t, lbl = x.kind==="rc" ? "잔액 맞춤" : esc(t.desc||t.cat||"(적요 없음)");
     const sub = x.kind==="rc" ? `${esc(t.cat||"")} · ${t.lock?"직접 고친 금액":"설명 안 되는 차이"}` : t.t==="move" ? `${esc(dispAcct(t.from))} → ${esc(dispAcct(t.to))}` : t.fromAc ? `${esc(t.cat||"")} · ${esc(t.fromAc)} → ${esc(txAcct(t))}` : esc(t.cat||"");
     const tag = t.src==="sched" ? `<b style="color:var(--warn)">${String(t.id).startsWith("xf-")?"자동이체로 기록":"예산 자동 기록"}</b> · ` : "";
@@ -1872,6 +1900,7 @@ function renderAcc(){
   $("accGrid").querySelectorAll("details[data-h]").forEach(dt=>dt.ontoggle=()=>{ const k="h:"+dt.dataset.h; dt.open?accOpen.add(k):accOpen.delete(k); });
   $("accGrid").querySelectorAll("details[data-pb]").forEach(dt=>dt.ontoggle=()=>{ dt.open?accOpen.add(dt.dataset.pb):accOpen.delete(dt.dataset.pb); });
   $("accGrid").querySelectorAll(".pb li[data-id]").forEach(li=>li.onclick=()=>openTx(li.dataset.ym,li.dataset.id));
+  $("accGrid").querySelectorAll(".pb li[data-card]").forEach(li=>li.onclick=()=>{ const [c,d]=li.dataset.card.split("|"); openCB(c,d); });
 
   renderPeople();
   const st=personalStats(); const recv=sumOf(allPending()); const PT=peopleTotals(); /* 평균에서는 맡은 돈 수입·지출을 뺍니다 */
@@ -2315,6 +2344,60 @@ async function applyCatRename(type, map){
   for(const k of plansCh){ try{ await plansRef.doc(k).set({ym:k,out:plans[k].out,inc:plans[k].inc}); }catch(_){} }
   if(accCh) await saveAccounts();
 }
+/* ---------- 카드 대금 맞추기 ---------- */
+const FEE_CAT="카드-수수료·연회비";
+let cbAdj=[];
+function cardCodes(){ return config.methods.filter(m=>kindOf(m)==="card" && +((resolve(m.code)||{}).pay||0)).map(m=>m.code); }
+function payDateOf(card, ym){ const p=+((resolve(card)||{}).pay||0); const [y,m]=ym.split("-").map(Number); return ym+"-"+pad(Math.min(p,lastDay(y,m))); }
+function cbTx(card,d){ return allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)===d); }
+function openCB(card, d){
+  const cs=cardCodes(); if(!cs.length){ showNotice("결제일이 정해진 카드가 없습니다. 결제수단 설정에서 카드의 결제일을 넣어 주세요."); return; }
+  $("cbCard").innerHTML=cs.map(c=>`<option value="${esc(c)}">${esc(c)} · ${esc((methodOf(c)||{}).name||"")} (매달 ${(resolve(c)||{}).pay}일)</option>`).join("");
+  $("cbCard").value = card && cs.includes(card) ? card : cs[0];
+  $("cbDate").value = d || (()=>{ const t=todayISO(); const pd=payDateOf($("cbCard").value, t.slice(0,7)); return pd<=t ? pd : payDateOf($("cbCard").value, ymAdd(t.slice(0,7),-1)); })();
+  const bill=(accounts.bills||[]).find(b=>b.card===$("cbCard").value && b.d===$("cbDate").value);
+  $("cbAmt").value = bill ? (+bill.amt).toLocaleString("ko-KR") : ""; cbAdj=[];
+  renderCB(); openOv("cbOv");
+}
+function renderCB(){
+  const card=$("cbCard").value, d=$("cbDate").value; if(!card||!d) return;
+  const inc=cbTx(card,d).sort((a,b)=>a.d.localeCompare(b.d)), calc=sumOf(inc), got=+($("cbAmt").value.replace(/[^\d]/g,""))||0;
+  const lo=(()=>{ const x=new Date(d); x.setDate(x.getDate()-80); return x.toISOString().slice(0,10); })();
+  const near=allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)!==d && t.d>=lo && t.d<d).sort((a,b)=>a.d.localeCompare(b.d));
+  const adjSum=cbAdj.reduce((a,x)=>a+(+x.amt||0),0), diff=got? got-calc-adjSum : 0;
+  $("cbSum").className = !got ? "hint" : diff===0 ? "hint" : "hint warn";
+  $("cbSum").innerHTML = `앱이 계산한 ${+d.slice(5,7)}/${+d.slice(8)} 청구 <b class="num">${won(calc)}</b> (${inc.length}건)` + (got ? ` · 실제 청구 <b class="num">${won(got)}</b> · ${diff===0?"<b>✓ 맞습니다</b>":`차이 <b class="num">${diff>0?"+":"−"}${won(Math.abs(diff))}</b> ${diff>0?"— 앱에 빠진 금액이 있습니다":"— 앱에 더 들어간 거래가 있습니다"}`}` : " · 실제 청구액을 넣어 주세요");
+  const row=(t,btn)=>`<div class="cb-row"><button type="button" class="lnk" data-open="${t.d.slice(0,7)}|${esc(t.id)}"><span class="num" style="color:var(--muted)">${t.d.slice(5).replace("-","/")}</span> ${esc(t.desc||t.cat||"")} <span style="color:var(--muted);font-size:12px">${esc(t.cat||"")}${t.bill?" · 청구 직접 지정":""}</span></button><b class="num">${won(t.amt)}</b>${btn}</div>`;
+  const nextD=payDateOf(card, ymAdd(d.slice(0,7),1));
+  $("cbIn").innerHTML = inc.length ? inc.map(t=>row(t, `<button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${t.bill?"":nextD}">${t.bill?"원래 청구로":"다음 청구로"}</button>`)).join("") : `<div class="foot">이 결제일로 계산된 거래가 없습니다.</div>`;
+  $("cbNear").innerHTML = near.length ? near.map(t=>row(t, `<span style="font-size:12px;color:var(--muted)">${+effDate(t).slice(5,7)}/${+effDate(t).slice(8)} 청구</span> <button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${d}">이번 청구에 넣기</button>`)).join("") : `<div class="foot">최근 80일 안에 다른 청구로 계산된 거래가 없습니다.</div>`;
+  // 차이 기록
+  const cats=[FEE_CAT].concat(config.outCats.filter(c=>c!==FEE_CAT));
+  $("cbAdj").innerHTML = (got && diff!==0 || cbAdj.length) ? `<div style="display:grid;gap:6px;margin:6px 0">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:12.5px;color:var(--muted)">차이 기록:</span>${["연회비","해외 결제 수수료","할부 수수료","기타 빠진 거래"].map(k=>`<button type="button" class="btn small" data-cbq="${k}">＋ ${k}</button>`).join("")}</div>
+      ${cbAdj.map((x,i)=>`<div class="cb-adj"><input type="date" data-ai="${i}" data-ak="d" value="${esc(x.d)}"><input data-ai="${i}" data-ak="desc" value="${esc(x.desc)}" placeholder="적요"><select data-ai="${i}" data-ak="cat">${cats.map(c=>`<option value="${esc(c)}" ${c===x.cat?"selected":""}>${esc(c)}</option>`).join("")}</select><input data-ai="${i}" data-ak="amt" inputmode="numeric" value="${x.amt?(+x.amt).toLocaleString("ko-KR"):""}" placeholder="금액"><button type="button" class="btn small" data-adel="${i}">×</button></div>`).join("")}
+      ${cbAdj.length?`<div><button type="button" class="btn small primary" id="cbSaveAdj">${cbAdj.length}건 ${$("cbCard").value}로 기록 (이번 청구)</button></div>`:""}</div>` : "";
+  $("cbOv").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{ const [ym,id]=b.dataset.open.split("|"); openTx(ym,id); });
+  $("cbOv").querySelectorAll("[data-bill]").forEach(b=>b.onclick=async()=>{ const [ym,id,v]=b.dataset.bill.split("|"); months[ym]=monthTx(ym).map(t=>{ if(t.id!==id) return t; const r={...t,u:Date.now()}; if(v) r.bill=v; else delete r.bill; return r; }); render(); renderCB(); await saveMonths(new Set([ym])); });
+  $("cbOv").querySelectorAll("[data-cbq]").forEach(b=>b.onclick=()=>{ const k=b.dataset.cbq, rest=Math.max(0,diff); cbAdj.push({d:k==="기타 빠진 거래"?ymAdd(d.slice(0,7),-1)+"-15":d, desc:`${(methodOf(card)||{}).name||card} ${k}`, cat:k==="기타 빠진 거래"?(config.outCats[0]||FEE_CAT):FEE_CAT, amt:rest}); renderCB(); });
+  $("cbOv").querySelectorAll("[data-ak]").forEach(el=>el.onchange=()=>{ const x=cbAdj[+el.dataset.ai], k=el.dataset.ak; if(k==="amt"){ const n=el.value.replace(/[^\d]/g,""); x.amt=+n||0; } else x[k]=el.value; setTimeout(renderCB,0); });
+  $("cbOv").querySelectorAll("[data-adel]").forEach(b=>b.onclick=()=>{ cbAdj.splice(+b.dataset.adel,1); renderCB(); });
+  if($("cbSaveAdj")) $("cbSaveAdj").onclick=async()=>{
+    const touched=new Set(); const card=$("cbCard").value, d=$("cbDate").value;
+    cbAdj.filter(x=>+x.amt>0).forEach(x=>{ const ym=x.d.slice(0,7); const t={id:uid(), d:x.d, t:"out", amt:+x.amt, desc:x.desc||"카드 청구 차이", cat:x.cat||FEE_CAT, m:card, ent:isCorpCat(x.cat||"")?"corp":"me", src:"manual", bill:d, ts:Date.now()}; if(needsSettle(t)) t.st="pending"; months[ym]=monthTx(ym).concat([t]); touched.add(ym); });
+    cbAdj=[]; ensureCats(); render(); renderCB(); await saveMonths(touched); showNotice("카드 청구 차이를 기록했습니다.");
+  };
+}
+$("cbBtn").onclick=()=>openCB();
+["cbCard","cbDate"].forEach(id=>$(id).addEventListener("change",()=>{ const b=(accounts.bills||[]).find(x=>x.card===$("cbCard").value&&x.d===$("cbDate").value); $("cbAmt").value=b?(+b.amt).toLocaleString("ko-KR"):""; renderCB(); }));
+$("cbAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; renderCB(); });
+$("cbAmt").addEventListener("blur",()=>setTimeout(renderCB,0));
+$("cbDone").onclick=async()=>{
+  const card=$("cbCard").value, d=$("cbDate").value, got=+($("cbAmt").value.replace(/[^\d]/g,""))||0; if(!got){ $("cbAmt").focus(); return; }
+  const calc=sumOf(cbTx(card,d)); accounts.bills=(accounts.bills||[]).filter(b=>!(b.card===card&&b.d===d)).concat([{card,d,amt:got,ok:got===calc,ts:Date.now()}]);
+  closeOv("cbOv"); render(); await saveAccounts(); showNotice(got===calc?`${card} ${+d.slice(5,7)}/${+d.slice(8)} 청구액이 장부와 맞습니다.`:`${card} 청구액을 저장했습니다. 차이 ${won(Math.abs(got-calc))}가 남아 있습니다.`);
+};
+
 /* ---------- 계정 일괄 정리 ---------- */
 let bulk=null;
 function catCount(type){ const c={}; allTx().forEach(t=>{ if(isRecon(t)||!t.cat) return; if(type==="in"?t.t==="in":t.t!=="in") c[t.cat]=(c[t.cat]||0)+1; }); return c; }
