@@ -2,7 +2,7 @@
  * 앱 파일: 온라인이면 새 파일을 받아 쓰고 보관, 오프라인이면 보관본을 씁니다.
  * 글꼴: 보관본을 먼저 쓰고 뒤에서 새로 받습니다.
  * 구글 로그인·드라이브 요청은 건드리지 않습니다. */
-const VERSION = "2026.11.12-1952";
+const VERSION = "2026.11.12-2004";
 const CACHE = "ldg-" + VERSION;
 const SHELL = ["./", "./index.html", "./config.js", "./store.js", "./ui.js", "./vendor/xlsx.full.min.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png", "./icons/favicon-32.png"];

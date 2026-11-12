@@ -673,7 +673,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="cbTitle">
     <h3><span id="cbTitle">카드 대금 맞추기</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
-      <p class="hint" style="margin:0">카드사 명세서의 <b>실제 청구액</b>을 넣으면, 앱이 그 결제일에 빠진다고 계산한 거래와 비교합니다. 청구 기간이 달라 다른 달로 계산된 거래는 <b>이번 청구에 넣기</b>로 옮기고, 수수료·연회비·빠진 거래는 아래에서 바로 기록하세요.</p>
+      <p class="hint" style="margin:0">카드사 명세서의 <b>실제 청구액</b>을 넣으면, 앱이 그 결제일에 빠진다고 계산한 거래와 비교합니다. 앱은 <b>지난달 1일~말일 사용분</b>을 결제일에 청구합니다. 수수료·연회비·빠진 거래는 아래에서 바로 기록하세요.</p>
       <div class="two">
         <div class="f"><label for="cbCard">카드</label><select id="cbCard"></select></div>
         <div class="f"><label for="cbDate">결제일 (출금일)</label><input id="cbDate" type="date"></div>
@@ -683,8 +683,8 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div id="cbAdj"></div>
       <h4 style="margin:6px 0 0">이번 청구에 들어간 거래</h4>
       <div class="ledger" id="cbIn"></div>
-      <h4 style="margin:6px 0 0">앞뒤 청구로 계산된 거래 <span style="font-weight:400;color:var(--muted);font-size:12.5px">— 명세서에 있으면 이번 청구에 넣으세요</span></h4>
-      <div class="ledger" id="cbNear"></div>
+      <details id="cbNearBox" hidden><summary style="cursor:pointer;font-weight:600;margin:6px 0">경계 날짜 거래 확인 <span style="font-weight:400;color:var(--muted);font-size:12.5px">— 차이가 날 때만: 청구 기간 앞뒤 7일 안의 거래 중 명세서에 있는 것</span></summary>
+      <div class="ledger" id="cbNear"></div></details>
       <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>닫기</button><button type="button" class="btn primary" id="cbDone">확인 완료로 표시</button></div></div>
     </div>
   </div>
@@ -2349,12 +2349,13 @@ const FEE_CAT="카드-수수료·연회비";
 let cbAdj=[];
 function cardCodes(){ return config.methods.filter(m=>kindOf(m)==="card" && +((resolve(m.code)||{}).pay||0)).map(m=>m.code); }
 function payDateOf(card, ym){ const p=+((resolve(card)||{}).pay||0); const [y,m]=ym.split("-").map(Number); return ym+"-"+pad(Math.min(p,lastDay(y,m))); }
+function lastPayDate(card){ const t=todayISO(); const pd=payDateOf(card, t.slice(0,7)); return pd<=t ? pd : payDateOf(card, ymAdd(t.slice(0,7),-1)); }
 function cbTx(card,d){ return allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)===d); }
 function openCB(card, d){
   const cs=cardCodes(); if(!cs.length){ showNotice("결제일이 정해진 카드가 없습니다. 결제수단 설정에서 카드의 결제일을 넣어 주세요."); return; }
   $("cbCard").innerHTML=cs.map(c=>`<option value="${esc(c)}">${esc(c)} · ${esc((methodOf(c)||{}).name||"")} (매달 ${(resolve(c)||{}).pay}일)</option>`).join("");
-  $("cbCard").value = card && cs.includes(card) ? card : cs[0];
-  $("cbDate").value = d || (()=>{ const t=todayISO(); const pd=payDateOf($("cbCard").value, t.slice(0,7)); return pd<=t ? pd : payDateOf($("cbCard").value, ymAdd(t.slice(0,7),-1)); })();
+  $("cbCard").value = card && cs.includes(card) ? card : cs.slice().sort((a,b)=>lastPayDate(b).localeCompare(lastPayDate(a)))[0]; /* 가장 최근에 결제된 카드부터 */
+  $("cbDate").value = d || lastPayDate($("cbCard").value);
   const bill=(accounts.bills||[]).find(b=>b.card===$("cbCard").value && b.d===$("cbDate").value);
   $("cbAmt").value = bill ? (+bill.amt).toLocaleString("ko-KR") : ""; cbAdj=[];
   renderCB(); openOv("cbOv");
@@ -2362,15 +2363,18 @@ function openCB(card, d){
 function renderCB(){
   const card=$("cbCard").value, d=$("cbDate").value; if(!card||!d) return;
   const inc=cbTx(card,d).sort((a,b)=>a.d.localeCompare(b.d)), calc=sumOf(inc), got=+($("cbAmt").value.replace(/[^\d]/g,""))||0;
-  const lo=(()=>{ const x=new Date(d); x.setDate(x.getDate()-80); return x.toISOString().slice(0,10); })();
-  const near=allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)!==d && t.d>=lo && t.d<d).sort((a,b)=>a.d.localeCompare(b.d));
+  /* 청구 기간(지난달 1일~말일) 경계 앞뒤 7일 안에서 다른 청구로 계산된 거래: 날짜를 잘못 적었거나 카드사 매입이 늦은 경우만 찾습니다 */
+  const pm=ymAdd(d.slice(0,7),-1), [py,pmo]=pm.split("-").map(Number), pS=pm+"-01", pE=pm+"-"+pad(lastDay(py,pmo));
+  const sh=(iso,n)=>{ const x=new Date(iso+"T00:00"); x.setDate(x.getDate()+n); return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate()); };
+  const near=allTx().filter(t=>t.t==="out" && payCode(t)===card && !t.ac && effDate(t)!==d && ((t.d>=sh(pS,-7)&&t.d<pS) || (t.d>pE&&t.d<=sh(pE,7)))).sort((a,b)=>a.d.localeCompare(b.d));
   const adjSum=cbAdj.reduce((a,x)=>a+(+x.amt||0),0), diff=got? got-calc-adjSum : 0;
   $("cbSum").className = !got ? "hint" : diff===0 ? "hint" : "hint warn";
   $("cbSum").innerHTML = `앱이 계산한 ${+d.slice(5,7)}/${+d.slice(8)} 청구 <b class="num">${won(calc)}</b> (${inc.length}건)` + (got ? ` · 실제 청구 <b class="num">${won(got)}</b> · ${diff===0?"<b>✓ 맞습니다</b>":`차이 <b class="num">${diff>0?"+":"−"}${won(Math.abs(diff))}</b> ${diff>0?"— 앱에 빠진 금액이 있습니다":"— 앱에 더 들어간 거래가 있습니다"}`}` : " · 실제 청구액을 넣어 주세요");
   const row=(t,btn)=>`<div class="cb-row"><button type="button" class="lnk" data-open="${t.d.slice(0,7)}|${esc(t.id)}"><span class="num" style="color:var(--muted)">${t.d.slice(5).replace("-","/")}</span> ${esc(t.desc||t.cat||"")} <span style="color:var(--muted);font-size:12px">${esc(t.cat||"")}${t.bill?" · 청구 직접 지정":""}</span></button><b class="num">${won(t.amt)}</b>${btn}</div>`;
   const nextD=payDateOf(card, ymAdd(d.slice(0,7),1));
   $("cbIn").innerHTML = inc.length ? inc.map(t=>row(t, `<button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${t.bill?"":nextD}">${t.bill?"원래 청구로":"다음 청구로"}</button>`)).join("") : `<div class="foot">이 결제일로 계산된 거래가 없습니다.</div>`;
-  $("cbNear").innerHTML = near.length ? near.map(t=>row(t, `<span style="font-size:12px;color:var(--muted)">${+effDate(t).slice(5,7)}/${+effDate(t).slice(8)} 청구</span> <button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${d}">이번 청구에 넣기</button>`)).join("") : `<div class="foot">최근 80일 안에 다른 청구로 계산된 거래가 없습니다.</div>`;
+  $("cbNearBox").hidden = !(got && diff!==0) || !near.length;
+  $("cbNear").innerHTML = near.length ? near.map(t=>row(t, `<span style="font-size:12px;color:var(--muted)">${+effDate(t).slice(5,7)}/${+effDate(t).slice(8)} 청구</span> <button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${d}">이번 청구에 넣기</button>`)).join("") : `<div class="foot">청구 기간 앞뒤 7일 안에 다른 청구로 계산된 거래가 없습니다.</div>`;
   // 차이 기록
   const cats=[FEE_CAT].concat(config.outCats.filter(c=>c!==FEE_CAT));
   $("cbAdj").innerHTML = (got && diff!==0 || cbAdj.length) ? `<div style="display:grid;gap:6px;margin:6px 0">
@@ -2389,6 +2393,7 @@ function renderCB(){
   };
 }
 $("cbBtn").onclick=()=>openCB();
+$("cbCard").addEventListener("change",()=>{ $("cbDate").value=lastPayDate($("cbCard").value); });
 ["cbCard","cbDate"].forEach(id=>$(id).addEventListener("change",()=>{ const b=(accounts.bills||[]).find(x=>x.card===$("cbCard").value&&x.d===$("cbDate").value); $("cbAmt").value=b?(+b.amt).toLocaleString("ko-KR"):""; renderCB(); }));
 $("cbAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; renderCB(); });
 $("cbAmt").addEventListener("blur",()=>setTimeout(renderCB,0));
