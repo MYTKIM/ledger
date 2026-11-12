@@ -2386,6 +2386,7 @@ function renderCB(){
   $("cbIn").innerHTML = inc.length ? inc.map(t=>row(t, t.tbu?"":`<button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${t.bill?"":nextD}">${t.bill?"원래 청구로":"다음 청구로"}</button>`)).join("") : `<div class="foot">이 결제일로 계산된 거래가 없습니다.</div>`;
   $("cbNearBox").hidden = !(got && diff!==0) || !near.length;
   $("cbTbu").hidden = !(got && diff>0) || inc.some(t=>t.tbu);
+  $("cbDone").textContent = got && diff===0 && !tbuAmt ? "확인 완료로 표시" : "청구액 저장 (나중에 이어서)";
   $("cbNear").innerHTML = near.length ? near.map(t=>row(t, `<span style="font-size:12px;color:var(--muted)">${+effDate(t).slice(5,7)}/${+effDate(t).slice(8)} 청구</span> <button type="button" class="btn small" data-bill="${t.d.slice(0,7)}|${esc(t.id)}|${d}">이번 청구에 넣기</button>`)).join("") : `<div class="foot">청구 기간 앞뒤 7일 안에 다른 청구로 계산된 거래가 없습니다.</div>`;
   // 차이 기록
   const cats=[FEE_CAT].concat(config.outCats.filter(c=>c!==FEE_CAT));
