@@ -150,6 +150,7 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 .row .amt{font-size:15px;font-weight:600;text-align:right;white-space:nowrap}
 #wsNew:not([hidden]){display:grid}
 .tot[data-tot],#tPendBox{cursor:pointer} .tot[data-tot]:hover,#tPendBox:hover{outline:1px solid var(--line)} .tot .tc{font-size:11.5px;color:var(--muted);font-weight:400;margin-left:2px}
+.sortseg button{font-size:12px;padding:3px 10px}
 .chip.ws{background:#efe7fb;color:#5b3a99} @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .chip.ws{background:#3a2d55;color:#d9c8ff} }
 .row .amt.in{color:var(--in)} .row .amt.move{color:var(--muted)} .row .amt.move::before{content:"⇄ ";font-weight:400}
 .row .meta{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;font-size:12px;color:var(--muted);min-width:0;grid-column:2/-1}
@@ -993,6 +994,12 @@ async function saveMonths(keys){ keys=[...keys]; keys.forEach(k=>{ pendingLocal[
 function saveConfig(){ if(!configRef) return Promise.resolve(); return configRef.set(config).catch(e=>showNotice("설정을 저장하지 못했습니다 ("+(e&&e.code||"오류")+").")); }
 let accQ=Promise.resolve();
 function saveAccounts(){ if(!accRef) return Promise.resolve(); const body=JSON.parse(JSON.stringify(accounts)); accQ=accQ.catch(()=>{}).then(()=>accRef.set(body)).catch(e=>showNotice("계좌 정보를 저장하지 못했습니다 ("+(e&&e.code||"오류")+").")); return accQ; }
+/* 정렬: 날짜순(기본) / 금액순 — 거래 탭과 상세 창이 같이 씀 */
+let sortBy=(()=>{ try{ return localStorage.getItem("sortBy")||"date"; }catch(_){ return "date"; } })();
+function setSort(v){ sortBy=v; try{ localStorage.setItem("sortBy",v); }catch(_){} render(); if(dtl && !$("dtOv").hidden) renderDetail(); }
+function sortTx(list){ return sortBy==="amt" ? list.sort((a,b)=>(+b.amt||0)-(+a.amt||0) || (b.d||"").localeCompare(a.d||"")) : list; }
+function sortSeg(){ return `<span class="seg sortseg" role="group" aria-label="정렬"><button type="button" data-sort="date" aria-pressed="${sortBy==="date"}">날짜순</button><button type="button" data-sort="amt" aria-pressed="${sortBy==="amt"}">금액순</button></span>`; }
+function dayCell(t){ const wd=["일","월","화","수","목","금","토"][new Date((t.d||"")+"T00:00").getDay()]||""; return sortBy==="amt" ? `<b style="font-size:13px">${+t.d.slice(5,7)}/${+t.d.slice(8,10)}</b>${wd}` : `<b>${+(t.d||"").slice(8,10)||""}</b>${wd}`; }
 function showNotice(msg){ const n=$("notice"); n.textContent=msg; n.hidden=!msg; }
 /* 바로 앞 상황으로 되돌리기: 기록을 바꾸기 직전의 장부(달별 기록)를 기억해 두었다가, 바뀐 달만 되돌립니다 */
 let undoBase=null, undoTimer=null;
@@ -1193,7 +1200,7 @@ function renderLedger(tx){
     if($("wkClr")) $("wkClr").onclick=()=>{ view.weeks.clear(); render(); };
     if(view.weeks.size) list=list.filter(t=>view.weeks.has(weekOfDay(curYM,+t.d.slice(8,10))));
   }
-  list.sort((a,b)=> (b.d||"").localeCompare(a.d||"") || ((b.ts||0)-(a.ts||0)));
+  list.sort((a,b)=> (b.d||"").localeCompare(a.d||"") || ((b.ts||0)-(a.ts||0))); sortTx(list);
   if(!anyData){
     wrap.innerHTML=`<div class="welcome"><h3>아직 장부가 비어 있습니다</h3><p>구글 드라이브의 월별 가계부(‘거래’ 시트)를 불러오면 2월부터 지금까지의 기록이 법인·개인, 결제수단, 출금 계좌별로 정리됩니다. 오늘 쓴 돈은 아래 <b>+ 거래 입력</b>로 바로 입력할 수 있습니다.</p><button class="btn primary" id="welcomeImp">가계부 불러오기</button></div>`;
     $("welcomeImp").onclick=openImport; return;
@@ -1203,10 +1210,10 @@ function renderLedger(tx){
   const sumOut=list.filter(t=>t.t==="out").reduce((a,t)=>a+(+t.amt||0),0), sumIn=list.filter(t=>t.t==="in").reduce((a,t)=>a+(+t.amt||0),0);
   const sumBar = filtOn && view.ent!=="pending" && list.length ? `<div class="hint" style="margin:0 0 10px">${view.scope!=="month"?`<b>${esc(scopeTxt())}</b>에서 `:""}조건에 맞는 <b>${list.length}건</b> · 지출 <b class="num">${won(sumOut)}</b>${sumIn?` · 수입 <b class="num">${won(sumIn)}</b>`:""}</div>` : "";
   const stBar = view.ent==="pending" ? `<div class="actions" style="margin:0 0 10px"><span class="hint" style="background:none;padding:0">개인 카드·현금으로 먼저 낸 법인 비용입니다. 법인에서 돌려받았으면 기록하세요.</span><div class="r"><button type="button" class="btn primary small" id="stOpen2">법인 정산</button></div></div>` : "";
-  let html=`<div class="ledger">`, lastDay=null, showDay=view.ent!=="pending" && view.scope==="month";
+  let html=`<div style="display:flex;justify-content:flex-end;margin:0 0 6px">${sortSeg()}</div><div class="ledger">`, lastDay=null, showDay=view.ent!=="pending" && view.scope==="month" && sortBy==="date";
   list.forEach(t=>{
     const ym=(t.d||"").slice(0,7), day=+(t.d||"").slice(8,10)||"";
-    if(!showDay && ym!==lastDay){ html+=`<div class="daysep">${+ym.slice(5)}월 · ${ym.slice(0,4)}</div>`; lastDay=ym; }
+    if(!showDay && sortBy==="date" && ym!==lastDay){ html+=`<div class="daysep">${+ym.slice(5)}월 · ${ym.slice(0,4)}</div>`; lastDay=ym; }
     const m=methodOf(t.m), acct=txAcct(t);
     const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : isRecon(t) ? `<span class="chip plain">잔액 맞춤 · ${t.lock?"수동":"자동"}</span>` : "";
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
@@ -1216,13 +1223,14 @@ function renderLedger(tx){
     const mv = t.t==="move" ? effects(t) : null;
     const flow = t.t==="move" ? `<span class="flow">${esc(isPerson(t.from)?dispAcct(t.from):(mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc(isPerson(t.to)?dispAcct(t.to):(mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.t==="in" ? (NOT_ACCT(acct) ? `<span class="flow">입금 계좌 미지정</span>` : `<span class="flow">${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}<b>${esc(acct)}</b></span>`) : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
     const cls = t.t==="in"?"in":t.t==="move"?"move":"";
-    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num"><b>${day}</b>${["일","월","화","수","목","금","토"][new Date((t.d||"")+"T00:00").getDay()]||""}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${cls}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${entChip}${st}<span>${esc(t.cat||"미분류")}</span><span>·</span>${flow}</div></button>`;
+    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num">${dayCell(t)}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${cls}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${entChip}${st}<span>${esc(t.cat||"미분류")}</span><span>·</span>${flow}</div></button>`;
   });
   const shown=sumOf(list.filter(t=>t.t==="out")), shownIn=sumOf(list.filter(t=>t.t==="in"));
   html+=`<div class="foot"><span>${list.length}건 표시</span><span class="num">지출 ${won(shown)}${shownIn?" · 수입 "+won(shownIn):""}</span></div></div>`;
   wrap.innerHTML=stBar+sumBar+html;
   if($("stOpen2")) $("stOpen2").onclick=openSettle;
   wrap.querySelectorAll(".row").forEach(b=>b.onclick=()=>openTx(b.dataset.ym,b.dataset.id));
+  wrap.querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>setSort(b.dataset.sort));
 }
 
 /* ---------- 대시보드 ---------- */
@@ -2262,16 +2270,18 @@ function renderDetail(){
     $("dtBreak").insertAdjacentHTML("afterbegin",`<span style="font-size:12px;color:var(--muted);margin-right:2px">워크샵</span><span class="chip plain" data-wsf="excl" aria-pressed="${dtl.ws==="excl"}">빼고</span><span class="chip plain" data-wsf="only" aria-pressed="${dtl.ws==="only"}">워크샵만 ${won(wsAmt)}</span><span style="flex-basis:100%;height:0"></span>`);
     $("dtBreak").querySelectorAll("[data-wsf]").forEach(x=>x.onclick=()=>{ dtl.ws = dtl.ws===x.dataset.wsf ? null : (x.dataset.wsf||null); dtl.sub=null; renderDetail(); }); }
   if(!list.length){ $("dtList").innerHTML=`<div class="foot">해당하는 거래가 없습니다.</div>`; return; }
-  let html="", last=null; const multi=months.length>1;
+  let html=`<div style="display:flex;justify-content:flex-end;margin:0 0 6px">${sortSeg()}</div>`, last=null; const multi=months.length>1 && sortBy==="date";
+  sortTx(list);
   list.forEach(t=>{
     const ym=t.d.slice(0,7); if(multi && ym!==last){ html+=`<div class="daysep">${+ym.slice(5)}월 · ${ym.slice(0,4)}</div>`; last=ym; }
     const acct=txAcct(t);
     const flow = t.t==="in" ? (NOT_ACCT(acct)?"입금 계좌 미지정":`${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}${esc(acct)}`) : t.m ? `${txMethodTxt(t)} → ${esc(acct)}` : t.ac ? `계좌 → ${esc(t.ac)}` : "결제수단 미지정";
-    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num"><b>${+t.d.slice(8,10)}</b>${["일","월","화","수","목","금","토"][new Date(t.d+"T00:00").getDay()]}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${t.t==="in"?"in":""}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${t.ent==="corp"?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}${t.st==="pending"?'<span class="chip warn">정산 대기</span>':""}${t.src==="sched"?'<span class="chip plain">예약 집행</span>':""}${isRecon(t)?'<span class="chip plain">잔액 맞춤</span>':""}<span>${esc(t.cat||"미분류")}</span><span>·</span><span class="flow">${flow}</span></div></button>`;
+    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num">${dayCell(t)}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${t.t==="in"?"in":""}">${t.t==="in"?"+":""}${won(t.amt)}</div><div class="meta">${t.ent==="corp"?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}${t.st==="pending"?'<span class="chip warn">정산 대기</span>':""}${t.src==="sched"?'<span class="chip plain">예약 집행</span>':""}${isRecon(t)?'<span class="chip plain">잔액 맞춤</span>':""}<span>${esc(t.cat||"미분류")}</span><span>·</span><span class="flow">${flow}</span></div></button>`;
   });
   html+=`<div class="foot"><span>${list.length}건</span><span class="num">합계 ${won(tot)}</span></div>`;
   $("dtList").innerHTML=html;
   $("dtList").querySelectorAll(".row").forEach(b=>b.onclick=()=>openTx(b.dataset.ym,b.dataset.id));
+  $("dtList").querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>setSort(b.dataset.sort));
 }
 document.addEventListener("click",e=>{ const el=e.target.closest("[data-dt]"); if(!el || e.target.closest("button:not([data-dt]),a,input,select")) return; try{ openDetail(JSON.parse(el.dataset.dt)); }catch(_){} });
 document.addEventListener("keydown",e=>{ if((e.key==="Enter"||e.key===" ") && e.target.matches && e.target.matches("[data-dt]")){ e.preventDefault(); try{ openDetail(JSON.parse(e.target.dataset.dt)); }catch(_){} } });
