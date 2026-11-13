@@ -351,6 +351,13 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .ameta .al{color:var(--muted);min-width:0}
 .ameta .al small{display:block;font-size:11px;opacity:.85}
 .ameta .ar b{font-weight:500;color:var(--ink);white-space:nowrap}
+.ameta details.more{margin:0}
+.ameta details.more>summary{list-style:none;cursor:pointer;font-size:12px;color:var(--focus);padding:4px 0 2px;border-top:1px dashed var(--line);margin-top:2px}
+.ameta details.more>summary::-webkit-details-marker{display:none}
+.ameta details.more>summary::before{content:"▸ "}
+.ameta details.more[open]>summary::before{content:"▾ "}
+.ameta details.more .hd,.ameta details.more[open] .sh{display:none}
+.ameta details.more[open] .hd{display:inline}
 .ameta .ar b.p{color:var(--in)}
 .ameta .ar b.bad{color:var(--warn)}
 .acc details{font-size:12.5px}
@@ -2009,9 +2016,16 @@ function cardUpBreak(name){ const today=todayISO(), g={}; allTx().forEach(t=>eff
 function accMeta(a,tr,up){
   const md=d=>+d.slice(5,7)+"/"+ +d.slice(8,10), row=(l,v,cls,sub)=>`<div class="ar"><span class="al">${l}${sub?`<small>${sub}</small>`:""}</span><b class="num ${cls||""}">${v}</b></div>`;
   let h=`<div class="ag"><div class="ah">잔액 계산</div>`+row(`${md(tr.snap.d)} 입력한 잔액`,won(tr.snap.bal))+row("그 뒤 들어온 돈","+"+won(tr.flow.inn),"p")+row("그 뒤 나간 돈","−"+won(tr.flow.out))+(a.maturity?row("만기",esc(a.maturity)):"")+`</div>`;
-  if(up){ const L=cardUpBreak(a.name); h+=`<div class="ag"><div class="ah">카드 결제 예정 <b class="num">${won(up)}</b></div>`+L.map(x=>row(esc(x.c),"−"+won(x.v),"",`${md(x.d)} 출금`)).join("")+row("모두 빠진 뒤 예상 잔액",sgn(tr.bal-up),tr.bal-up<0?"bad":"")+`</div>`; }
+  if(up){ const L=cardUpBreak(a.name), m0=L.length?L[0].d.slice(0,7):"", now=L.filter(x=>x.d.slice(0,7)===m0), later=L.filter(x=>x.d.slice(0,7)!==m0), nowSum=now.reduce((t,x)=>t+x.v,0), laterSum=up-nowSum;
+    const cr=x=>row(esc(x.c),"−"+won(x.v),"",`${md(x.d)} 출금`), k="cu:"+a.name;
+    h+=`<div class="ag"><div class="ah">카드 결제 예정 <b class="num">${won(up)}</b></div>`+now.map(cr).join("")+
+      (later.length?row(`${+m0.slice(5)}월에 빠진 뒤 잔액`,sgn(tr.bal-nowSum),tr.bal-nowSum<0?"bad":"")
+        +`<details class="more" data-acx="${esc(k)}" ${accOpen.has(k)?"open":""}><summary><span class="sh">그 뒤 ${later.length}건 · −${won(laterSum)} 펼치기</span><span class="hd">접기</span></summary>${later.map(cr).join("")}${row("모두 빠진 뒤 예상 잔액",sgn(tr.bal-up),tr.bal-up<0?"bad":"")}</details>`
+        : row("모두 빠진 뒤 예상 잔액",sgn(tr.bal-up),tr.bal-up<0?"bad":""))+`</div>`; }
   const xs=(accounts.xfers||[]).filter(x=>x.from===a.name||x.to===a.name);
-  if(xs.length) h+=`<div class="ag"><div class="ah">자동이체 ${xs.length}건</div>`+xs.map(x=>{ const nx=xfNext(x), inc=x.to===a.name; return row(esc(x.name||"자동이체"),(inc?"+":"−")+won(+x.amt||0),inc?"p":"",`매달 ${esc(ruleTxt(xfAsBudget(x))||"?")} · ${inc?"← "+esc(x.from):"→ "+esc(xfTo(x))} · ${nx?"다음 "+md(nx):"끝남"}`); }).join("")+`</div>`;
+  if(xs.length){ const xr=x=>{ const nx=xfNext(x), inc=x.to===a.name; return row(esc(x.name||"자동이체"),(inc?"+":"−")+won(+x.amt||0),inc?"p":"",`매달 ${esc(ruleTxt(xfAsBudget(x))||"?")} · ${inc?"← "+esc(x.from):"→ "+esc(xfTo(x))} · ${nx?"다음 "+md(nx):"끝남"}`); };
+    const ord=xs.slice().sort((p,q)=>(xfNext(p)||"9999").localeCompare(xfNext(q)||"9999")), k="xf:"+a.name, top=ord.slice(0,3), rest=ord.slice(3);
+    h+=`<div class="ag"><div class="ah">자동이체 ${xs.length}건 <span style="font-weight:400">다음 이체일 순</span></div>`+top.map(xr).join("")+(rest.length?`<details class="more" data-acx="${esc(k)}" ${accOpen.has(k)?"open":""}><summary><span class="sh">${rest.length}건 더 펼치기</span><span class="hd">접기</span></summary>${rest.map(xr).join("")}</details>`:"")+`</div>`; }
   return `<div class="ameta">${h}</div>`;
 }
 function xfLines(name){ return (accounts.xfers||[]).filter(x=>x.from===name||x.to===name).map(x=>{ const nx=xfNext(x); return `<span>자동이체 ${esc(x.name||"")} · ${xfTxt(x)} ${x.to===name?"← "+esc(x.from):"→ "+esc(xfTo(x))}${nx?` · 다음 ${nx.slice(5).replace("-","/")}`:" · 끝남"}</span>`; }).join(""); }
@@ -2068,6 +2082,7 @@ function renderAcc(){
     if(!b.classList.contains("sure")){ const t0=b.textContent; b.classList.add("sure"); b.textContent="한 번 더 누르면 지웁니다"; setTimeout(()=>{ b.classList.remove("sure"); b.textContent=t0; },4000); return; }
     const [name,ts,d]=b.dataset.sdel.split("|"); const snap=(accounts.snaps[name]||[]).find(x=>String(x.ts||"")===ts && x.d===d); if(snap) delSnap(name,snap,false); });
   $("accGrid").querySelectorAll("details[data-h]").forEach(dt=>dt.ontoggle=()=>{ const k="h:"+dt.dataset.h; dt.open?accOpen.add(k):accOpen.delete(k); });
+  $("accGrid").querySelectorAll("details[data-acx]").forEach(dt=>dt.ontoggle=()=>{ dt.open?accOpen.add(dt.dataset.acx):accOpen.delete(dt.dataset.acx); });
   $("accGrid").querySelectorAll("details[data-pb]").forEach(dt=>dt.ontoggle=()=>{ dt.open?accOpen.add(dt.dataset.pb):accOpen.delete(dt.dataset.pb); });
   $("accGrid").querySelectorAll(".pb li[data-id]").forEach(li=>li.onclick=()=>openTx(li.dataset.ym,li.dataset.id));
   $("accGrid").querySelectorAll(".pb li[data-card]").forEach(li=>li.onclick=()=>{ const [c,d]=li.dataset.card.split("|"); openCB(c,d); });
