@@ -208,6 +208,10 @@ section h2 .aside{text-transform:none;letter-spacing:0;font-weight:500}
 .hint b{color:var(--ink)}
 .hint.warn{background:var(--warn-soft);color:var(--warn)} .hint.warn b{color:var(--warn)}
 .actions{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:4px}
+/* 긴 창에서도 저장·취소가 늘 화면 아래에 보이게 */
+.sheet .form > .actions:last-child{position:sticky;bottom:calc(-18px - env(safe-area-inset-bottom,0px));background:var(--surface);margin:4px 0 calc(-18px - env(safe-area-inset-bottom,0px));padding:10px 0 calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);z-index:3}
+.tot.bud{grid-column:1/-1;cursor:pointer}
+.tot.bud .pbar{margin-top:6px}
 .actions .r{display:flex;gap:8px;margin-left:auto}
 .danger{color:var(--warn)}
 .check{display:flex;align-items:center;gap:8px;font-size:13px}
@@ -377,6 +381,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
           <div class="tot me" data-tot="me" role="button" tabindex="0" title="이 달 개인 지출 보기"><div class="k"><span class="dot me"></span>개인 지출 <span class="tc" id="nMe"></span></div><div class="v num" id="tMe">0원</div></div>
           <div class="tot warn" id="tPendBox" role="button" tabindex="0" title="정산 대기만 보기"><div class="k"><span class="dot warn"></span>법인 정산 받을 돈 (전체 기간) <span class="tc" id="nPend"></span></div><div class="v num" id="tPend">0원</div></div>
           <div class="tot" data-tot="net" role="button" tabindex="0" title="이 달 수입·지출 거래를 거래 탭에서 보기"><div class="k">수입 − 지출</div><div class="v num" id="tNet">0원</div></div>
+          <div class="tot bud" id="tBudBox" role="button" tabindex="0" title="예산 탭에서 항목별로 보기" hidden><div class="k">이 달 예산 <span class="tc" id="nBud"></span></div><div class="v num" id="tBud"></div><div id="tBudBar"></div><div class="s" id="tBudSub" style="font-size:12px;color:var(--muted);margin-top:4px"></div></div>
         </div>
       </section>
 
@@ -394,7 +399,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       </section>
 
       <section>
-        <h2>지출 구성
+        <h2>지출 구성 <span class="aside" title="( ) 안은 이 계정의 이번 달 예산 대비 사용률입니다. 이 달에 예산이 없는 계정은 NA로 표시합니다.">(%) = 이번 달 예산 대비 사용률</span>
           <span class="seg" id="catSeg"><button data-v="all" aria-pressed="true">전체</button><button data-v="corp" aria-pressed="false">법인</button><button data-v="me" aria-pressed="false">개인</button></span>
         </h2>
         <div class="bars" id="byCat"></div>
@@ -457,6 +462,11 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="ph"><h3>워크샵 비용</h3><button type="button" class="btn small" id="wsEdit">워크샵 관리</button></div>
       <p class="sub">미리 낸 숙박·교통부터 기간 중 비용까지, 워크샵으로 표시한 기록을 모읍니다. 기간과 상관없이 전체 기록에서 셉니다. 줄을 누르면 거래를 봅니다.</p>
       <div class="scroll-x"><table class="dt" id="wsTbl"></table></div>
+    </div>
+    <div class="panel" id="avgPanel">
+      <div class="ph"><h3>항목별 평균과 예산 집행률</h3><span class="seg" id="avgSeg"><button type="button" data-v="all" aria-pressed="true">전체</button><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="false">개인</button></span></div>
+      <p class="sub" id="avgSub"></p>
+      <div class="scroll-x"><table class="dt" id="avgTbl"></table></div>
     </div>
     <div class="panel">
       <h3>지출 상위 항목</h3>
@@ -613,7 +623,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="f"><label for="iAmt">금액 (원)</label><input id="iAmt" class="big" inputmode="numeric" placeholder="0" required></div>
       </div>
       <div class="f"><label for="iDesc">적요</label><input id="iDesc" placeholder="예: 코스트코, SALT 점심, 오태호회계사"></div>
-      <div class="f"><label for="iCat">계정 (지출 항목)</label><select id="iCat"></select></div>
+      <div class="f"><label for="iCat">계정 (지출 항목)</label><select id="iCat"></select><div class="hint" id="budHint" hidden style="margin-top:6px;font-size:12.5px"></div></div>
       <div class="two" id="moveRow" hidden>
         <div class="f"><label for="iFrom">보낸 계좌</label><select id="iFrom"></select></div>
         <div class="f"><label for="iTo">받은 계좌</label><select id="iTo"></select></div>
@@ -1101,6 +1111,9 @@ function render(){
   $("tIn").textContent=won(inc); $("tOut").textContent=won(corp+me); $("tCorp").textContent=won(corp); $("tMe").textContent=won(me);
   $("tNet").textContent=(inc-corp-me<0?"−":"")+won(Math.abs(inc-corp-me));
   const pend=allPending(); $("tPend").textContent=won(sumOf(pend));
+  { const bm=budMonth(curYM); $("tBudBox").hidden=!bm.al;
+    if(bm.al){ $("nBud").textContent=`${bm.n}개 항목`; $("tBud").innerHTML=`${won(bm.u)} <span style="font-size:13px;color:var(--muted);font-weight:400">/ ${won(bm.al)}</span>`; $("tBudBar").innerHTML=bBar(bm.u,bm.al);
+      $("tBudSub").innerHTML=`남은 예산 ${sgn(bm.al-bm.u)}${bm.p?` · 나갈 예정 ${won(bm.p)}`:""} · <b class="${bm.al-bm.u-bm.p<0?"bad":""}">더 쓸 수 있는 돈 ${sgn(bm.al-bm.u-bm.p)}</b>${bm.over?` · <span class="bad">초과 ${bm.over}개</span>`:""}`; } }
   $("nIn").textContent=ins.length+"건"; $("nOut").textContent=outs.length+"건"; $("nCorp").textContent=outs.filter(t=>t.ent==="corp").length+"건"; $("nMe").textContent=outs.filter(t=>t.ent!=="corp").length+"건"; $("nPend").textContent=pend.length+"건";
   $("sumNote").textContent = tx.length ? tx.length+"건" : "";
   renderTrend(); renderAcct(outs); renderCat(outs); renderInc(tx.filter(t=>t.t==="in")); const ltx=ledgerBase(tx); renderFilters(ltx); renderLedger(ltx);
@@ -1131,6 +1144,8 @@ function renderTrend(){
   svg.innerHTML=s;
 }
 
+/* 이 달 지출 예산 합계: 예산이 있는 계정만 */
+function budMonth(ym){ let al=0,u=0,p=0,n=0,over=0; budgetCatsT("out",ym).forEach(c=>{ const a=allocT("out",c,ym); if(!a) return; const uu=usedT("out",c,ym); al+=a; u+=uu; p+=pendOccT("out",c,ym).a; n++; if(uu>a) over++; }); return {al,u,p,n,over}; }
 function barsHTML(rows, total){
   if(!rows.length) return `<div class="empty-s">이 달에는 지출 기록이 없습니다.</div>`;
   const max=Math.max(...rows.map(r=>r.c+r.m));
@@ -1153,7 +1168,7 @@ function renderCat(outs){
   const f=view.catEnt; const g={};
   outs.filter(t=>f==="all"||(f==="corp"?t.ent==="corp":t.ent!=="corp")).forEach(t=>{ const k=t.cat||"미분류"; g[k]=g[k]||{key:k,name:k.replace(/^지발연-/,""),sub:isCorpCat(k)?"법인":"",c:0,m:0,n:0}; g[k][t.ent==="corp"?"c":"m"]+=+t.amt||0; g[k].n++; });
   const rows=Object.values(g).sort((a,b)=>(b.c+b.m)-(a.c+a.m)).slice(0,14);
-  rows.forEach(r=>{ const al=alloc(r.key,curYM); r.pct = al>0 ? (r.c+r.m)/al*100 : null; r.dt={k:"cat",v:r.key,t:"out",ym:[curYM],ent:view.catEnt}; });
+  rows.forEach(r=>{ const al=alloc(r.key,curYM); r.pct = al>0 ? usedT("out",r.key,curYM)/al*100 : null; r.dt={k:"cat",v:r.key,t:"out",ym:[curYM],ent:view.catEnt}; });
   $("byCat").innerHTML=barsHTML(rows);
 }
 function renderFilters(tx){
@@ -1291,7 +1306,7 @@ $("wsSave").onclick=async()=>{
   config.workshops=wDraft; closeOv("wsOv"); render(); await saveConfig();
 };
 function renderDash(){
-  renderWs();
+  renderWs(); renderAvg();
   const keys=periodKeys(perMode,curYM), have=dataMonths(keys), nMon=Math.max(1,have.length);
   const A=agg(keys), P=agg(prevKeys(keys));
   const lbl = perMode==="1" ? `${+curYM.slice(5)}월` : perMode==="3" ? `${+keys[0].slice(5)}~${+curYM.slice(5)}월` : `${curYM.slice(0,4)}년 1~${+curYM.slice(5)}월`;
@@ -1362,6 +1377,28 @@ function renderDash(){
   $("methTbl").innerHTML=shareTable(sumBy(A.outs,methLabel),A.out,"결제수단",(v,rest)=>({k:"meth",v,t:"out",ym:keys,lbl:lb(v,rest)}));
 }
 segBind("perSeg", v=>{ perMode=v; renderDash(); });
+let avgEnt="all";
+segBind("avgSeg", v=>{ avgEnt=v; renderAvg(); });
+/* 항목별 평균: 이 달 기준으로 그 전 달까지 마감된 달을 씁니다. 예산 사용액은 예산 탭과 같은 방식(예정 집행은 예정된 달). */
+function renderAvg(){
+  const cur=curYM, y=cur.slice(0,4), mo=+cur.slice(5);
+  const p12=[]; for(let i=12;i>=1;i--) p12.push(ymAdd(cur,-i)); const h12=dataMonths(p12), n=h12.length;
+  const h3=dataMonths(p12.slice(-3)), yk=yearKeys(y), ytd=yk.slice(0,mo);
+  const cats=new Set(); h12.concat([cur]).forEach(k=>monthTx(k).forEach(t=>{ if(t.t==="out" && !isRecon(t)) cats.add(t.cat||"미분류"); })); budgets.items.forEach(b=>{ if(typeOfKey(b.key)==="out") cats.add(b.key.slice(2)); });
+  let rows=[...cats].filter(c=>avgEnt==="all"||(avgEnt==="corp"?isCorpCat(c):!isCorpCat(c))).map(c=>{
+    const U=k=>usedT("out",c,k), cu=U(cur), ca=allocT("out",c,cur), t12=h12.reduce((a,k)=>a+U(k),0), m12=n?t12/n:0, a3=h3.length?h3.reduce((a,k)=>a+U(k),0)/h3.length:0;
+    const yu=ytd.reduce((a,k)=>a+U(k),0), ann=yk.reduce((a,k)=>a+allocT("out",c,k),0);
+    return {c,cu,ca,a3,m12,yu,ann};
+  }).filter(r=>r.cu||r.m12||r.ann||r.yu);
+  rows.sort((a,b)=>b.m12-a.m12||b.cu-a.cu);
+  $("avgSub").textContent=`${+cur.slice(5)}월 기준. 평균은 그 전 12개월 중 기록이 있는 ${n}개월(3개월 평균은 최근 ${h3.length}개월)로 냅니다. 분기 평균 = 월평균 × 3, 연 환산 = 월평균 × 12. 예산 대비는 예산이 있는 달·항목만 표시하고, 없으면 NA입니다. 줄을 누르면 최근 12개월 거래를 봅니다.`;
+  if(!rows.length){ $("avgTbl").innerHTML=`<tbody><tr><td style="color:var(--muted)">조건에 맞는 항목이 없습니다.</td></tr></tbody>`; return; }
+  const W=v=>v?Math.round(v).toLocaleString("ko-KR"):"·", P=(u,a)=>a?`<span class="${u>a?"bad":u>a*.85?"warn":""}">${pctTxt(u/a*100)}</span>`:'<span style="color:var(--muted)">NA</span>';
+  const T=rows.reduce((o,r)=>{ ["cu","ca","a3","m12","yu","ann"].forEach(k=>o[k]+=r[k]); return o; },{cu:0,ca:0,a3:0,m12:0,yu:0,ann:0});
+  $("avgTbl").innerHTML=`<thead><tr><th>항목</th><th class="r">${mo}월 사용</th><th class="r">${mo}월 예산</th><th class="r">예산 대비</th><th class="r">3개월 월평균</th><th class="r">월평균</th><th class="r">분기 평균</th><th class="r">연 환산</th><th class="r">${y}년 누적</th><th class="r">${y}년 예산</th><th class="r">연 집행률</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr${dtAttr({k:"cat",v:r.c,t:"out",ym:h12.concat([cur])})}><td title="${esc(r.c)}">${esc(r.c.replace(/^지발연\s*-\s*/,""))}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}</td><td class="r num">${W(r.cu)}</td><td class="r num">${r.ca?W(r.ca):'<span style="color:var(--muted)">—</span>'}</td><td class="r num">${P(r.cu,r.ca)}</td><td class="r num">${W(r.a3)}</td><td class="r num"><b>${W(r.m12)}</b></td><td class="r num">${W(r.m12*3)}</td><td class="r num">${W(r.m12*12)}</td><td class="r num">${W(r.yu)}</td><td class="r num">${r.ann?W(r.ann):'<span style="color:var(--muted)">—</span>'}</td><td class="r num">${P(r.yu,r.ann)}</td></tr>`).join("")+
+    `</tbody><tfoot><tr><td>합계</td><td class="r num">${W(T.cu)}</td><td class="r num">${W(T.ca)}</td><td class="r num"></td><td class="r num">${W(T.a3)}</td><td class="r num">${W(T.m12)}</td><td class="r num">${W(T.m12*3)}</td><td class="r num">${W(T.m12*12)}</td><td class="r num">${W(T.yu)}</td><td class="r num">${W(T.ann)}</td><td class="r num"></td></tr></tfoot>`;
+}
 function route(){
   const h=location.hash, v = h==="#dashboard" ? "dash" : h==="#accounts" ? "acc" : h==="#budget" ? "bud" : h==="#settings" ? "set" : (h==="#tx"||h==="#ledger") ? "tx" : "home";
   const lv=v==="home"||v==="tx"; $("ledgerView").hidden=!lv; $("dashView").hidden=v!=="dash"; $("accView").hidden=v!=="acc"; $("budView").hidden=v!=="bud"; $("setView").hidden=v!=="set";
@@ -2683,6 +2720,7 @@ document.querySelectorAll(".tot[data-tot]").forEach(el=>{ const go=()=>{ const k
     openDetail({k:"all", v:"*", t:k==="in"?"in":"out", ym:[curYM], ent:k==="corp"?"corp":k==="me"?"me":"all", lbl}); };
   el.onclick=go; el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } }; });
 const pendGo=()=>{ view.ent="pending"; segSet("entSeg","pending"); if(location.hash!=="#tx") location.hash="#tx"; render(); setTimeout(()=>$("ledgerWrap").scrollIntoView({behavior:"smooth",block:"start"}),60); };
+$("tBudBox").onclick=()=>{ location.hash="#budget"; }; $("tBudBox").onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); location.hash="#budget"; } };
 $("tPendBox").onclick=pendGo; $("tPendBox").onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); pendGo(); } };
 
 /* ---------- 오버레이 공통 ---------- */
@@ -2722,7 +2760,7 @@ function wsOptions(d, val){
   sel.value = val && [...sel.options].some(x=>x.value===val) ? val : "";
 }
 $("iWs").onchange=()=>{ const nw=$("iWs").value==="__new"; $("wsNew").hidden=!nw; if(nw){ const d=$("iDate").value||todayISO(); if(!$("iWsStart").value) $("iWsStart").value=d; if(!$("iWsEnd").value) $("iWsEnd").value=d; $("iWsName").focus(); } };
-$("iDate").addEventListener("change",()=>{ const v=$("iWs").value; if(v!=="__new") wsOptions($("iDate").value||todayISO(), v); });
+$("iDate").addEventListener("change",()=>{ budHintUpd(); const v=$("iWs").value; if(v!=="__new") wsOptions($("iDate").value||todayISO(), v); });
 function payViaOptions(sel, code, val){
   const pm=methodOf(code)||{}, link=pm.link||"", lm=methodOf(link);
   sel.innerHTML=`<option value="">기본: ${esc(link?(link+" · "+((lm||{}).name||"")):"연결 안 됨")}</option>`+KINDS.filter(([k])=>k!=="pay").map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k && m.code!==link); return ms.length?`<optgroup label="${lbl}">`+ms.map(m=>`<option value="${esc(m.code)}">${esc(m.code)} · ${esc(m.name||"")}</option>`).join("")+`</optgroup>`:""; }).join("");
@@ -2738,7 +2776,16 @@ function viaOptions(sel,val){
 $("iVia").onchange=()=>updateHint(true); $("iMx").oninput=()=>updateHint(false);
 function acctOptions(sel,val,noPeople){ const names=[...new Set(accounts.list.map(a=>a.name).concat(config.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))]; const ppl=noPeople?[]:(accounts.people||[]).map(P=>P.name);
   sel.innerHTML=`<option value="">외부 (추적 안 함)</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")+(ppl.length?`<optgroup label="사람 (맡은 돈·빌려 준 돈)">${ppl.map(n=>`<option value="@${esc(n)}">${esc(n)}</option>`).join("")}</optgroup>`:""); sel.value=val||""; }
+function budHintUpd(){
+  const h=$("budHint"); if(!h) return; const c=$("iCat").value, d=$("iDate").value||todayISO(), ym=d.slice(0,7);
+  if(form.t!=="out" || !c){ h.hidden=true; return; }
+  const al=allocT("out",c,ym); if(!al){ h.hidden=true; return; }
+  const u=usedT("out",c,ym), a0=+($("iAmt").value.replace(/[^\d]/g,""))||0, after=al-u-(editing?0:a0);
+  h.hidden=false; h.className="hint"+(after<0?" warn":"");
+  h.innerHTML=`${+ym.slice(5)}월 예산 ${won(al)} 중 ${won(u)} 사용 (${pctTxt(u/al*100)})`+(editing?` · 남은 예산 ${sgn(al-u)}`:a0?` · 이 기록을 넣으면 남은 예산 <b>${sgn(after)}</b>`:` · 남은 예산 <b>${sgn(al-u)}</b>`);
+}
 function updateHint(autoSettle){
+  budHintUpd();
   const t=form.t, m=methodOf(form.m);
   $("moveRow").hidden = t!=="move"; $("wsRow").hidden = t==="move"; $("methodRow").hidden = t==="move" || t==="in"; $("entRow").hidden = t==="move"; $("inAcctRow").hidden = t!=="in"; $("inFromRow").hidden = t!=="in";
   if(t==="in"){ $("otherRow").hidden=true; $("settleRow").hidden=true; $("iCat").previousElementSibling.textContent="계정 (수입 항목)"; const h=$("flowHint"); h.className="hint"; const a0=+($("iAmt").value.replace(/[^\d]/g,""))||0;
