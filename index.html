@@ -94,6 +94,11 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-
 .cat-sub{padding:2px 10px 2px 22px;font-size:12px;font-weight:600;color:var(--muted);display:flex;gap:6px;align-items:center;border-top:1px solid var(--line);flex-wrap:wrap}
 .cat-l{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 22px;border-top:1px solid var(--line);flex-wrap:wrap;min-width:0}
 .cat-l.d3{padding-left:38px}
+.cat-sub{padding:5px 10px 5px 22px}
+.cat-sub .tg{border:0;background:none;cursor:pointer;font-size:12px;color:var(--muted);padding:0 2px 0 0;width:16px}
+.cat-sub .snm{color:var(--ink);font-size:12.5px}
+.cat-sub .drag{cursor:grab}
+.cat-sg.dragover-b{box-shadow:inset 0 -3px 0 var(--corp)} .cat-sg.dragover-t{box-shadow:inset 0 3px 0 var(--corp)}
 .cat-l .nm{min-width:0;overflow-wrap:anywhere}
 .cat-edit{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-top:1px dashed var(--line);background:var(--surface)}
 .cat-edit input,.cat-edit select{flex:1 1 200px;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px 8px;background:var(--paper);color:var(--ink)}
@@ -2454,18 +2459,20 @@ function catOpenSave(){ try{ localStorage.setItem("catOpen",JSON.stringify([...c
 function catList(type){ return type==="in" ? (config.inCats=config.inCats||[]) : config.outCats; }
 /* 같은 부모(마지막 칸만 다른) 계정끼리, 또는 대그룹끼리 순서 바꾸기 */
 function catParent(c){ return catSegs(c).slice(0,-1).join("-"); }
+/* 마디(대그룹·소그룹·항목)를 같은 부모 아래 다른 마디 앞/뒤로 옮김. 마디에 딸린 하위 계정은 함께 움직입니다 */
+const segKey=p=>p.join("\u0001"), under=(c,P)=>{ const S=catSegs(c); return S.length>=P.length && P.every((x,i)=>S[i]===x); };
 async function catMove(kind, a, b, after){
   const type=catType; ensureCats(); const L=catList(type).slice().sort(catOrderSort(type));
-  let out;
-  if(kind==="grp"){ const blocks=[]; L.forEach(c=>{ const g=catSegs(c)[0]; let bl=blocks.find(x=>x.g===g); if(!bl){ bl={g,items:[]}; blocks.push(bl); } bl.items.push(c); });
-    const ia=blocks.findIndex(x=>x.g===a); if(ia<0) return; const [mv]=blocks.splice(ia,1); let ib=blocks.findIndex(x=>x.g===b); if(ib<0) return; blocks.splice(after?ib+1:ib,0,mv); out=[].concat(...blocks.map(x=>x.items)); }
-  else { if(a===b || catParent(a)!==catParent(b)) return; const r=L.filter(c=>c!==a); const ib=r.indexOf(b); r.splice(after?ib+1:ib,0,a); out=r; }
-  if(type==="in") config.inCats=out; else config.outCats=out; renderCats(); await saveConfig();
+  const A=catSegs(a), B=catSegs(b); if(!A.length||!B.length||segKey(A)===segKey(B)||segKey(A.slice(0,-1))!==segKey(B.slice(0,-1))) return;
+  const blk=L.filter(c=>under(c,A)), rest=L.filter(c=>!under(c,A)); const idx=rest.map((c,i)=>under(c,B)?i:-1).filter(i=>i>=0); if(!idx.length||!blk.length) return;
+  rest.splice(after?idx[idx.length-1]+1:idx[0],0,...blk);
+  if(type==="in") config.inCats=rest; else config.outCats=rest; renderCats(); await saveConfig();
 }
+/* 같은 부모 아래 형제 마디들 (보이는 순서) */
+function catSiblings(type, P){ const par=P.slice(0,-1), L=catKnown(type).sort(catOrderSort(type)), out=[];
+  L.forEach(c=>{ const S=catSegs(c); if(S.length<P.length || !par.every((x,i)=>S[i]===x)) return; const k=S.slice(0,P.length).join("-"); if(!out.includes(k)) out.push(k); }); return out; }
 function catStep(kind, a, dir){
-  const type=catType, L=catKnown(type).sort(catOrderSort(type));
-  if(kind==="grp"){ const gs=[...new Set(L.map(c=>catSegs(c)[0]))], i=gs.indexOf(a), j=i+dir; if(j<0||j>=gs.length) return; catMove("grp", a, gs[j], dir>0); }
-  else { const sib=L.filter(c=>catParent(c)===catParent(a)), i=sib.indexOf(a), j=i+dir; if(j<0||j>=sib.length) return; catMove("item", a, sib[j], dir>0); }
+  const P=catSegs(a), sib=catSiblings(catType,P), key=P.join("-"), i=sib.indexOf(key), j=i+dir; if(i<0||j<0||j>=sib.length) return; catMove(kind, key, sib[j], dir>0);
 }
 /* 기록에서 저절로 다시 생긴 계정 표시: 예전 이름이 남은 기록이 있다는 뜻이라, 고치기에서 새 이름으로 바꾸면 합쳐집니다 */
 function catFlag(type,c){ const a=(config.catAuto||{})[type+"|"+c]; return a?` <span class="tag" style="color:var(--warn);border-color:var(--warn)" title="${esc(a)}에 기록·예산·자동이체에 남은 이름으로 다시 생긴 계정입니다. 예전 이름이면 ‘고치기’에서 지금 쓰는 계정 이름으로 바꾸면 기록이 그쪽으로 합쳐지고 이 줄은 없어집니다.">기록에서 다시 생김</span>`:""; }
@@ -2477,13 +2484,16 @@ function renderCats(){
   $("catTree").innerHTML=Object.keys(tree).map(g=>{
     const list=tree[g]; const n=list.reduce((a,c)=>a+(use[c]||0),0);
     let lastSub=null, rows="";
+    const subOf=sp=>list.filter(c=>under(c,catSegs(sp)));
     list.forEach(c=>{
       const sg=catSegs(c);
-      if(sg.length>=3 && sg[1]!==lastSub){ lastSub=sg[1]; const sp=sg.slice(0,2).join("-"); rows+=`<div class="cat-sub">${esc(sg[1])} <span class="acts" style="margin-left:auto">${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div>`; }
-      else if(sg.length<3) lastSub=null;
+      if(sg.length>=3 && sg[1]!==lastSub){ if(lastSub!==null) rows+=`</div></div>`; lastSub=sg[1]; const sp=sg.slice(0,2).join("-"), so=catOpen.has(type+":"+sp), sl=subOf(sp), sn=sl.reduce((a,x)=>a+(use[x]||0),0);
+        rows+=`<div class="cat-sg" data-drag="node" data-key="${esc(sp)}"><div class="cat-sub" draggable="true" data-drag="node" data-key="${esc(sp)}"><button type="button" class="tg" data-tg="${esc(sp)}" aria-expanded="${so}" aria-label="${so?"접기":"펼치기"}">${so?"▾":"▸"}</button><span class="drag" title="끌어서 소그룹 순서 바꾸기">⋮⋮</span><span class="snm">${esc(sg[1])}</span><span class="cnt" style="font-weight:400">${sl.length}개 · ${sn?`<span class="cnt-link"${dtAttr({k:"cat",v:sl,t:type,ym:allYms(),lbl:sp+" 전체"})}>${sn}건</span>`:"0건"}</span><span class="acts" style="margin-left:auto"><button type="button" class="mv" data-step="node|${esc(sp)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="node|${esc(sp)}|1" aria-label="아래로">↓</button>${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div><div class="cat-sb" ${so?"":"hidden"}>`; }
+      else if(sg.length<3 && lastSub!==null){ rows+=`</div></div>`; lastSub=null; }
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : "(그룹 자체)";
       rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button>${btn("edit",c,"고치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
     });
+    if(lastSub!==null) rows+=`</div></div>`;
     const open=catOpen.has(type+":"+g);
     return `<div class="cat-g" data-drag="grp" data-key="${esc(g)}"><div class="cat-h" draggable="true" data-drag="grp" data-key="${esc(g)}"><button type="button" class="tg" data-tg="${esc(g)}" aria-expanded="${open}" aria-label="${open?"접기":"펼치기"}">${open?"▾":"▸"}</button><span class="drag" title="끌어서 대그룹 순서 바꾸기">⋮⋮</span><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n?`<span class="cnt-link"${dtAttr({k:"cat",v:list,t:type,ym:allYms(),lbl:g+" 전체"})}>${n}건</span>`:"0건"}</span><span class="acts"><button type="button" class="mv" data-step="grp|${esc(g)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="grp|${esc(g)}|1" aria-label="아래로">↓</button>${btn("addin",g,"하위 추가")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div><div class="cat-body" ${open?"":"hidden"}>${rows}</div></div>`;
   }).join("") || `<div class="hint">계정이 없습니다.</div>`;
@@ -2495,14 +2505,14 @@ function renderCats(){
   $("catTree").querySelectorAll('[draggable="true"]').forEach(el=>{
     el.addEventListener("dragstart",e=>{ drag={kind:el.dataset.drag,key:el.dataset.key}; e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",drag.key); }catch(_){} e.stopPropagation(); });
     el.addEventListener("dragend",()=>{ drag=null; clr(); }); });
-  $("catTree").querySelectorAll(".cat-l[data-drag], .cat-g[data-drag]").forEach(el=>{
-    const ok=()=>drag && drag.kind===el.dataset.drag && drag.key!==el.dataset.key && (drag.kind==="grp" || catParent(drag.key)===catParent(el.dataset.key));
+  $("catTree").querySelectorAll(".cat-l[data-drag], .cat-g[data-drag], .cat-sg[data-drag]").forEach(el=>{
+    const ok=()=>drag && drag.key!==el.dataset.key && catParent(drag.key)===catParent(el.dataset.key);
     el.addEventListener("dragover",e=>{ if(!ok()) return; e.preventDefault(); e.stopPropagation(); const r=el.getBoundingClientRect(), after=(e.clientY-r.top)>r.height/2; clr(); el.classList.add(after?"dragover-b":"dragover-t"); });
     el.addEventListener("dragleave",()=>el.classList.remove("dragover-t","dragover-b"));
     el.addEventListener("drop",e=>{ if(!ok()) return; e.preventDefault(); e.stopPropagation(); const r=el.getBoundingClientRect(), after=(e.clientY-r.top)>r.height/2; const d=drag; drag=null; clr(); catMove(d.kind, d.key, el.dataset.key, after); });
   });
 }
-$("catOpenAll").onclick=()=>{ catKnown(catType).forEach(c=>catOpen.add(catType+":"+catSegs(c)[0])); catOpenSave(); renderCats(); };
+$("catOpenAll").onclick=()=>{ catKnown(catType).forEach(c=>{ const S=catSegs(c); catOpen.add(catType+":"+S[0]); if(S.length>=3) catOpen.add(catType+":"+S.slice(0,2).join("-")); }); catOpenSave(); renderCats(); };
 $("catCloseAll").onclick=()=>{ [...catOpen].filter(k=>k.startsWith(catType+":")).forEach(k=>catOpen.delete(k)); catOpenSave(); renderCats(); };
 $("catAbc").onclick=async()=>{ const b=$("catAbc"); if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent="한 번 더 누르면 정렬"; setTimeout(()=>{ b.dataset.sure=""; b.textContent="가나다순으로 정렬"; },4000); return; }
   b.dataset.sure=""; b.textContent="가나다순으로 정렬"; ensureCats(); const L=catList(catType).slice().sort(catSort); if(catType==="in") config.inCats=L; else config.outCats=L; renderCats(); await saveConfig(); catMsg("가나다순으로 다시 정렬했습니다."); };
