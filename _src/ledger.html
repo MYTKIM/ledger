@@ -993,10 +993,12 @@ function allTx(){ return [].concat(...Object.keys(months).map(monthTx)); }
 const isCorpCat = cat => /^지발연/.test(cat||"");
 const catSegs = c => String(c||"").split(/\s*-\s*/).map(x=>x.trim()).filter(Boolean);
 /* 계정과목 순서: 계정 목록에 저장된 순서 (계정과목 화면에서 끌어 옮기거나 ↑↓로 바꿈). 목록에 없는 것은 뒤에 가나다순 */
-function catOrderSort(type){ const L=type==="in"?(config.inCats||[]):config.outCats, ix=new Map(L.map((c,i)=>[c,i]));
-  const gFirst=new Map(); L.forEach((c,i)=>{ const g=catSegs(c)[0]; if(!gFirst.has(g)) gFirst.set(g,i); });
-  return (a,b)=>{ const ga=catSegs(a)[0], gb=catSegs(b)[0]; const fa=gFirst.has(ga)?gFirst.get(ga):1e9, fb=gFirst.has(gb)?gFirst.get(gb):1e9; if(ga!==gb) return fa!==fb ? fa-fb : ga.localeCompare(gb,"ko");
-    const ia=ix.has(a)?ix.get(a):1e9, ib=ix.has(b)?ix.get(b):1e9; return ia!==ib ? ia-ib : catSort(a,b); }; }
+/* 단계별로 정렬: 대그룹 → 소그룹 → 항목. 각 단계는 계정 목록에서 처음 나온 자리 순서라, 같은 소그룹은 늘 붙어 있습니다 */
+function catOrderSort(type){ const L=type==="in"?(config.inCats||[]):config.outCats, first=new Map();
+  L.forEach((c,i)=>{ const sg=catSegs(c); for(let k=1;k<=sg.length;k++){ const p=sg.slice(0,k).join("\u0001"); if(!first.has(p)) first.set(p,i); } });
+  return (a,b)=>{ const A=catSegs(a), B=catSegs(b), n=Math.min(A.length,B.length);
+    for(let k=1;k<=n;k++){ if(A[k-1]===B[k-1]) continue; const pa=A.slice(0,k).join("\u0001"), pb=B.slice(0,k).join("\u0001"), ia=first.has(pa)?first.get(pa):1e9, ib=first.has(pb)?first.get(pb):1e9; return ia!==ib ? ia-ib : A[k-1].localeCompare(B[k-1],"ko"); }
+    return A.length-B.length; }; }
 const catSort = (a,b) => { const A=catSegs(a), B=catSegs(b); for(let i=0;i<Math.min(A.length,B.length);i++){ const c=A[i].localeCompare(B[i],"ko"); if(c) return c; } return A.length-B.length; };
 const groupOf = cat => { const s=(cat||"기타").split(/\s*-\s*/)[0].trim(); return s||"기타"; };
 function needsSettle(tx){ if(tx.t!=="out"||tx.ent!=="corp") return false; if(tx.m==="기타") return !(resolve(tx.via)||{}).own || (resolve(tx.via)||{}).own!=="corp"; const r=resolve(payCode(tx)); return !!r && r.own!=="corp"; }
@@ -1679,6 +1681,7 @@ function ensureCats(){
   budgets.items.forEach(b=>{ if(!b.key) return; if(b.key.startsWith("c:")) o(b.key.slice(2)); else if(b.key.startsWith("i:")) i(b.key.slice(2)); });
   (accounts.xfers||[]).forEach(x=>{ if((x.to==="__ext" && x.kind!=="move") || (isPerson(x.to) && pMode(personByName(pName(x.to)))==="flow")) o(x.cat||x.name); });
   if(!addO.length && !addI.length) return false;
+  config.catAuto=config.catAuto||{}; const td=todayISO(); addO.forEach(c=>{ config.catAuto["out|"+c]=td; }); addI.forEach(c=>{ config.catAuto["in|"+c]=td; });
   config.outCats=config.outCats.concat(addO); config.inCats=(config.inCats||[]).concat(addI); saveConfig();
   return true;
 }
@@ -2424,8 +2427,11 @@ function catStep(kind, a, dir){
   if(kind==="grp"){ const gs=[...new Set(L.map(c=>catSegs(c)[0]))], i=gs.indexOf(a), j=i+dir; if(j<0||j>=gs.length) return; catMove("grp", a, gs[j], dir>0); }
   else { const sib=L.filter(c=>catParent(c)===catParent(a)), i=sib.indexOf(a), j=i+dir; if(j<0||j>=sib.length) return; catMove("item", a, sib[j], dir>0); }
 }
+/* 기록에서 저절로 다시 생긴 계정 표시: 예전 이름이 남은 기록이 있다는 뜻이라, 고치기에서 새 이름으로 바꾸면 합쳐집니다 */
+function catFlag(type,c){ const a=(config.catAuto||{})[type+"|"+c]; return a?` <span class="tag" style="color:var(--warn);border-color:var(--warn)" title="${esc(a)}에 기록·예산·자동이체에 남은 이름으로 다시 생긴 계정입니다. 예전 이름이면 ‘고치기’에서 지금 쓰는 계정 이름으로 바꾸면 기록이 그쪽으로 합쳐지고 이 줄은 없어집니다.">기록에서 다시 생김</span>`:""; }
 function renderCats(){
-  const type=catType, cats=catKnown(type).sort(catOrderSort(type)), use=catUse(type);
+  const type=catType, cats=catKnown(type).sort(catOrderSort(type)), use=catUse(type), lastUse={};
+  allTx().forEach(t=>{ if(t.cat && (type==="in"?t.t==="in":t.t==="out") && (lastUse[t.cat]||"")<t.d) lastUse[t.cat]=t.d; });
   const tree={}; cats.forEach(c=>{ const sg=catSegs(c); const g=sg[0]||c; (tree[g]=tree[g]||[]).push(c); });
   const btn=(act,arg,txt)=>`<button type="button" class="btn small" data-act="${act}" data-arg="${esc(arg)}">${txt}</button>`;
   $("catTree").innerHTML=Object.keys(tree).map(g=>{
@@ -2436,7 +2442,7 @@ function renderCats(){
       if(sg.length>=3 && sg[1]!==lastSub){ lastSub=sg[1]; const sp=sg.slice(0,2).join("-"); rows+=`<div class="cat-sub">${esc(sg[1])} <span class="acts" style="margin-left:auto">${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div>`; }
       else if(sg.length<3) lastSub=null;
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : "(그룹 자체)";
-      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})}>${use[c]}건</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button>${btn("edit",c,"고치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button>${btn("edit",c,"고치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
     });
     const open=catOpen.has(type+":"+g);
     return `<div class="cat-g" data-drag="grp" data-key="${esc(g)}"><div class="cat-h" draggable="true" data-drag="grp" data-key="${esc(g)}"><button type="button" class="tg" data-tg="${esc(g)}" aria-expanded="${open}" aria-label="${open?"접기":"펼치기"}">${open?"▾":"▸"}</button><span class="drag" title="끌어서 대그룹 순서 바꾸기">⋮⋮</span><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n?`<span class="cnt-link"${dtAttr({k:"cat",v:list,t:type,ym:allYms(),lbl:g+" 전체"})}>${n}건</span>`:"0건"}</span><span class="acts"><button type="button" class="mv" data-step="grp|${esc(g)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="grp|${esc(g)}|1" aria-label="아래로">↓</button>${btn("addin",g,"하위 추가")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div><div class="cat-body" ${open?"":"hidden"}>${rows}</div></div>`;
@@ -2777,7 +2783,12 @@ function fillCatSelect(type, val, own){
     Object.keys(groups).sort((a,b)=> side ? ((catSide(type,groups[a][0])===side)?0:1)-((catSide(type,groups[b][0])===side)?0:1) : 0)
       .map(g=>{ const gs=catSide(type,groups[g][0]), off=side&&gs!==side, mis=type==="out"&&own&&gs!==own;
         const note = mis ? (own==="corp"?" — 법인카드로 낸 개인 비용 (드묾)":" — 개인 수단으로 먼저 낸 법인 비용 (정산 대기)") : off ? (gs==="corp"?" — 법인 항목":" — 개인 항목") : "";
-        return `<optgroup label="${esc(g)}${note}">`+groups[g].map(c=>{ const sg=catSegs(c); return `<option value="${esc(c)}">${esc(sg.length>1?sg.slice(1).join(" › "):c)}</option>`; }).join("")+`</optgroup>`; }).join("");
+        /* 계정 관리 화면처럼 소그룹마다 묶음 제목을 붙임 (예: 지발연 › 운영) */
+        let html="", cur=null;
+        groups[g].forEach(c=>{ const sg=catSegs(c), h=sg.length>=3 ? sg[0]+" › "+sg[1] : sg[0];
+          if(h!==cur){ if(cur!==null) html+=`</optgroup>`; html+=`<optgroup label="${esc(h)}${note}">`; cur=h; }
+          html+=`<option value="${esc(c)}">${esc(sg.length>=3?sg.slice(2).join(" › "):sg.length===2?sg[1]:c)}</option>`; });
+        return html+(cur!==null?`</optgroup>`:""); }).join("");
   if(val) sel.value=val;
 }
 function fillMethods(){
