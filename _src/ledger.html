@@ -2528,9 +2528,19 @@ function catAction(act, arg, el){
   if(act==="del"){
     const n=use[arg]||0;
     if(!n){
-      const row=openEditRow(arg, `<span style="flex:1">기록이 없는 계정입니다. 목록에서 지울까요?</span><button type="button" class="btn primary small">삭제</button><button type="button" class="btn small">취소</button>`);
+      /* 거래는 없어도 예산·자동이체·사람 묶음이 이 이름을 쓰고 있으면 목록에 다시 나타나므로 함께 정리 */
+      const bud=budgets.items.filter(b=>b.key===bKey(type,arg)), xs=type==="in"?[]:(accounts.xfers||[]).filter(x=>(x.cat||x.name)===arg), ps=type==="in"?[]:(accounts.people||[]).filter(P=>(P.cats||[]).includes(arg));
+      if(xs.length){ const row=openEditRow(arg, `<span style="flex:1">기록은 없지만 자동이체 ${xs.map(x=>"‘"+esc(x.name||"이름 없음")+"’").join(", ")}이(가) 이 계정을 씁니다. 자동이체에서 계정을 바꾸거나, 오른쪽 ‘합치기’로 다른 계정에 합쳐 주세요.</span><button type="button" class="btn small">닫기</button>`); row.querySelector("button").onclick=()=>{ row.hidden=true; }; return; }
+      const extra=[bud.length?`예산 ${bud.length}개`:"", ps.length?`사람 묶음 ${ps.length}곳`:""].filter(Boolean).join("·");
+      const row=openEditRow(arg, `<span style="flex:1">기록이 없는 계정입니다.${extra?` 이 계정에 걸린 <b>${extra}</b>도 함께 지웁니다.`:""} 목록에서 지울까요?</span><button type="button" class="btn primary small">삭제</button><button type="button" class="btn small">취소</button>`);
       const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
-      ok.onclick=async()=>{ if(type==="in") config.inCats=config.inCats.filter(c=>c!==arg); else config.outCats=config.outCats.filter(c=>c!==arg); await saveConfig(); catMsg(`‘${esc(arg)}’을 지웠습니다.`); renderCats(); };
+      ok.onclick=async()=>{ if(type==="in") config.inCats=config.inCats.filter(c=>c!==arg); else config.outCats=config.outCats.filter(c=>c!==arg);
+        if(config.catAuto) delete config.catAuto[type+"|"+arg];
+        if(bud.length){ budgets.items=budgets.items.filter(b=>b.key!==bKey(type,arg)); await saveBudgets(); }
+        if(ps.length){ ps.forEach(P=>{ P.cats=P.cats.filter(c=>c!==arg); }); await saveAccounts(); }
+        await saveConfig(); renderCats();
+        const still=catKnown(type).includes(arg);
+        catMsg(still?`‘${esc(arg)}’을(를) 목록에서 지웠지만 다른 곳에 이름이 남아 있어 다시 보입니다. 알려 주시면 찾아 보겠습니다.`:`‘${esc(arg)}’을(를) 지웠습니다.${extra?` (${extra}도 함께)`:""}`, still); render(); };
     } else {
       const others=catKnown(type).filter(c=>c!==arg).sort(catSort);
       const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">거래 ${n}건이 있습니다. 어느 계정으로 옮기고 지울까요?</span><select aria-label="옮길 계정">${others.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select><button type="button" class="btn primary small">옮기고 삭제</button><button type="button" class="btn small">취소</button>`);
