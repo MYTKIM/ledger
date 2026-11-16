@@ -2475,9 +2475,14 @@ function catStep(kind, a, dir){
   const P=catSegs(a), sib=catSiblings(catType,P), key=P.join("-"), i=sib.indexOf(key), j=i+dir; if(i<0||j<0||j>=sib.length) return; catMove(kind, key, sib[j], dir>0);
 }
 /* 기록에서 저절로 다시 생긴 계정 표시: 예전 이름이 남은 기록이 있다는 뜻이라, 고치기에서 새 이름으로 바꾸면 합쳐집니다 */
-function catFlag(type,c){ const a=(config.catAuto||{})[type+"|"+c]; return a?` <span class="tag" style="color:var(--warn);border-color:var(--warn)" title="${esc(a)}에 기록·예산·자동이체에 남은 이름으로 다시 생긴 계정입니다. 예전 이름이면 ‘고치기’에서 지금 쓰는 계정 이름으로 바꾸면 기록이 그쪽으로 합쳐지고 이 줄은 없어집니다.">기록에서 다시 생김</span>`:""; }
+let catDup={};
+function catDupMap(type){ const by={}; catKnown(type).forEach(c=>{ const S=catSegs(c); if(S.length<2) return; const k=S[0]+"|"+S[S.length-1].replace(/\s+/g,"").toLowerCase(); (by[k]=by[k]||[]).push(c); });
+  const m={}; Object.values(by).filter(l=>l.length>1).forEach(l=>l.forEach(c=>{ m[c]=l.filter(x=>x!==c); })); return m; }
+const catShow=c=>catSegs(c).slice(1).join(" › ")||c;
+function catFlag(type,c){ const d=catDup[c]; const dup=d?` <span class="tag" style="color:var(--corp);border-color:var(--corp)" title="같은 대그룹에 이름이 같은 계정이 있습니다. ‘합치기’로 하나로 모을 수 있습니다.">같은 이름: ${d.map(x=>esc(catShow(x))).join(", ")}</span>`:"";
+  const a=(config.catAuto||{})[type+"|"+c]; return dup+(a?` <span class="tag" style="color:var(--warn);border-color:var(--warn)" title="${esc(a)}에 기록·예산·자동이체에 남은 이름으로 다시 생긴 계정입니다. 예전 이름이면 ‘고치기’에서 지금 쓰는 계정 이름으로 바꾸면 기록이 그쪽으로 합쳐지고 이 줄은 없어집니다.">기록에서 다시 생김</span>`:""); }
 function renderCats(){
-  const type=catType, cats=catKnown(type).sort(catOrderSort(type)), use=catUse(type), lastUse={};
+  const type=catType, cats=catKnown(type).sort(catOrderSort(type)), use=catUse(type), lastUse={}; catDup=catDupMap(type);
   allTx().forEach(t=>{ if(t.cat && (type==="in"?t.t==="in":t.t==="out") && (lastUse[t.cat]||"")<t.d) lastUse[t.cat]=t.d; });
   const tree={}; cats.forEach(c=>{ const sg=catSegs(c); const g=sg[0]||c; (tree[g]=tree[g]||[]).push(c); });
   const btn=(act,arg,txt)=>`<button type="button" class="btn small" data-act="${act}" data-arg="${esc(arg)}">${txt}</button>`;
@@ -2491,7 +2496,7 @@ function renderCats(){
         rows+=`<div class="cat-sg" data-drag="node" data-key="${esc(sp)}"><div class="cat-sub" draggable="true" data-drag="node" data-key="${esc(sp)}"><button type="button" class="tg" data-tg="${esc(sp)}" aria-expanded="${so}" aria-label="${so?"접기":"펼치기"}">${so?"▾":"▸"}</button><span class="drag" title="끌어서 소그룹 순서 바꾸기">⋮⋮</span><span class="snm">${esc(sg[1])}</span><span class="cnt" style="font-weight:400">${sl.length}개 · ${sn?`<span class="cnt-link"${dtAttr({k:"cat",v:sl,t:type,ym:allYms(),lbl:sp+" 전체"})}>${sn}건</span>`:"0건"}</span><span class="acts" style="margin-left:auto"><button type="button" class="mv" data-step="node|${esc(sp)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="node|${esc(sp)}|1" aria-label="아래로">↓</button>${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div><div class="cat-sb" ${so?"":"hidden"}>`; }
       else if(sg.length<3 && lastSub!==null){ rows+=`</div></div>`; lastSub=null; }
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : "(그룹 자체)";
-      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button>${btn("edit",c,"고치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button>${btn("edit",c,"고치기")}${btn("merge",c,"합치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
     });
     if(lastSub!==null) rows+=`</div></div>`;
     const open=catOpen.has(type+":"+g);
@@ -2545,6 +2550,17 @@ function catAction(act, arg, el){
     };
     return;
   }
+  if(act==="merge"){
+    /* 이 계정의 거래·예산·자동이체를 다른 계정으로 옮기고 이 계정은 목록에서 없앰 */
+    const n=use[arg]||0, nb=budgets.items.filter(b=>b.key===bKey(type,arg)).length, others=catKnown(type).filter(c=>c!==arg).sort(catOrderSort(type)), dup=catDup[arg]||[];
+    const def=dup.slice().sort((a,b)=>catSegs(b).length-catSegs(a).length||(use[b]||0)-(use[a]||0))[0]||"";
+    const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">‘${esc(catShow(arg))}’의 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 아래 계정으로 옮기고, ‘${esc(catShow(arg))}’은 목록에서 없앱니다.</span><select aria-label="합칠 계정">${others.map(c=>`<option value="${esc(c)}"${c===def?" selected":""}>${esc(c)}${dup.includes(c)?" ← 같은 이름":""}</option>`).join("")}</select><button type="button" class="btn primary small">합치기</button><button type="button" class="btn small">취소</button>`);
+    const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
+    ok.onclick=async()=>{ const to=row.querySelector("select").value; if(!to) return;
+      if(ok.dataset.c!=="1"){ ok.dataset.c="1"; ok.textContent=`‘${catShow(to)}’(으)로 합치기 — 한 번 더 누르기`; return; }
+      await applyCatRename(type,{[arg]:to}); catMsg(`‘${esc(arg)}’을 ‘${esc(to)}’에 합쳤습니다. 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 옮겼습니다.`); renderCats(); };
+    return;
+  }
   if(act==="del"){
     const n=use[arg]||0;
     if(!n){
@@ -2574,7 +2590,8 @@ async function catAddName(v){
 async function applyCatRename(type, map){
   const touched=new Set();
   Object.keys(months).forEach(k=>{ let ch=false; const arr=monthTx(k).map(t=>{ if(t.cat && map[t.cat]!==undefined && (type==="in"?t.t==="in":t.t!=="in")){ ch=true; return {...t,cat:map[t.cat]}; } return t; }); if(ch){ months[k]=arr; touched.add(k); } });
-  const fix=list=>[...new Set(list.map(c=>map[c]!==undefined?map[c]:c))];
+  /* 합쳐질 때는 받는 계정이 원래 자리를 지킴 */
+  const fix=list=>[...new Set(list.filter(c=>!(map[c]!==undefined && list.includes(map[c]) && !(map[c] in map))).map(c=>map[c]!==undefined?map[c]:c))];
   if(type==="in") config.inCats=fix(config.inCats); else config.outCats=fix(config.outCats);
   Object.values(map).forEach(v=>{ const l=type==="in"?config.inCats:config.outCats; if(!l.includes(v)) l.push(v); });
   let budCh=false, plansCh=[], accCh=false;
@@ -2582,6 +2599,10 @@ async function applyCatRename(type, map){
       return true; }); /* 계정마다 예산을 여러 개 둘 수 있어 합쳐진 계정의 예산도 그대로 둡니다 */ }
   Object.keys(plans).forEach(k=>{ const o=plans[k][type==="in"?"inc":"out"]; let ch=false; Object.keys(o).forEach(c=>{ if(map[c]!==undefined){ o[map[c]]=(o[map[c]]||0)+o[c]; delete o[c]; ch=true; } }); if(ch) plansCh.push(k); });
   Object.values(accounts.snaps).forEach(ss=>ss.forEach(sn=>{ const f=type==="in"?"inCat":"outCat"; if(sn[f]&&map[sn[f]]!==undefined){ sn[f]=map[sn[f]]; accCh=true; } }));
+  /* 자동이체·사람 묶음에 남은 예전 이름도 바꿔야 계정 목록에 다시 생기지 않음 */
+  if(type!=="in"){ (accounts.xfers||[]).forEach(x=>{ if(x.cat && map[x.cat]!==undefined){ x.cat=map[x.cat]; accCh=true; } else if(!x.cat && x.name && map[x.name]!==undefined){ x.cat=map[x.name]; accCh=true; } });
+    (accounts.people||[]).forEach(P=>{ if(P.cats && P.cats.some(c=>map[c]!==undefined)){ P.cats=[...new Set(P.cats.map(c=>map[c]!==undefined?map[c]:c))]; accCh=true; } }); }
+  if(config.catAuto) Object.keys(map).forEach(c=>{ delete config.catAuto[type+"|"+c]; });
   render();
   await saveMonths(touched);
   await saveConfig();
