@@ -2827,7 +2827,8 @@ function fillCatSelect(type, val, own){
   sel.innerHTML = (type==="move"?`<option value="법인 정산">법인 정산</option><option value="적금 가입·납입">적금 가입·납입</option><option value="적금 만기·해지">적금 만기·해지</option><option value="계좌 이체">계좌 이체</option><option value="맡은 돈·빌려 준 돈">맡은 돈·빌려 준 돈</option>`:"") +
     Object.keys(groups).sort((a,b)=> side ? ((catSide(type,groups[a][0])===side)?0:1)-((catSide(type,groups[b][0])===side)?0:1) : 0)
       .map(g=>{ const gs=catSide(type,groups[g][0]), off=side&&gs!==side, mis=type==="out"&&own&&gs!==own;
-        const note = mis ? (own==="corp"?" — 법인카드로 낸 개인 비용 (드묾)":" — 개인 수단으로 먼저 낸 법인 비용 (정산 대기)") : off ? (gs==="corp"?" — 법인 항목":" — 개인 항목") : "";
+        /* 묶음 이름에는 귀속과 반대쪽 묶음에만 표시. 결제수단과 귀속이 다를 때의 뜻(정산 대기 등)은 아래 안내 문구에서 한 번만 보여 줌 */
+        const note = off ? (gs==="corp"?" — 법인 항목":" — 개인 항목") : (!side && mis ? (own==="corp"?" — 법인카드로 낸 개인 비용 (드묾)":" — 개인 수단으로 먼저 낸 법인 비용 (정산 대기)") : "");
         /* 계정 관리 화면처럼 소그룹마다 묶음 제목을 붙임 (예: 지발연 › 운영) */
         let html="", cur=null;
         groups[g].forEach(c=>{ const sg=catSegs(c), h=sg.length>=3 ? sg[0]+" › "+sg[1] : sg[0];
