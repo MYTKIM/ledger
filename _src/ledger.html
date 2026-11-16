@@ -2514,11 +2514,15 @@ function catAction(act, arg, el){
     /* 이 계정의 거래·예산·자동이체를 다른 계정으로 옮기고 이 계정은 목록에서 없앰 */
     const n=use[arg]||0, nb=budgets.items.filter(b=>b.key===bKey(type,arg)).length, others=catKnown(type).filter(c=>c!==arg).sort(catOrderSort(type)), dup=catDup[arg]||[];
     const def=dup.slice().sort((a,b)=>catSegs(b).length-catSegs(a).length||(use[b]||0)-(use[a]||0))[0]||"";
-    const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">‘${esc(catShow(arg))}’의 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 아래 계정으로 옮기고, ‘${esc(catShow(arg))}’은 목록에서 없앱니다.</span><select aria-label="합칠 계정">${others.map(c=>`<option value="${esc(c)}"${c===def?" selected":""}>${esc(c)}${dup.includes(c)?" ← 같은 이름":""}</option>`).join("")}</select><button type="button" class="btn primary small">합치기</button><button type="button" class="btn small">취소</button>`);
+    /* 같은 이름 계정이 있으면 그것을 미리 고르고, 없으면 비워 두어 직접 고르게 함 (목록 맨 위 계정이 저절로 골라지지 않게) */
+    const jo=(w,a,b)=>{ const ch=(w||"").slice(-1).charCodeAt(0)-0xAC00; return ch>=0&&ch<=11171 ? (ch%28?a:b) : a+"("+b+")"; }, nm=catShow(arg);
+    let opts="", cur=null; others.forEach(c=>{ const S=catSegs(c), h=S.length>=3?S[0]+" › "+S[1]:S[0]; if(h!==cur){ if(cur!==null) opts+=`</optgroup>`; opts+=`<optgroup label="${esc(h)}">`; cur=h; } opts+=`<option value="${esc(c)}"${c===def?" selected":""}>${esc(S.length>=3?S.slice(2).join(" › "):S.length===2?S[1]:c)}${dup.includes(c)?" ← 같은 이름":""}</option>`; }); if(cur!==null) opts+=`</optgroup>`;
+    const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">‘${esc(nm)}’의 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 고른 계정으로 옮기고, ‘${esc(nm)}’${jo(nm,"은","는")} 목록에서 없앱니다.${dup.length?"":" 이름이 같은 계정이 없어 직접 골라야 합니다."}</span><select aria-label="합칠 계정"><option value=""${def?"":" selected"}>— 합칠 계정 고르기 —</option>${opts}</select><button type="button" class="btn primary small">합치기</button><button type="button" class="btn small">취소</button>`);
     const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
-    ok.onclick=async()=>{ const to=row.querySelector("select").value; if(!to) return;
+    row.querySelector("select").onchange=()=>{ ok.dataset.c=""; ok.textContent="합치기"; };
+    ok.onclick=async()=>{ const to=row.querySelector("select").value; if(!to){ row.querySelector("select").focus(); return; }
       if(ok.dataset.c!=="1"){ ok.dataset.c="1"; ok.textContent=`‘${catShow(to)}’(으)로 합치기 — 한 번 더 누르기`; return; }
-      await applyCatRename(type,{[arg]:to}); catMsg(`‘${esc(arg)}’을 ‘${esc(to)}’에 합쳤습니다. 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 옮겼습니다.`); renderCats(); };
+      await applyCatRename(type,{[arg]:to}); catMsg(`‘${esc(arg)}’${jo(arg,"을","를")} ‘${esc(to)}’에 합쳤습니다. 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 옮겼습니다.`); renderCats(); };
     return;
   }
   if(act==="del"){
