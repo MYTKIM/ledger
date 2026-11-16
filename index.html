@@ -678,6 +678,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="f"><label for="iAmt">금액 (원)</label><input id="iAmt" class="big" inputmode="numeric" placeholder="0" required></div>
       </div>
       <div class="f"><label for="iDesc">적요</label><input id="iDesc" placeholder="예: 코스트코, SALT 점심, 오태호회계사"></div>
+      <div class="f" id="entRow"><span class="lbl">귀속 <small style="font-weight:400;color:var(--muted)">고른 쪽 계정이 목록 위에 옵니다</small></span><span class="seg" id="entInSeg"><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="true">개인</button></span></div>
       <div class="f"><label for="iCat">계정 (지출 항목)</label><select id="iCat"></select><div class="hint" id="budHint" hidden style="margin-top:6px;font-size:12.5px"></div></div>
       <div class="two" id="moveRow" hidden>
         <div class="f"><label for="iFrom">보낸 계좌</label><select id="iFrom"></select></div>
@@ -695,7 +696,6 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       </div>
       <div class="f" id="wsRow"><label for="iWs">워크샵</label><select id="iWs"></select>
         <div id="wsNew" hidden style="grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="iWsName" placeholder="워크샵 이름 (예: 11월 제주 리더십)" style="grid-column:1/-1"><input id="iWsStart" type="date" aria-label="시작일"><input id="iWsEnd" type="date" aria-label="끝나는 날"></div></div>
-      <div class="f" id="entRow"><span class="lbl">귀속</span><span class="seg" id="entInSeg"><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="true">개인</button></span></div>
       <div class="hint" id="flowHint"></div>
       <div class="hint" id="reconBox" hidden></div>
       <label class="check" id="settleRow"><input type="checkbox" id="iSettle"> 법인에서 아직 정산받지 않음</label>
@@ -2807,13 +2807,17 @@ document.querySelectorAll(".overlay").forEach(ov=>{
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".overlay").forEach(o=>o.hidden=true); });
 
 /* ---------- 기록 입력 ---------- */
+const catSide=(type,c)=> (type==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me";
+/* 계정 목록: 귀속(법인/개인)에서 고른 쪽 묶음이 위, 반대쪽은 아래. 반대쪽 묶음 이름에는 결제수단에 따라 뜻을 붙입니다 */
 function fillCatSelect(type, val, own){
-  const sel=$("iCat"); sel.dataset.own = own||""; const list = type==="in" ? config.inCats : config.outCats;
+  const sel=$("iCat"); own=own||""; const side=type==="move"?"":form.ent==="corp"?"corp":"me"; sel.dataset.own=own; sel.dataset.sig=type+"|"+side+"|"+own; const list = type==="in" ? config.inCats : config.outCats;
   const all = list.includes(val)||!val ? list : [val, ...list];
   const groups={}; [...all].sort(catOrderSort(type==="in"?"in":"out")).forEach(c=>{ const g=catSegs(c)[0]||"기타"; (groups[g]=groups[g]||[]).push(c); });
   sel.innerHTML = (type==="move"?`<option value="법인 정산">법인 정산</option><option value="적금 가입·납입">적금 가입·납입</option><option value="적금 만기·해지">적금 만기·해지</option><option value="계좌 이체">계좌 이체</option><option value="맡은 돈·빌려 준 돈">맡은 돈·빌려 준 돈</option>`:"") +
-    Object.keys(groups).sort((a,b)=> own&&type==="out" ? ((isCorpCat(groups[a][0])===(own==="corp"))?0:1)-((isCorpCat(groups[b][0])===(own==="corp"))?0:1) : 0)
-      .map(g=>`<optgroup label="${esc(g)}${own&&type==="out"&&isCorpCat(groups[g][0])!==(own==="corp")?(own==="corp"?" — 법인카드로 낸 개인 비용 (드묾)":" — 개인 수단으로 먼저 낸 법인 비용 (정산 대기)"):""}">${groups[g].map(c=>{ const sg=catSegs(c); return `<option value="${esc(c)}">${esc(sg.length>1?sg.slice(1).join(" › "):c)}</option>`; }).join("")}</optgroup>`).join("");
+    Object.keys(groups).sort((a,b)=> side ? ((catSide(type,groups[a][0])===side)?0:1)-((catSide(type,groups[b][0])===side)?0:1) : 0)
+      .map(g=>{ const gs=catSide(type,groups[g][0]), off=side&&gs!==side, mis=type==="out"&&own&&gs!==own;
+        const note = mis ? (own==="corp"?" — 법인카드로 낸 개인 비용 (드묾)":" — 개인 수단으로 먼저 낸 법인 비용 (정산 대기)") : off ? (gs==="corp"?" — 법인 항목":" — 개인 항목") : "";
+        return `<optgroup label="${esc(g)}${note}">`+groups[g].map(c=>{ const sg=catSegs(c); return `<option value="${esc(c)}">${esc(sg.length>1?sg.slice(1).join(" › "):c)}</option>`; }).join("")+`</optgroup>`; }).join("");
   if(val) sel.value=val;
 }
 function fillMethods(){
@@ -2892,7 +2896,8 @@ function updateHint(autoSettle){
   if(isPay) $("pvLbl").textContent = `${(methodOf(form.m)||{}).name||form.m}로 낸 돈이 실제로 나간 수단`;
   const code = isOther ? $("iVia").value : (isPay && $("iPayVia").value) ? $("iPayVia").value : form.m;
   /* 결제수단의 성격(법인/개인)에 맞춰 계정 목록 순서를 바꿈: 맞는 쪽이 위, 반대쪽은 아래 묶음 */
-  if(t==="out"){ const rv0=resolve(code), own=rv0&&!NOT_ACCT(rv0.acct) ? (rv0.own==="corp"?"corp":"me") : ""; if(($("iCat").dataset.own||"")!==own) fillCatSelect("out", $("iCat").value, own); }
+  if(t==="out"){ const rv0=resolve(code), own=rv0&&!NOT_ACCT(rv0.acct) ? (rv0.own==="corp"?"corp":"me") : ""; if(own && !form.entTouched && !form.catPicked && form.ent!==own){ form.ent=own; segSet("entInSeg",own); fillCatSelect("out","",own); autoEnt(); }
+    else if(($("iCat").dataset.own||"")!==own) fillCatSelect("out", $("iCat").value, own); }
   const rv=resolve(code);
   /* 카드면 할부 고르기 (지출은 산 날 전액, 통장에서는 결제일마다 나눠 빠짐) */
   const isCard = t==="out" && rv && +rv.pay>0; $("instRow").hidden=!isCard;
@@ -2926,7 +2931,10 @@ function lastInAcct(cat){ let best=null; allTx().forEach(t=>{ if(t.t==="in" && t
 function setType(t){ form.t=t; segSet("typeSeg",t); fillCatSelect(t, ""); if(!form.entTouched) autoEnt(); if(t==="in" && !form.ac){ form.ac=lastInAcct($("iCat").value)||mainAcct(); fillAccts(); } if(t==="in" && !editing) fillFromAc(lastFromAc($("iCat").value)); updateHint(true); }
 function autoEnt(){ const c=$("iCat").value; form.ent = (form.t==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me"; segSet("entInSeg",form.ent); }
 segBind("typeSeg", v=>setType(v));
-segBind("entInSeg", v=>{ form.ent=v; form.entTouched=true; updateHint(true); });
+segBind("entInSeg", v=>{ form.ent=v; form.entTouched=true; const cur=$("iCat").value;
+  /* 아직 계정을 직접 고르지 않았으면 고른 쪽의 첫 계정으로, 골랐으면 그대로 두고 순서만 바꿈 */
+  fillCatSelect(form.t, form.catPicked?cur:"", $("iCat").dataset.own); if(!form.catPicked){ form.entTouched=true; }
+  updateHint(true); });
 $("iSettle").addEventListener("change",()=>{
   const base = editing ? monthTx(editing.ym).find(x=>x.id===editing.id) : null;
   const show = !!(base && base.st==="pending" && !base.settledBy && !$("iSettle").checked);
@@ -2936,7 +2944,7 @@ $("iSettle").addEventListener("change",()=>{
 $("iFrom").onchange=$("iTo").onchange=()=>{ $("iPk").value="";
   if((isPerson($("iFrom").value)||isPerson($("iTo").value)) && ["법인 정산","계좌 이체","적금 가입·납입","적금 만기·해지",""].includes($("iCat").value)) $("iCat").value="맡은 돈·빌려 준 돈";
   updateHint(false); };
-$("iCat").onchange=()=>{ form.entTouched=false; autoEnt();
+$("iCat").onchange=()=>{ form.catPicked=true; form.entTouched=false; autoEnt();
   if(form.t==="in" && !editing){ const la=lastInAcct($("iCat").value); if(la){ form.ac=la; fillAccts(); } fillFromAc(lastFromAc($("iCat").value)); }
   const bi = form.t==="out" ? itemFor($("iCat").value) : null;
   if(bi && bi.m && !form.m && !editing){ form.m=bi.m; fillMethods(); }
@@ -2959,7 +2967,7 @@ function openTx(ym, id, force){
   editing = t ? {ym, id} : null;
   $("txTitle").textContent = t ? "기록 수정" : "새 기록";
   $("delBtn").hidden = !t;
-  form = {t: t?t.t:"out", m: t?(t.m||""):"", ent: t?(t.ent==="corp"?"corp":"me"):"me", entTouched: !!t, ac: t&&t.t==="in" ? (t.ac || (NOT_ACCT(acctOf(t.m))?"":acctOf(t.m))) : ""};
+  form = {t: t?t.t:"out", m: t?(t.m||""):"", ent: t?(t.ent==="corp"?"corp":"me"):"me", entTouched: !!t, catPicked: !!t, ac: t&&t.t==="in" ? (t.ac || (NOT_ACCT(acctOf(t.m))?"":acctOf(t.m))) : ""};
   $("iDate").value = t ? t.d : (curYM===CUR_YM ? todayISO() : curYM+"-01");
   $("iAmt").value = t ? (+t.amt).toLocaleString("ko-KR") : "";
   $("iDesc").value = t ? (t.desc||"") : "";
