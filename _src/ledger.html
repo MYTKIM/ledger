@@ -1529,7 +1529,11 @@ function dayFor(b,y,m){
 }
 function ruleTxt(b){ const r=b.dayRule||"date"; if(r==="last") return "마지막 날"; if(r==="lastBiz") return "마지막 평일"; if(r==="firstBiz") return "첫 평일"; if(r==="nth") return `${NTH[b.nth||1]} ${WD[+(b.wd??1)]}요일`; return +b.day?`${+b.day}일`:""; }
 function acctNames(){ return [...new Set(accounts.list.map(a=>a.name).concat(config.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))]; }
-function budgetAcct(b){ if(!b) return "미지정"; if(b.acct) return b.acct; const a=acctOf(b.m); return b.m && !NOT_ACCT(a) ? a : "미지정"; }
+/* 예산의 실제 결제수단: 카카오페이·네이버페이 등은 그 안에서 고른 카드·계좌(via) */
+const bPayCode=b=> b && b.m && isPayM(b.m) && b.via ? b.via : (b&&b.m)||"";
+function budgetAcct(b){ if(!b) return "미지정"; if(b.acct) return b.acct; const a=acctOf(bPayCode(b)); return b.m && !NOT_ACCT(a) ? a : "미지정"; }
+function payViaOptsHtml(code,val){ const pm=methodOf(code)||{}, link=pm.link||"", lm=methodOf(link);
+  return `<option value="">기본: ${esc(link?(link+" · "+((lm||{}).name||"")):"연결 안 됨")}</option>`+KINDS.filter(([k])=>k!=="pay").map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k && m.code!==link); return ms.length?`<optgroup label="${lbl}">`+ms.map(m=>`<option value="${esc(m.code)}" ${m.code===val?"selected":""}>${esc(m.code)} · ${esc(m.name||"")}</option>`).join("")+`</optgroup>`:""; }).join(""); }
 function execOf(b){ if(b.period==="dates") return b.auto?"auto":"date"; return b.exec || (b.auto?"auto":hasDay(b)?"date":"manual"); }
 const EXEC_LBL={manual:"수동 기록", date:"날짜 지정", auto:"자동 기록"};
 function monthEq(b){ const a=+b.amount||0; if(b.period==="month") return a; if(b.period==="year") return a/12; const y=new Date(); const t=todayISO(); y.setFullYear(y.getFullYear()+1); const e=y.getFullYear()+"-"+pad(y.getMonth()+1)+"-"+pad(y.getDate()); return a*(b.dates||[]).filter(d=>d>=t&&d<=e).length/12; }
@@ -1703,7 +1707,7 @@ async function runSchedules(){
         const ym=o.d.slice(0,7), id="sch-"+b.id+"-"+o.d, cat=b.key.slice(2), inc=typeOfKey(b.key)==="in";
         if(!monthTx(ym).some(t=>t.id===id)){
           const tx={id, d:o.d, t:inc?"in":"out", amt:o.amt, desc:b.desc||b.name||cat, cat, m:inc?"":(b.m||""), ent:isCorpCat(cat)?"corp":"me", src:"sched", ts:Date.now()};
-          if(inc){ tx.ac=b.acct||mainAcct(); } else if(b.toP){ tx.t="move"; tx.m=""; tx.ent="me"; tx.from=b.acct||mainAcct(); tx.to="@"+b.toP; } else if(b.acct && b.acct!==acctOf(b.m)) tx.ac=b.acct;
+          if(inc){ tx.ac=b.acct||mainAcct(); } else if(b.toP){ tx.t="move"; tx.m=""; tx.ent="me"; tx.from=b.acct||mainAcct(); tx.to="@"+b.toP; } else { if(isPayM(b.m) && b.via) tx.via=b.via; if(b.acct && b.acct!==acctOf(bPayCode(b))) tx.ac=b.acct; }
           tx.st = needsSettle(tx) ? "pending" : null;
           const ptx=toPersonMove(tx);
           months[ym]=monthTx(ym).concat([ptx]); touched.add(ym); made++;
@@ -1786,7 +1790,7 @@ function recordOcc(b,o){
   fillCatSelect(inc?"in":"out", b.key.slice(2));
   $("iAmt").value=(+o.amt).toLocaleString("ko-KR"); $("iDesc").value=b.desc||b.key.slice(2);
   $("iDate").value = o.d>todayISO() ? o.d : todayISO();
-  if(inc){ form.ac=b.acct||mainAcct(); fillAccts(); } else if(b.toP){ setType("move"); fillCatSelect("move", b.key.slice(2)); acctOptions($("iFrom"), b.acct||mainAcct()); acctOptions($("iTo"), "@"+b.toP); $("iPk").value=""; } else if(b.m){ form.m=b.m; fillMethods(); }
+  if(inc){ form.ac=b.acct||mainAcct(); fillAccts(); } else if(b.toP){ setType("move"); fillCatSelect("move", b.key.slice(2)); acctOptions($("iFrom"), b.acct||mainAcct()); acctOptions($("iTo"), "@"+b.toP); $("iPk").value=""; } else if(b.m){ form.m=b.m; fillMethods(); if(isPayM(b.m)){ payViaOptions($("iPayVia"), b.m, b.via||""); updateHint(); } }
   autoEnt(); form.schOf=b.id+"|"+o.d;
   $("txTitle").textContent=`예정 집행 기록 · ${+o.d.slice(5,7)}/${+o.d.slice(8)} 예정분`;
   updateHint(false);
@@ -1804,8 +1808,8 @@ function bSummary(b){
   if(ex!=="manual" && !hasDay(b)) t+=` · <span class="warn">집행일을 정해 주세요</span>`;
   const ba=budgetAcct(b);
   if(typeOfKey(b.key)==="in") t += b.acct ? ` · <b>${esc(b.acct)}</b>(으)로 입금` : ` · <span class="warn">들어오는 계좌를 정하지 않았습니다</span>`;
-  else t += ba!=="미지정" ? ` · <b>${esc(ba)}</b>에서 출금${b.m?` (${esc(b.m)})`:""}` : ` · <span class="warn">돈이 나가는 계좌를 정하지 않았습니다</span>`;
-  if(b.m && b.acct && !NOT_ACCT(acctOf(b.m)) && acctOf(b.m)!==b.acct) t+=` · <span class="warn">${esc(b.m)}의 기본 계좌(${esc(acctOf(b.m))})와 다릅니다</span>`;
+  else t += ba!=="미지정" ? ` · <b>${esc(ba)}</b>에서 출금${b.m?` (${esc(b.m)}${isPayM(b.m)&&b.via?" → "+esc(b.via):""})`:""}` : ` · <span class="warn">돈이 나가는 계좌를 정하지 않았습니다</span>`;
+  { const pc=bPayCode(b); if(b.m && b.acct && !NOT_ACCT(acctOf(pc)) && acctOf(pc)!==b.acct) t+=` · <span class="warn">${esc(pc)}의 기본 계좌(${esc(acctOf(pc))})와 다릅니다</span>`; }
   return t;
 }
 const bOpen=new Set(); let bFindQ="", bOnlyHas=false;
@@ -1838,7 +1842,7 @@ function itemCard(b,i){
         <label class="fld">기한 · 마지막 집행일 (선택)<input type="date" data-i="${i}" data-k="end" value="${esc(b.end||"")}"></label>
       </div>
       <div class="brow">
-        ${typeOfKey(b.key)==="in" ? "" : `<label class="fld">결제수단 (선택)<select data-i="${i}" data-k="m" data-re="1">${mOpts(b.m||"")}</select></label>`}
+        ${typeOfKey(b.key)==="in" ? "" : `<label class="fld">결제수단 (선택)<select data-i="${i}" data-k="m" data-re="1">${mOpts(b.m||"")}</select></label>`+(b.m && isPayM(b.m) ? `<label class="fld">${esc(b.m)}로 실제 결제하는 카드·계좌<select data-i="${i}" data-k="via" data-re="1">${payViaOptsHtml(b.m,b.via||"")}</select></label>` : "")}
         <label class="fld">${typeOfKey(b.key)==="in"?"들어오는 계좌":"돈이 나가는 계좌·주머니"}<select data-i="${i}" data-k="acct" data-re="1">${aOpts(b.acct||"")}</select></label>
         ${typeOfKey(b.key)==="in"||!(accounts.people||[]).length ? "" : `<label class="fld">받는 사람 (맡은 돈·빌려 준 돈)<select data-i="${i}" data-k="toP" data-re="1"><option value="">없음 (보통 지출)</option>${(accounts.people||[]).map(P=>`<option value="${esc(P.name)}" ${b.toP===P.name?"selected":""}>${esc(P.name)}</option>`).join("")}</select></label>`}
         ${ex==="auto"?`<label class="fld wide">원장에 적을 적요<input data-i="${i}" data-k="desc" value="${esc(b.desc||"")}" placeholder="예: 차량 할부금, 넷플릭스"></label>`:""}
@@ -1886,7 +1890,8 @@ function renderBudEdit(){
       else if(k==="day"){ const n=Math.min(31,+el.value.replace(/[^\d]/g,"")||0); b.day=n||null; el.value=n||""; }
       else if(k==="nth"||k==="wd"){ b[k]=+el.value; }
       else if(k==="mm"){ if(el.value==="spread") b.mode="spread"; else { b.mode="lump"; b.month=+el.value; } }
-      else if(k==="m"){ b.m=el.value; const ra=acctOf(b.m); if(b.m && !NOT_ACCT(ra)) b.acct=ra; }
+      else if(k==="m"){ b.m=el.value; if(!isPayM(b.m)) delete b.via; const ra=acctOf(bPayCode(b)); if(b.m && !NOT_ACCT(ra)) b.acct=ra; }
+      else if(k==="via"){ if(el.value) b.via=el.value; else delete b.via; const ra=acctOf(bPayCode(b)); if(!NOT_ACCT(ra)) b.acct=ra; }
       else if(k==="exec"){ b.exec=el.value; if(el.value==="manual"){ b.auto=false; b.day=null; b.dayRule="date"; } else if(el.value==="date"){ b.auto=false; } else { b.auto=true; if(!b.autoFrom) b.autoFrom=todayISO(); if(!b.desc) b.desc=b.key.slice(2); } }
       else if(k==="period"){ b.period=el.value; if(b.period==="dates"){ if(!b.dates) b.dates=[]; if(b.exec==="manual") b.exec="date"; } }
       else b[k]=el.value;
