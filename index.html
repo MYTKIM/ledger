@@ -94,6 +94,8 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-
 .cat-sub{padding:2px 10px 2px 22px;font-size:12px;font-weight:600;color:var(--muted);display:flex;gap:6px;align-items:center;border-top:1px solid var(--line);flex-wrap:wrap}
 .cat-l{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 22px;border-top:1px solid var(--line);flex-wrap:wrap;min-width:0}
 .cat-l.d3{padding-left:38px}
+.bbadge{font-variant-numeric:tabular-nums;color:var(--corp)}
+#bList .cat-h .tg{border:0;background:none;cursor:pointer;font-size:13px;color:var(--muted);padding:0 4px 0 0;width:18px}
 .cat-sub{padding:5px 10px 5px 22px}
 .cat-sub .tg{border:0;background:none;cursor:pointer;font-size:12px;color:var(--muted);padding:0 2px 0 0;width:16px}
 .cat-sub .snm{color:var(--ink);font-size:12.5px}
@@ -1837,7 +1839,10 @@ function recordOcc(b,o){
 }
 
 let bDraft=null;
-function openBudEdit(){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.items=bDraft.items.filter(b=>b.key&&(b.key.startsWith("c:")||b.key.startsWith("i:"))); bT=budT; segSet("bTSeg",bT); renderBudEdit(); openOv("budOv"); }
+function openBudEdit(focus){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.items=bDraft.items.filter(b=>b.key&&(b.key.startsWith("c:")||b.key.startsWith("i:"))); bT=budT;
+  /* 계정과목 화면에서 왔으면 그 계정만 찾아서 펼쳐 둠 */
+  if(focus&&focus.cat){ bT=focus.type||"out"; bFindQ=focus.cat; $("bFind").value=focus.cat; bOnlyHas=false; $("bOnly").checked=false; bOpen.add(focus.cat); }
+  segSet("bTSeg",bT); renderBudEdit(); openOv("budOv"); }
 function bTargets(){ return [...new Set(config.outCats.concat(allTx().filter(t=>t.t==="out"&&t.cat).map(t=>t.cat)).concat(...Object.values(plans).map(p=>Object.keys(p.out))))].sort(); }
 function bSummary(b){
   const n=occurrences(b, todayISO(), "9999-12-31").slice(0,3).map(o=>o.d.slice(2).replace(/-/g,"."));
@@ -1898,6 +1903,28 @@ function bInfo(ix){
   if(L.length===1){ const b=L[0]; return `<b class="num" style="color:var(--ink)">${won(+b.amount||0)}</b> ${b.period==="month"?"/월":b.period==="year"?"/년":"/회"} · ${EXEC_LBL[execOf(b)]}${budgetAcct(b)!=="미지정"?" · "+esc(budgetAcct(b)):""}${on.length?"":" · 끝남"}`; }
   return `${L.length}개 · 월 환산 <b class="num" style="color:var(--ink)">${won(bInfoSum(ix))}</b>${on.length<L.length?` · ${L.length-on.length}개 끝남`:""}`;
 }
+/* 예산 설정 화면에서 바로 계정 정리: 합치기(거래·예산을 다른 계정으로) 또는 삭제(기록 없는 계정) */
+function budCatFix(c){
+  const box=$("bList"); box.querySelectorAll(".cat-edit[data-bfix]").forEach(x=>{ x.hidden=true; x.innerHTML=""; });
+  const row=[...box.querySelectorAll(".cat-edit[data-bfix]")].find(x=>x.dataset.bfix===c); if(!row) return;
+  const type=bT, info=catDelInfo(type,c), mo=catMergeOpts(type,c), nm=catShow(c), nd=bDraft.items.filter(b=>b.key===bKey(type,c)).length;
+  const canDel=!info.n && !info.xs.length;
+  row.innerHTML=`<span style="flex-basis:100%;font-size:12.5px"><b>${esc(nm)}</b> — 거래 ${info.n}건${nd?` · 예산 ${nd}개`:""}. 다른 계정에 합치면 거래와 예산이 그쪽으로 옮겨지고 ‘${esc(nm)}’${josa(nm,"은","는")} 없어집니다.${canDel?" 기록이 없으니 그냥 지워도 됩니다.":info.n?" 거래가 있어 삭제 대신 합치기로 정리합니다.":" 자동이체가 이 계정을 써서 삭제 대신 합치기로 정리합니다."}</span><select aria-label="합칠 계정">${mo.html}</select><button type="button" class="btn primary small" data-go="merge">합치기</button>${canDel?`<button type="button" class="btn small" data-go="del">삭제${info.extra?` (${info.extra} 포함)`:""}</button>`:""}<button type="button" class="btn small" data-go="x">취소</button>`;
+  row.hidden=false; row.style.display="flex"; row.style.flexWrap="wrap"; row.style.gap="6px";
+  const sel=row.querySelector("select"), mb=row.querySelector('[data-go="merge"]'), db=row.querySelector('[data-go="del"]');
+  row.querySelector('[data-go="x"]').onclick=()=>{ row.hidden=true; row.innerHTML=""; };
+  sel.onchange=()=>{ mb.dataset.c=""; mb.textContent="합치기"; };
+  mb.onclick=async()=>{ const to=sel.value; if(!to){ sel.focus(); return; }
+    if(mb.dataset.c!=="1"){ mb.dataset.c="1"; mb.textContent=`‘${catShow(to)}’(으)로 합치기 — 한 번 더 누르기`; return; }
+    mb.disabled=true; mb.textContent="합치는 중… (거래가 많으면 몇 초 걸립니다)"; row.querySelectorAll("button,select").forEach(x=>x.disabled=true);
+    try{ await applyCatRename(type,{[c]:to}); }catch(e){ showNotice("합치지 못했습니다: "+(e&&e.message||e)); mb.disabled=false; return; }
+    bDraft.items.forEach(b=>{ if(b.key===bKey(type,c)) b.key=bKey(type,to); }); if(bOpen.has(c)){ bOpen.delete(c); bOpen.add(to); }
+    if(bFindQ===c){ bFindQ=to; $("bFind").value=to; }
+    showNotice(`‘${c}’${josa(c,"을","를")} ‘${to}’에 합쳤습니다. 거래 ${info.n}건${nd?`과 예산 ${nd}개를`:"을"} 옮겼습니다.`); renderBudEdit(); render(); };
+  if(db) db.onclick=async()=>{ if(db.dataset.c!=="1"){ db.dataset.c="1"; db.textContent="한 번 더 누르면 지웁니다"; return; }
+    await catDelDo(type,c,info); bDraft.items=bDraft.items.filter(b=>b.key!==bKey(type,c)); bOpen.delete(c);
+    showNotice(`‘${c}’${josa(c,"을","를")} 지웠습니다.`); renderBudEdit(); render(); };
+}
 function renderBudEdit(){
   const box=$("bList");
   const keyIdx={}; bDraft.items.forEach((b,i)=>{ if(typeOfKey(b.key)===bT) (keyIdx[b.key.slice(2)]=keyIdx[b.key.slice(2)]||[]).push(i); });
@@ -1907,18 +1934,25 @@ function renderBudEdit(){
   if(bFindQ) cats=cats.filter(c=>c.toLowerCase().includes(bFindQ.toLowerCase()));
   const tree={}; cats.forEach(c=>{ const g=catSegs(c)[0]||c; (tree[g]=tree[g]||[]).push(c); });
   const btn=(attr,txt,primary)=>`<button type="button" class="btn small${primary?" primary":""}" ${attr}>${txt}</button>`;
+  const forceOpen=!!(bFindQ||bOnlyHas), isOpen=k=>forceOpen||catOpen.has(bT+":"+k), use=catUse(bT);
   box.innerHTML=Object.keys(tree).map(g=>{
     const list=tree[g]; const gm=list.reduce((a,c)=>a+(c in keyIdx?bInfoSum(keyIdx[c]):0),0); const nb=list.filter(c=>c in keyIdx).length;
     let lastSub=null, rows="";
     list.forEach(c=>{
       const sg=catSegs(c);
-      if(sg.length>=3 && sg[1]!==lastSub){ lastSub=sg[1]; rows+=`<div class="cat-sub">${esc(sg[1])}</div>`; } else if(sg.length<3) lastSub=null;
+      if(sg.length>=3 && sg[1]!==lastSub){ if(lastSub!==null) rows+=`</div>`; lastSub=sg[1]; const sp=sg.slice(0,2).join("-"), so=isOpen(sp), sl=list.filter(x=>under(x,catSegs(sp))), sb=sl.filter(x=>x in keyIdx).length;
+        rows+=`<div class="cat-sub"><button type="button" class="tg" data-btg="${esc(sp)}" aria-expanded="${so}">${so?"▾":"▸"}</button><span class="snm">${esc(sg[1])}</span><span class="cnt" style="font-weight:400">${bT==="in"?"계획":"예산"} ${sb}개${sb?` · 월 ${won(sl.reduce((a,x)=>a+(x in keyIdx?bInfoSum(keyIdx[x]):0),0))}`:""}</span></div><div class="cat-sb" ${so?"":"hidden"}>`; }
+      else if(sg.length<3 && lastSub!==null){ rows+=`</div>`; lastSub=null; }
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : c;
       const ix = keyIdx[c]||[], b = ix.length ? bDraft.items[ix[0]] : null, open = b && bOpen.has(c);
-      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span><span class="cnt" data-info="${esc(c)}">${bInfo(ix)}</span><span class="acts">${b ? btn(`data-tog="${esc(c)}"`, open?"접기":"고치기") : btn(`data-new="${esc(c)}"`,bT==="in"?"+ 계획 정하기":"+ 예산 정하기")}</span></div>${open?ix.map(i=>itemCard(bDraft.items[i],i)).join("")+`<div class="cat-l" style="justify-content:flex-end;border-top:1px dashed var(--line)">${btn(`data-new="${esc(c)}" data-more="1"`, bT==="in"?"+ 이 계정에 계획 하나 더":"+ 이 계정에 예산 하나 더 (정기 결제·연 1회 등)")}</div>`:""}`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}"><span class="nm">${esc(label)}</span><span class="cnt" data-info="${esc(c)}">${bInfo(ix)}</span><span class="acts">${b ? btn(`data-tog="${esc(c)}"`, open?"접기":"고치기") : btn(`data-new="${esc(c)}"`,bT==="in"?"+ 계획 정하기":"+ 예산 정하기")}${btn(`data-fix="${esc(c)}" title="필요 없는 계정이면 다른 계정에 합치거나 지웁니다"`,"계정 정리")}</span></div><div class="cat-edit" data-bfix="${esc(c)}" hidden></div>${open?ix.map(i=>itemCard(bDraft.items[i],i)).join("")+`<div class="cat-l" style="justify-content:flex-end;border-top:1px dashed var(--line)">${btn(`data-new="${esc(c)}" data-more="1"`, bT==="in"?"+ 이 계정에 계획 하나 더":"+ 이 계정에 예산 하나 더 (정기 결제·연 1회 등)")}</div>`:""}`;
     });
-    return `<div class="cat-g"><div class="cat-h"><b>${esc(g)}</b>${g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${bT==="in"?"계획":"예산"} ${nb}개 · 월 환산 ${won(gm)}</span></div>${rows}</div>`;
+    if(lastSub!==null) rows+=`</div>`;
+    const go=isOpen(g);
+    return `<div class="cat-g"><div class="cat-h"><button type="button" class="tg" data-btg="${esc(g)}" aria-expanded="${go}">${go?"▾":"▸"}</button><b>${esc(g)}</b>${g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${bT==="in"?"계획":"예산"} ${nb}개 · 월 환산 ${won(gm)}</span></div><div class="cat-body" ${go?"":"hidden"}>${rows}</div></div>`;
   }).join("") || `<div class="hint">조건에 맞는 항목이 없습니다.</div>`;
+  box.querySelectorAll("[data-btg]").forEach(x=>x.onclick=()=>{ if(forceOpen) return; const k=bT+":"+x.dataset.btg; catOpen.has(k)?catOpen.delete(k):catOpen.add(k); catOpenSave(); renderBudEdit(); });
+  box.querySelectorAll("[data-fix]").forEach(x=>x.onclick=()=>budCatFix(x.dataset.fix));
   box.querySelectorAll("[data-endnow]").forEach(x=>x.onclick=()=>{ const b=bDraft.items[+x.dataset.endnow]; b.end=todayISO(); renderBudEdit(); });
   box.querySelectorAll("[data-revive]").forEach(x=>x.onclick=()=>{ const b=bDraft.items[+x.dataset.revive]; b.end=""; if(b.auto) b.autoFrom=todayISO(); renderBudEdit(); });
   box.querySelectorAll("[data-tog]").forEach(x=>x.onclick=()=>{ const c=x.dataset.tog; bOpen.has(c)?bOpen.delete(c):bOpen.add(c); renderBudEdit(); });
@@ -2501,13 +2535,14 @@ function renderCats(){
         rows+=`<div class="cat-sg" data-drag="node" data-key="${esc(sp)}"><div class="cat-sub" draggable="true" data-drag="node" data-key="${esc(sp)}"><button type="button" class="tg" data-tg="${esc(sp)}" aria-expanded="${so}" aria-label="${so?"접기":"펼치기"}">${so?"▾":"▸"}</button><span class="drag" title="끌어서 소그룹 순서 바꾸기">⋮⋮</span><span class="snm">${esc(sg[1])}</span><span class="cnt" style="font-weight:400">${sl.length}개 · ${sn?`<span class="cnt-link"${dtAttr({k:"cat",v:sl,t:type,ym:allYms(),lbl:sp+" 전체"})}>${sn}건</span>`:"0건"}</span><span class="acts" style="margin-left:auto"><button type="button" class="mv" data-step="node|${esc(sp)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="node|${esc(sp)}|1" aria-label="아래로">↓</button>${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div><div class="cat-sb" ${so?"":"hidden"}>`; }
       else if(sg.length<3 && lastSub!==null){ rows+=`</div></div>`; lastSub=null; }
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : "(그룹 자체)";
-      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button>${btn("edit",c,"고치기")}${btn("merge",c,"합치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button><button type="button" class="btn small bbadge" data-bud="${esc(c)}" title="이 계정의 ${type==="in"?"계획":"예산"} 정하기·고치기">${budBadge(type,c)?esc(budBadge(type,c)):(type==="in"?"+ 계획":"+ 예산")}</button>${btn("edit",c,"고치기")}${btn("merge",c,"합치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
     });
     if(lastSub!==null) rows+=`</div></div>`;
     const open=catOpen.has(type+":"+g);
     return `<div class="cat-g" data-drag="grp" data-key="${esc(g)}"><div class="cat-h" draggable="true" data-drag="grp" data-key="${esc(g)}"><button type="button" class="tg" data-tg="${esc(g)}" aria-expanded="${open}" aria-label="${open?"접기":"펼치기"}">${open?"▾":"▸"}</button><span class="drag" title="끌어서 대그룹 순서 바꾸기">⋮⋮</span><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n?`<span class="cnt-link"${dtAttr({k:"cat",v:list,t:type,ym:allYms(),lbl:g+" 전체"})}>${n}건</span>`:"0건"}</span><span class="acts"><button type="button" class="mv" data-step="grp|${esc(g)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="grp|${esc(g)}|1" aria-label="아래로">↓</button>${btn("addin",g,"하위 추가")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div><div class="cat-body" ${open?"":"hidden"}>${rows}</div></div>`;
   }).join("") || `<div class="hint">계정이 없습니다.</div>`;
   $("catTree").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>catAction(b.dataset.act, b.dataset.arg, b));
+  $("catTree").querySelectorAll("[data-bud]").forEach(b=>b.onclick=()=>{ closeOv("catOv"); openBudEdit({type:catType, cat:b.dataset.bud}); });
   $("catTree").querySelectorAll("[data-tg]").forEach(b=>b.onclick=()=>{ const k=type+":"+b.dataset.tg; catOpen.has(k)?catOpen.delete(k):catOpen.add(k); catOpenSave(); renderCats(); });
   $("catTree").querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>{ const [k,key,d]=b.dataset.step.split("|"); catStep(k,key,+d); });
   // 끌어 옮기기
@@ -2531,6 +2566,22 @@ function openEditRow(key, html){
   const row=[...$("catTree").querySelectorAll(".cat-edit")].find(e=>e.dataset.for===key); if(!row) return null;
   row.hidden=false; row.innerHTML=html; const i=row.querySelector("input"); if(i) setTimeout(()=>i.focus(),20); return row;
 }
+/* 계정 정리(합치기·삭제)는 계정과목 화면과 예산 설정 화면이 같은 함수를 씁니다 */
+const josa=(w,a,b)=>{ const ch=(w||"").slice(-1).charCodeAt(0)-0xAC00; return ch>=0&&ch<=11171 ? (ch%28?a:b) : a+"("+b+")"; };
+function catMergeOpts(type,arg){ const dup=catDupMap(type)[arg]||[], use=catUse(type), others=catKnown(type).filter(c=>c!==arg).sort(catOrderSort(type));
+  const def=dup.slice().sort((a,b)=>catSegs(b).length-catSegs(a).length||(use[b]||0)-(use[a]||0))[0]||"";
+  let opts="", cur=null; others.forEach(c=>{ const S=catSegs(c), h=S.length>=3?S[0]+" › "+S[1]:S[0]; if(h!==cur){ if(cur!==null) opts+=`</optgroup>`; opts+=`<optgroup label="${esc(h)}">`; cur=h; } opts+=`<option value="${esc(c)}"${c===def?" selected":""}>${esc(S.length>=3?S.slice(2).join(" › "):S.length===2?S[1]:c)}${dup.includes(c)?" ← 같은 이름":""}</option>`; }); if(cur!==null) opts+=`</optgroup>`;
+  return {html:`<option value=""${def?"":" selected"}>— 합칠 계정 고르기 —</option>`+opts, dup}; }
+function catDelInfo(type,arg){ const bud=budgets.items.filter(b=>b.key===bKey(type,arg)), xs=type==="in"?[]:(accounts.xfers||[]).filter(x=>(x.cat||x.name)===arg), ps=type==="in"?[]:(accounts.people||[]).filter(P=>(P.cats||[]).includes(arg));
+  return {n:catUse(type)[arg]||0, bud, xs, ps, extra:[bud.length?`예산 ${bud.length}개`:"", ps.length?`사람 묶음 ${ps.length}곳`:""].filter(Boolean).join("·")}; }
+async function catDelDo(type,arg,info){ if(type==="in") config.inCats=config.inCats.filter(c=>c!==arg); else config.outCats=config.outCats.filter(c=>c!==arg);
+  if(config.catAuto) delete config.catAuto[type+"|"+arg];
+  if(info.bud.length){ budgets.items=budgets.items.filter(b=>b.key!==bKey(type,arg)); await saveBudgets(); }
+  if(info.ps.length){ info.ps.forEach(P=>{ P.cats=P.cats.filter(c=>c!==arg); }); await saveAccounts(); }
+  await saveConfig(); return !catKnown(type).includes(arg); }
+function budBadge(type,c){ const L=budgets.items.filter(b=>b.key===bKey(type,c)); if(!L.length) return "";
+  if(L.length===1){ const b=L[0]; return won(+b.amount||0)+(b.period==="month"?"/월":b.period==="year"?"/년":"/회"); }
+  return `${L.length}개 · 월 ${won(L.reduce((a,b)=>a+monthEq(b),0))}`; }
 function catAction(act, arg, el){
   const type=catType, use=catUse(type);
   if(act==="addin"){
@@ -2556,36 +2607,24 @@ function catAction(act, arg, el){
     return;
   }
   if(act==="merge"){
-    /* 이 계정의 거래·예산·자동이체를 다른 계정으로 옮기고 이 계정은 목록에서 없앰 */
-    const n=use[arg]||0, nb=budgets.items.filter(b=>b.key===bKey(type,arg)).length, others=catKnown(type).filter(c=>c!==arg).sort(catOrderSort(type)), dup=catDup[arg]||[];
-    const def=dup.slice().sort((a,b)=>catSegs(b).length-catSegs(a).length||(use[b]||0)-(use[a]||0))[0]||"";
-    /* 같은 이름 계정이 있으면 그것을 미리 고르고, 없으면 비워 두어 직접 고르게 함 (목록 맨 위 계정이 저절로 골라지지 않게) */
-    const jo=(w,a,b)=>{ const ch=(w||"").slice(-1).charCodeAt(0)-0xAC00; return ch>=0&&ch<=11171 ? (ch%28?a:b) : a+"("+b+")"; }, nm=catShow(arg);
-    let opts="", cur=null; others.forEach(c=>{ const S=catSegs(c), h=S.length>=3?S[0]+" › "+S[1]:S[0]; if(h!==cur){ if(cur!==null) opts+=`</optgroup>`; opts+=`<optgroup label="${esc(h)}">`; cur=h; } opts+=`<option value="${esc(c)}"${c===def?" selected":""}>${esc(S.length>=3?S.slice(2).join(" › "):S.length===2?S[1]:c)}${dup.includes(c)?" ← 같은 이름":""}</option>`; }); if(cur!==null) opts+=`</optgroup>`;
-    const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">‘${esc(nm)}’의 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 고른 계정으로 옮기고, ‘${esc(nm)}’${jo(nm,"은","는")} 목록에서 없앱니다.${dup.length?"":" 이름이 같은 계정이 없어 직접 골라야 합니다."}</span><select aria-label="합칠 계정"><option value=""${def?"":" selected"}>— 합칠 계정 고르기 —</option>${opts}</select><button type="button" class="btn primary small">합치기</button><button type="button" class="btn small">취소</button>`);
+    const n=use[arg]||0, nb=budgets.items.filter(b=>b.key===bKey(type,arg)).length, mo=catMergeOpts(type,arg), dup=mo.dup, jo=josa, nm=catShow(arg), opts=mo.html.replace(/^<option value=""[^>]*>[^<]*<\/option>/,""), def=dup.length;
+    const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">‘${esc(nm)}’의 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 고른 계정으로 옮기고, ‘${esc(nm)}’${jo(nm,"은","는")} 목록에서 없앱니다.${dup.length?"":" 이름이 같은 계정이 없어 직접 골라야 합니다."}</span><select aria-label="합칠 계정">${mo.html}</select><button type="button" class="btn primary small">합치기</button><button type="button" class="btn small">취소</button>`);
     const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
     row.querySelector("select").onchange=()=>{ ok.dataset.c=""; ok.textContent="합치기"; };
     ok.onclick=async()=>{ const to=row.querySelector("select").value; if(!to){ row.querySelector("select").focus(); return; }
       if(ok.dataset.c!=="1"){ ok.dataset.c="1"; ok.textContent=`‘${catShow(to)}’(으)로 합치기 — 한 번 더 누르기`; return; }
-      await applyCatRename(type,{[arg]:to}); catMsg(`‘${esc(arg)}’${jo(arg,"을","를")} ‘${esc(to)}’에 합쳤습니다. 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 옮겼습니다.`); renderCats(); };
+      ok.disabled=true; ok.textContent="합치는 중…"; await applyCatRename(type,{[arg]:to}); catMsg(`‘${esc(arg)}’${jo(arg,"을","를")} ‘${esc(to)}’에 합쳤습니다. 거래 ${n}건${nb?`과 예산 ${nb}개를`:"을"} 옮겼습니다.`); renderCats(); };
     return;
   }
   if(act==="del"){
     const n=use[arg]||0;
     if(!n){
-      /* 거래는 없어도 예산·자동이체·사람 묶음이 이 이름을 쓰고 있으면 목록에 다시 나타나므로 함께 정리 */
-      const bud=budgets.items.filter(b=>b.key===bKey(type,arg)), xs=type==="in"?[]:(accounts.xfers||[]).filter(x=>(x.cat||x.name)===arg), ps=type==="in"?[]:(accounts.people||[]).filter(P=>(P.cats||[]).includes(arg));
+      const info=catDelInfo(type,arg), {xs,extra}=info;
       if(xs.length){ const row=openEditRow(arg, `<span style="flex:1">기록은 없지만 자동이체 ${xs.map(x=>"‘"+esc(x.name||"이름 없음")+"’").join(", ")}이(가) 이 계정을 씁니다. 자동이체에서 계정을 바꾸거나, 오른쪽 ‘합치기’로 다른 계정에 합쳐 주세요.</span><button type="button" class="btn small">닫기</button>`); row.querySelector("button").onclick=()=>{ row.hidden=true; }; return; }
-      const extra=[bud.length?`예산 ${bud.length}개`:"", ps.length?`사람 묶음 ${ps.length}곳`:""].filter(Boolean).join("·");
       const row=openEditRow(arg, `<span style="flex:1">기록이 없는 계정입니다.${extra?` 이 계정에 걸린 <b>${extra}</b>도 함께 지웁니다.`:""} 목록에서 지울까요?</span><button type="button" class="btn primary small">삭제</button><button type="button" class="btn small">취소</button>`);
       const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
-      ok.onclick=async()=>{ if(type==="in") config.inCats=config.inCats.filter(c=>c!==arg); else config.outCats=config.outCats.filter(c=>c!==arg);
-        if(config.catAuto) delete config.catAuto[type+"|"+arg];
-        if(bud.length){ budgets.items=budgets.items.filter(b=>b.key!==bKey(type,arg)); await saveBudgets(); }
-        if(ps.length){ ps.forEach(P=>{ P.cats=P.cats.filter(c=>c!==arg); }); await saveAccounts(); }
-        await saveConfig(); renderCats();
-        const still=catKnown(type).includes(arg);
-        catMsg(still?`‘${esc(arg)}’을(를) 목록에서 지웠지만 다른 곳에 이름이 남아 있어 다시 보입니다. 알려 주시면 찾아 보겠습니다.`:`‘${esc(arg)}’을(를) 지웠습니다.${extra?` (${extra}도 함께)`:""}`, still); render(); };
+      ok.onclick=async()=>{ const gone=await catDelDo(type,arg,info); renderCats();
+        catMsg(gone?`‘${esc(arg)}’${josa(arg,"을","를")} 지웠습니다.${extra?` (${extra}도 함께)`:""}`:`‘${esc(arg)}’${josa(arg,"을","를")} 목록에서 지웠지만 다른 곳에 이름이 남아 있어 다시 보입니다. 알려 주시면 찾아 보겠습니다.`, !gone); render(); };
     } else {
       const others=catKnown(type).filter(c=>c!==arg).sort(catSort);
       const row=openEditRow(arg, `<span style="flex-basis:100%;font-size:12.5px">거래 ${n}건이 있습니다. 어느 계정으로 옮기고 지울까요?</span><select aria-label="옮길 계정">${others.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select><button type="button" class="btn primary small">옮기고 삭제</button><button type="button" class="btn small">취소</button>`);
