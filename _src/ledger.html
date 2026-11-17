@@ -769,7 +769,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="brow" style="align-items:center"><input id="bFind" type="search" placeholder="항목 찾기" aria-label="항목 찾기" style="flex:1 1 180px"><label class="check" style="font-size:13px"><input type="checkbox" id="bOnly" style="width:auto"> 예산 있는 항목만</label></div>
       <div class="tools"><button class="btn small" id="fromPlanB">시트 계획으로 채우기</button><button class="btn small" id="suggestB">최근 6개월 평균으로 제안</button><span class="hint" style="background:none;padding:0;font-size:12px;align-self:center">계정 추가·이름 바꾸기는 <b>계정 관리</b>에서 합니다.</span></div>
       <div class="cat-tree" id="bList"></div>
-      <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveBud">저장</button></div></div>
+      <div class="actions"><span id="bGuard" class="hint warn" hidden style="flex:1 1 100%;margin:0"></span><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveBud">저장</button></div></div>
     </div>
   </div>
 </div>
@@ -1799,7 +1799,15 @@ function recordOcc(b,o){
 }
 
 let bDraft=null;
-function openBudEdit(focus){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.items=bDraft.items.filter(b=>b.key&&(b.key.startsWith("c:")||b.key.startsWith("i:"))); bT=budT;
+/* 저장 안 한 변경 확인: 금액이 0인 새 항목(저장해도 버려지는 것)은 변경으로 치지 않음 */
+const bNorm=items=>JSON.stringify(items.filter(b=>b.key && (b.period==="dates" ? (+b.amount||0)>0&&(b.dates||[]).length : (+b.amount||0)>0)));
+let bBase="";
+function budDirty(){ return !$("budOv").hidden && bDraft && bNorm(bDraft.items)!==bBase; }
+function budGuard(){ const g=$("bGuard"); g.hidden=false;
+  g.innerHTML=`저장하지 않은 변경이 있습니다. <button type="button" class="btn small primary" id="bgSave">저장하고 닫기</button> <button type="button" class="btn small" id="bgDrop">저장 안 하고 닫기</button> <button type="button" class="btn small" id="bgBack">계속 고치기</button>`;
+  $("bgSave").onclick=()=>$("saveBud").click(); $("bgDrop").onclick=()=>{ g.hidden=true; closeOv("budOv"); }; $("bgBack").onclick=()=>{ g.hidden=true; };
+  g.scrollIntoView({block:"nearest"}); }
+function openBudEdit(focus){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.items=bDraft.items.filter(b=>b.key&&(b.key.startsWith("c:")||b.key.startsWith("i:"))); bT=budT; bBase=bNorm(bDraft.items); $("bGuard").hidden=true;
   /* 계정과목 화면에서 왔으면 그 계정만 찾아서 펼쳐 둠 */
   if(focus&&focus.cat){ bT=focus.type||"out"; bFindQ=focus.cat; $("bFind").value=focus.cat; bOnlyHas=false; $("bOnly").checked=false; bOpen.add(focus.cat); }
   segSet("bTSeg",bT); renderBudEdit(); openOv("budOv"); }
@@ -1878,11 +1886,11 @@ function budCatFix(c){
     if(mb.dataset.c!=="1"){ mb.dataset.c="1"; mb.textContent=`‘${catShow(to)}’(으)로 합치기 — 한 번 더 누르기`; return; }
     mb.disabled=true; mb.textContent="합치는 중… (거래가 많으면 몇 초 걸립니다)"; row.querySelectorAll("button,select").forEach(x=>x.disabled=true);
     try{ await applyCatRename(type,{[c]:to}); }catch(e){ showNotice("합치지 못했습니다: "+(e&&e.message||e)); mb.disabled=false; return; }
-    bDraft.items.forEach(b=>{ if(b.key===bKey(type,c)) b.key=bKey(type,to); }); if(bOpen.has(c)){ bOpen.delete(c); bOpen.add(to); }
+    bDraft.items.forEach(b=>{ if(b.key===bKey(type,c)) b.key=bKey(type,to); }); { const bb=JSON.parse(bBase); bb.forEach(b=>{ if(b.key===bKey(type,c)) b.key=bKey(type,to); }); bBase=JSON.stringify(bb); } if(bOpen.has(c)){ bOpen.delete(c); bOpen.add(to); }
     if(bFindQ===c){ bFindQ=to; $("bFind").value=to; }
     showNotice(`‘${c}’${josa(c,"을","를")} ‘${to}’에 합쳤습니다. 거래 ${info.n}건${nd?`과 예산 ${nd}개를`:"을"} 옮겼습니다.`); renderBudEdit(); render(); };
   if(db) db.onclick=async()=>{ if(db.dataset.c!=="1"){ db.dataset.c="1"; db.textContent="한 번 더 누르면 지웁니다"; return; }
-    await catDelDo(type,c,info); bDraft.items=bDraft.items.filter(b=>b.key!==bKey(type,c)); bOpen.delete(c);
+    await catDelDo(type,c,info); bDraft.items=bDraft.items.filter(b=>b.key!==bKey(type,c)); bBase=JSON.stringify(JSON.parse(bBase).filter(b=>b.key!==bKey(type,c))); bOpen.delete(c);
     showNotice(`‘${c}’${josa(c,"을","를")} 지웠습니다.`); renderBudEdit(); render(); };
 }
 function renderBudEdit(){
@@ -1965,7 +1973,7 @@ $("suggestB").onclick=()=>{
 $("saveBud").onclick=async()=>{
   const seen=new Set(); bDraft.items=bDraft.items.filter(b=>b.key && (b.period==="dates" ? (+b.amount||0)>0&&(b.dates||[]).length : (+b.amount||0)>0) && !seen.has(b.id||(b.id=uid())) && seen.add(b.id));
   bDraft.items.forEach(b=>{ if(!b.id) b.id=uid(); if(b.auto && !b.autoFrom) b.autoFrom=todayISO(); if(execOf(b)==="manual"){ b.auto=false; if(b.period!=="dates"){ b.day=null; b.dayRule="date"; } } });
-  budgets=bDraft; closeOv("budOv"); render();
+  budgets=bDraft; $("bGuard").hidden=true; closeOv("budOv"); render();
   await saveBudgets(); runSchedules();
 };
 
@@ -2857,9 +2865,9 @@ $("tPendBox").onclick=pendGo; $("tPendBox").onkeydown=e=>{ if(e.key==="Enter"||e
 function openOv(id){ $(id).hidden=false; }
 function closeOv(id){ $(id).hidden=true; }
 document.querySelectorAll(".overlay").forEach(ov=>{
-  ov.addEventListener("click",e=>{ if(e.target===ov||e.target.closest("[data-close]")) ov.hidden=true; });
+  ov.addEventListener("click",e=>{ if(e.target===ov||e.target.closest("[data-close]")){ if(ov.id==="budOv" && budDirty()){ budGuard(); return; } ov.hidden=true; } });
 });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".overlay").forEach(o=>o.hidden=true); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".overlay").forEach(o=>{ if(o.id==="budOv" && budDirty()){ budGuard(); return; } o.hidden=true; }); });
 
 /* ---------- 기록 입력 ---------- */
 const catSide=(type,c)=> (type==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me";
