@@ -22,4 +22,4 @@
 ## 데이터 원칙
 - 장부 데이터는 절대 저장소에 넣지 않는다 (기기 IndexedDB와 사용자 구글 드라이브 앱 전용 폴더에만 있음).
 - AI 분석용 내보내기: 사용자가 누를 때만 일반 드라이브 'U JIN Ledger AI' 폴더에 ledger_ai_latest.json·ledger_ai_transactions.csv를 덮어씀(drive.file 권한). 폴더·파일 ID는 config/main의 aiExport에 저장. 원본 동기화(appDataFolder)와 분리.
-- 문서 경로: months/YYYY-MM {ym, tx[], del{}}, plans/YYYY-MM {out{}, inc{}}, config/main(결제수단·계정), config/accounts(계좌·잔액), config/budgets(예산·집행일·자동기록).
+- 문서 경로: months/YYYY-MM {ym, tx[], del{}}, plans/YYYY-MM {out{}, inc{}}, config/main(결제수단·계정), config/accounts(계좌·잔액), config/budgets(예산·집행일·자동기록), config/pjplans(프로젝트 예정비용 items[]; 거래 연결은 거래의 pe 필드만 원본).

@@ -311,6 +311,14 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .bitem{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--paper);display:grid;gap:10px}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+.pjks{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px;margin:4px 0 8px}
+.pjk{border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:var(--surface)}
+.pjk .k{font-size:11.5px;color:var(--muted)} .pjk .v{font-size:15px;font-weight:600} .pjk .s{font-size:11px;color:var(--muted)}
+.pjk.a{border-left:4px solid var(--corp)} .pjk.c{border-left:4px solid color-mix(in srgb,var(--corp) 60%,transparent)} .pjk.p{border-left:4px solid color-mix(in srgb,var(--corp) 25%,transparent)} .pjk.bad .v{color:var(--warn)}
+.pjbar{position:relative;display:flex;height:12px;border-radius:6px;background:var(--sunk);overflow:hidden}
+.pjbar span{display:block;height:100%} .pjbar .a{background:var(--corp)} .pjbar .c{background:color-mix(in srgb,var(--corp) 60%,transparent)} .pjbar .p{background:color-mix(in srgb,var(--corp) 25%,transparent)}
+.pjbar i{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.pe-ed{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--sunk);margin:6px 0}
 .ckrow{display:flex;align-items:stretch;border-bottom:1px solid var(--line)}
 .ckrow .row{flex:1;border-bottom:0}
 .ckbox{display:flex;align-items:center;padding:0 4px 0 12px;cursor:pointer}
@@ -723,6 +731,9 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
           <label class="fld">목적<select id="iPur"></select></label>
           <label class="fld">세무 구분<select id="iTax"></select></label>
           <div class="hint" style="flex-basis:100%;margin:0;font-size:12px">프로젝트 비용을 누구 몫·무슨 목적·어떤 세무 처리인지 나눕니다. 세무 구분은 세무사 확인 전까지 ‘세무 검토 필요’로 두세요.</div>
+          <label class="fld" id="peRow" style="flex:2 1 260px">예정 항목에 연결<select id="iPe"></select></label>
+          <label class="fld" id="rfRow" style="flex:2 1 260px" hidden>환불 원거래 (이 수입이 어떤 지출의 환불인지)<select id="iRefund"></select></label>
+          <div class="hint" id="peHint" style="flex-basis:100%;margin:0;font-size:12px">한 거래는 하나의 예정항목에만 연결할 수 있습니다. 여러 용도가 섞인 결제는 거래를 분할해 기록하세요.</div>
           <label class="check" style="flex-basis:100%;font-size:13px"><input type="checkbox" id="iAllocOn" style="width:auto"> 사람별로 나누기 <small style="color:var(--muted)">(예: 3인 항공권을 각자 몫으로. 몫마다 목적·세무 구분을 다르게 할 수 있음)</small></label>
           <div id="allocBox" hidden style="flex-basis:100%">
             <div id="allocRows"></div>
@@ -894,6 +905,12 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 </div>
 
 <!-- 백업 -->
+<div class="overlay" id="pjOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="pjTitle">
+    <h3><span id="pjTitle">프로젝트 예산</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form" id="pjBody"></div>
+  </div>
+</div>
 <div class="overlay" id="aiOv" hidden>
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="aiTitle">
     <h3><span id="aiTitle">AI 분석용 내보내기</span><button class="x" data-close aria-label="닫기">×</button></h3>
@@ -1043,6 +1060,8 @@ let staged = null;          // parsed import
 let accounts = JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS));
 let accRef = null;
 let budgets = {items:[]}; let budRef = null;
+/* 프로젝트 예정비용: 별도 문서 config/pjplans (다른 설정과 서로 덮어쓰지 않게). 거래 연결은 거래의 pe(plannedExpenseId)만 원본 */
+let pjp = {items:[]}, pjRef = null, pjPending = false, pjQ = Promise.resolve();
 const loaded = {months:false, bud:false, acc:false}; let budPending = false, schedRunning = false;
 let plans = {}; let plansRef = null;   // ym -> {out:{cat:amt}, inc:{cat:amt}}
 
@@ -1209,6 +1228,8 @@ async function boot(){
   accRef = db.doc("config/accounts");
   plansRef = db.collection("plans");
   plansRef.onSnapshot(snap=>{ const n={}; snap.docs.forEach(d=>{ const b=d.data(); if(b) n[d.id]={out:{...(b.out||{})},inc:{...(b.inc||{})}}; }); plans=n; render(); }, e=>showNotice("시트 계획을 읽지 못했습니다 ("+e.code+")."));
+  pjRef = db.doc("config/pjplans");
+  pjRef.onSnapshot(s=>{ if(s.exists && !pjPending){ const d=s.data(); pjp={items:(d.items||[]).map(x=>JSON.parse(JSON.stringify(x)))}; } render(); if($("pjOv") && !$("pjOv").hidden) renderPj(); }, e=>showNotice("예정비용을 읽지 못했습니다 ("+e.code+")."));
   budRef = db.doc("config/budgets");
   budRef.onSnapshot(s=>{ if(s.exists && !budPending){ const d=s.data(); budgets={items:(d.items||[]).map(x=>JSON.parse(JSON.stringify(x)))}; } loaded.bud=true; render(); maybeRunSchedules(); }, e=>showNotice("예산을 읽지 못했습니다 ("+e.code+")."));
   accRef.onSnapshot(s=>{ if(s.exists){ const d=s.data(); accounts={buffer:d.buffer==null?3:d.buffer, list:(d.list||DEFAULT_ACCOUNTS.list).map(x=>({...x})), snaps:JSON.parse(JSON.stringify(d.snaps||{})), xfers:JSON.parse(JSON.stringify(d.xfers||[])), people:JSON.parse(JSON.stringify(d.people||[])), bills:JSON.parse(JSON.stringify(d.bills||[]))}; maybeRunSchedules(); } loaded.acc=true; render(); }, e=>showNotice("계좌 정보를 읽지 못했습니다 ("+e.code+")."));
@@ -1321,6 +1342,7 @@ function aiTx(t, o){
     entity:ent, paymentMethod:m?{code:m.code, name:m.name||"", kind:kindOf(m)}:(t.m?{code:t.m,name:"",kind:null}:null),
     payVia:t.via||null, account:t.t==="move"||NOT_ACCT(txAcct(t))?null:(txAcct(t)||null), from:t.t==="move"?(effects(t).find(e=>e.v<0)||{}).acct||null:null, to:t.t==="move"?(effects(t).find(e=>e.v>0)||{}).acct||null:null,
     projectId:t.ws||null, projectName:W?W.name:null, beneficiary:t.ws?(t.bf||null):null, purpose:t.ws?(t.pur||null):null, taxTreatment:t.ws?(t.tax||"REVIEW"):null,
+    plannedExpenseId:t.pe||null, refundOf:t.refundOf||null,
     allocation:t.ws&&t.alloc?Object.fromEntries(Object.entries(t.alloc).map(([p,x])=>[p,+x.a||0])):null,
     settlement:t.st?{status:t.st, settledOn:t.settledOn||null}:null, installments:+t.inst>1?+t.inst:null,
     includeInTotals:inTot,
@@ -1353,17 +1375,34 @@ function buildAiExport(per, from, to, o){
       "entity: SUSLAB=지속발전연구소(주) 법인, PERSONAL=개인·가계. 프로젝트 거래의 beneficiary(비용 대상)·purpose(목적)·taxTreatment(세무 구분)는 사용자가 입력한 값이고, taxTreatment=REVIEW는 세무 확인 전이라는 뜻입니다.",
       "custody=true는 가족에게 맡거나 보낸 돈(예수금) 관련 기록이며 앱 기본 설정에서는 지출·수입에 포함됩니다.",
       "프로젝트 참가자: projects[].people이 실제 참가자이고 candidatePeople은 전체 후보입니다. totalAttendees = people 수 + otherPeopleCount. participantsSet=false면 참가자를 아직 정하지 않은 것입니다.",
+      "예정비용(plannedExpenses): 아직 결제되지 않은 금액은 remainingKRW입니다. 예상총액 forecastTotal = spent + 열린 예정 항목의 remainingKRW 합(committed + plannedLimit). 예정 항목에 연결된 결제(plannedExpenseId)는 spent에만 들어가고 그만큼 remainingKRW가 줄어드므로, spent와 plannedAmount를 그냥 더하면 이중 집계입니다. 차이: overrunAmount(예정보다 더 씀), unusedAmount(마감 때 안 쓴 금액, 다른 항목으로 옮긴 금액 제외), amountVariance+fxVariance = variance = usedKRW − (plannedAmount − movedOutKRW)(외화 금액 차이와 환율 차이; 통화가 달라 나눌 수 없으면 fxVariance=null. 다른 항목으로 옮긴 금액은 차이에 넣지 않음).",
+      "환불: refundOf가 있는 수입은 그 지출의 환불입니다. projectSummary.spent(=spentGross)는 환불을 빼지 않은 값이고 spentNet = spentGross − refunds입니다. reviewActual은 실제 지출 중 세무 검토 필요 금액, reviewPlanned는 열린 예정 항목 중 세무 검토 필요 금액입니다.",
       "사람별 귀속: allocation이 있는 거래는 beneficiary=SPLIT이고, 각 사람 몫(원화, 합계=amount)으로 나눠 셉니다. 몫별 목적·세무 구분은 allocationPurpose·allocationTax에 있고 없으면 거래의 purpose·taxTreatment를 따릅니다. beneficiary=COMMON은 나누지 않은 공동비용입니다. projectSummary.byPerson·byPurpose·byTaxTreatment는 이 규칙으로 계산한 값입니다(배분 몫과 COMMON을 함께 더하면 이중 집계가 아닙니다 — 각 거래는 한 번만 셉니다)."],
     transactions:T, monthlyTotals:monthly};
   if(o.meta){ out.categories={expense:config.outCats.slice(), income:(config.inCats||[]).slice()}; out.paymentMethods=config.methods.map(m=>({code:m.code, name:m.name||"", kind:kindOf(m), account:m.acct||null, owner:(resolve(m.code)||{}).own||null, linkedTo:m.link||null})); }
   if(o.projects){ const W=wsList().filter(w=>allT.some(t=>t.ws===w.id) || (w.end||w.start)>=a+"-01");
     out.candidatePeople=pjCands().slice();
+    /* 예정비용: linkedTransactionIds는 거래의 plannedExpenseId로 계산한 값 */
+    out.plannedExpenses=pjp.items.filter(p=>W.some(w=>w.id===p.projectId)).map(p=>{ const c=peCalc(p), cur=p.currency||"KRW";
+      return {plannedExpenseId:p.id, projectId:p.projectId, description:p.description||"", kind:p.kind||"OTHER", mode:p.mode==="limit"?"limit":"single",
+        status:p.status==="cancelled"?"cancelled":(p.status||"planned"), effectiveStatus:{planned:"planned",committed:"committed",partial:"partially_paid",paid:"paid",closed:"closed",cancelled:"cancelled"}[c.st],
+        originalAmount:+p.amount||0, currency:cur, forecastRate:cur==="KRW"?null:+p.forecastRate||null, forecastRateAt:cur==="KRW"?null:p.forecastRateAt||null, initialForecastRate:cur==="KRW"?null:+(p.initialForecastRate||p.forecastRate)||null, initialForecastRateAt:cur==="KRW"?null:(p.initialForecastRateAt||p.forecastRateAt||null),
+        forecastKRW:c.base, movedInKRW:c.movedIn, plannedAmount:c.target, expectedDate:p.expectedDate||null,
+        beneficiary:p.beneficiary||null, purpose:p.purpose||null, taxTreatment:p.taxTreatment||"REVIEW", memo:p.memo||"",
+        linkedTransactionIds:c.txs.map(t=>t.id), usedKRW:c.used, remainingKRW:c.remaining,
+        movedOutKRW:c.movedOut, variance:(c.done||c.cancelled)?c.used-(c.target-c.movedOut):null, amountVariance:c.amtVar, fxVariance:c.fxVar, unusedAmount:c.unused, overrunAmount:c.overrun,
+        closeReason:p.closeReason||null, movedTo:p.movedTo||null, movedIn:p.movedIn||[],
+        createdAt:p.createdAt||null, updatedAt:p.updatedAt||null, closedAt:p.closedAt||null, cancelledAt:p.cancelledAt||null}; });
     out.projects=W.map(w=>({projectId:w.id, name:w.name, start:w.start, end:w.end||w.start, owner:w.owner==="me"?"PERSONAL":"SUSLAB", status:{plan:"planned",approved:"approved",done:"done"}[w.status||"approved"], approvedBudget:+w.budget||null, currency:"KRW", people:pjPeopleOf(w), participantsSet:pjPeopleOf(w).length>0, otherPeopleCount:pjOtherN(w), otherPeople:w.others||[], totalAttendees:pjTotal(w), note:w.note||""}));
     /* 프로젝트 요약은 기간과 상관없이 그 프로젝트의 모든 지출로 계산 */
     out.projectSummary=W.map(w=>{ const xs=allT.filter(t=>t.ws===w.id && t.t==="out"), spent=sumOf(xs), grp=f=>{ const g={}; xs.forEach(t=>{ const k=t[f]||(f==="tax"?"REVIEW":"UNSPECIFIED"); g[k]=(g[k]||0)+(+t.amt||0); }); return g; };
       const bf={}; xs.forEach(t=>{ const k=t.bf||"UNSPECIFIED"; bf[k]=(bf[k]||0)+(+t.amt||0); });
       const sg=f=>{ const g={}; xs.forEach(t=>txShares(t).forEach(sh=>{ const k=sh[f]||(f==="tax"?"REVIEW":"UNSPECIFIED"); g[k]=(g[k]||0)+sh.amt; })); return g; };
-      return {projectId:w.id, name:w.name, approvedBudget:+w.budget||null, spent, remaining:+w.budget?(+w.budget-spent):null, transactions:xs.length, transactionIds:xs.map(t=>t.id), people:pjPeopleOf(w), totalAttendees:pjTotal(w), byBeneficiary:bf, byPerson:sg("who"), byPurpose:sg("pur"), byTaxTreatment:sg("tax"), byEntity:{SUSLAB:sumOf(xs.filter(t=>t.ent==="corp")), PERSONAL:sumOf(xs.filter(t=>t.ent!=="corp"))}}; }); }
+      const F=pjFin(w);
+      return {projectId:w.id, name:w.name, approvedBudget:+w.budget||null, spent, remaining:+w.budget?(+w.budget-spent):null,
+        committed:F.committed, plannedLimit:F.plannedLimit, planned:F.committed+F.plannedLimit, forecastTotal:F.forecast, remainingActual:F.remainingActual, remainingForecast:F.remainingForecast,
+        executionRate:F.rateActual==null?null:Math.round(F.rateActual*10)/10, forecastRate:F.rateForecast==null?null:Math.round(F.rateForecast*10)/10, overBudgetActual:F.overBudgetActual, overBudgetForecast:F.overBudgetForecast,
+        reviewActual:F.reviewActual, reviewPlanned:F.reviewPlanned, spentGross:spent, refunds:F.refunds, spentNet:spent-F.refunds, refundTransactionIds:F.refundTx.map(t=>t.id), transactions:xs.length, transactionIds:xs.map(t=>t.id), people:pjPeopleOf(w), totalAttendees:pjTotal(w), byBeneficiary:bf, byPerson:sg("who"), byPurpose:sg("pur"), byTaxTreatment:sg("tax"), byEntity:{SUSLAB:sumOf(xs.filter(t=>t.ent==="corp")), PERSONAL:sumOf(xs.filter(t=>t.ent!=="corp"))}}; }); }
   if(o.budgets){ out.budgets=budgets.items.filter(x=>x.key&&(+x.amount||0)>0).map(x=>({category:x.key.slice(2), type:typeOfKey(x.key)==="in"?"income":"expense", frequency:freqOf(x), amount:+x.amount, currency:x.cur||"KRW", monthlyEquivalentKRW:Math.round(monthEq(x)), start:x.start||null, end:x.end||null, name:x.name||null})); }
   if(o.plans){ out.plans=Object.keys(plans||{}).filter(k=>k>=a&&k<=b).sort().map(k=>({month:k, expense:plans[k].out||{}, income:plans[k].inc||{}})); }
   if(o.people){ out.people=(accounts.people||[]).map(P=>{ const L=personLedger(P); return {name:P.name, heldForThem:L.hold, lentToThem:L.loan, paidTotal:L.paid}; }); }
@@ -1417,6 +1456,99 @@ $("aiDel").onclick=async()=>{ const b=$("aiDel"), ax=config.aiExport||{};
   try{ for(const id of [ax.jsonId, ax.csvId, ax.folderId]) if(id){ try{ await drvJson(`${DRV}/${id}`,{method:"DELETE"}); }catch(e){ if(e.code==="scope"||e.code==="auth") throw e; } }
     config.aiExport={opts:ax.opts, per:ax.per}; await saveConfig(); renderAi(); aiMsg("드라이브의 AI 분석본을 지웠습니다. 원본 장부는 그대로입니다."); }
   catch(e){ aiMsg("지우지 못했습니다. 구글 로그인·권한을 확인해 주세요.",true); } };
+/* ---------- 프로젝트 예산·예정비용 창 ---------- */
+let pjCur=null, peEdit=null, peCloseId=null;
+function openPj(id){ pjCur=id; peEdit=null; peCloseId=null; renderPj(); openOv("pjOv"); }
+function peNow(){ return new Date().toISOString(); }
+function renderPj(){ const w=wsOf(pjCur); if(!w){ $("pjBody").innerHTML=`<p class="hint">프로젝트를 찾지 못했습니다.</p>`; return; }
+  const f=pjFin(w), ppl=pjPeopleOf(w).length?pjPeopleOf(w):pjCands();
+  $("pjTitle").textContent=w.name+" · 예산";
+  const opt=(L,v,empty)=>(empty?`<option value="">${empty}</option>`:"")+L.map(([x,l])=>`<option value="${x}"${v===x?" selected":""}>${l}</option>`).join("");
+  const row=({p,c})=>{ const cur=p.currency||"KRW", fx=cur!=="KRW";
+    const amtTxt=`${won(c.target)}${fx?`<small class="fxs">${fxTxt(cur,p.amount)} × ${(+p.forecastRate).toLocaleString("ko-KR")}${c.movedIn?` + 옮겨 온 ${won(c.movedIn)}`:""}</small>`:c.movedIn?`<small class="fxs">옮겨 온 ${won(c.movedIn)} 포함</small>`:""}`;
+    const varTxt=c.done||c.cancelled ? [c.overrun?`<span class="bad">초과 ${won(c.overrun)}</span>`:"", c.unused?`안 씀 ${won(c.unused)}`:"", c.movedOut?`옮김 ${won(c.movedOut)}`:"", (c.amtVar!=null&&fx)?`금액차 ${sgn(c.amtVar)} · 환율차 ${c.fxVar==null?"계산 불가":sgn(c.fxVar)}`:""].filter(Boolean).join("<br>")||"—" : (c.overrun?`<span class="bad">초과 ${won(c.overrun)}</span>`:"—");
+    const acts=[`<button type="button" class="btn small" data-pe-edit="${p.id}">고치기</button>`];
+    if(!c.cancelled && !p.closedAt) acts.push(`<button type="button" class="btn small" data-pe-rec="${p.id}">기록하기</button>`, `<button type="button" class="btn small" data-pe-close="${p.id}">마감</button>`);
+    if(!c.cancelled && !p.closedAt && !c.used) acts.push(`<button type="button" class="btn small" data-pe-cancel="${p.id}">취소</button>`);
+    if(c.cancelled || p.closedAt) acts.push(`<button type="button" class="btn small" data-pe-reopen="${p.id}">되살리기</button>`);
+    if(fx && !c.done && !c.cancelled) acts.push(`<button type="button" class="btn small" data-pe-fx="${p.id}" title="최초 예상환율 ${(+(p.initialForecastRate||p.forecastRate)).toLocaleString("ko-KR")} (${esc(p.initialForecastRateAt||p.forecastRateAt||"")})은 그대로 남습니다">현재 환율로 갱신</button>`);
+    return `<tr${c.cancelled?' style="opacity:.55"':""}><td><b>${esc(p.description||"(이름 없음)")}</b><br><span class="tag">${esc(pjLbl(PE_KIND,p.kind||"OTHER"))}</span><span class="tag">${p.mode==="limit"?"한도":"단건"}</span><span class="tag">${bfLbl(p.beneficiary)}</span><span class="tag">${esc(pjLbl(PJ_PUR,p.purpose))}</span><span class="tag">${esc(pjLbl(PJ_TAX,p.taxTreatment||"REVIEW"))}</span>${p.expectedDate?`<span class="tag">${esc(p.expectedDate)} 예정</span>`:""}${p.memo?`<br><small style="color:var(--muted)">${esc(p.memo)}</small>`:""}</td>
+      <td>${PE_ST_LBL[c.st]}${p.closedAt?`<br><small>${esc(pjLbl(PE_CLOSE,p.closeReason))}</small>`:""}</td><td class="r num">${amtTxt}</td><td class="r num">${c.used?won(c.used):"—"}${c.txs.length?`<small class="fxs">${c.txs.length}건</small>`:""}</td><td class="r num"><b>${c.remaining?won(c.remaining):"—"}</b></td><td class="r" style="font-size:12px">${varTxt}</td></tr>
+      <tr><td colspan="6" style="padding-top:0;border-top:0">${acts.join(" ")}${peCloseId===p.id?peCloseUI(p,c,f):""}${peEdit&&peEdit.id===p.id?peEditUI(peEdit,ppl,opt):""}</td></tr>`; };
+  const grp=(lbl,L)=>L.length?`<tr><td colspan="6" style="background:var(--sunk);font-weight:600;font-size:12.5px">${lbl}</td></tr>`+L.map(row).join(""):"";
+  const it=f.items, open=it.filter(x=>!x.c.done&&!x.c.cancelled);
+  $("pjBody").innerHTML=`${pjKpis(f)}
+    <p class="hint" style="margin:0">실제집행은 이 프로젝트로 표시한 지출 전체입니다. 예정 항목에 연결된 결제는 실제집행에만 들어가고 예정에서는 그만큼 빠지므로 이중으로 세지 않습니다.${f.refunds?` 환불 ${won(f.refunds)}은 실제집행에서 빼지 않았습니다(내보내기에는 spentNet으로 따로 계산).`:""}</p>
+    <div class="scroll-x"><table class="dt"><thead><tr><th>예정 항목</th><th>상태</th><th class="r">예정</th><th class="r">연결된 결제</th><th class="r">남은 금액</th><th class="r">차이</th></tr></thead><tbody>
+    ${grp("확정예정",open.filter(x=>x.p.status==="committed"))}${grp("계획",open.filter(x=>x.p.status!=="committed"))}${grp("결제완료·마감·취소",it.filter(x=>x.c.done||x.c.cancelled))}
+    ${it.length?"":`<tr><td colspan="6" class="foot">아직 예정 항목이 없습니다.</td></tr>`}</tbody></table></div>
+    ${peEdit&&peEdit.isNew?peEditUI(peEdit,ppl,opt):`<button type="button" class="btn small" id="peAdd" style="justify-self:start">+ 예정 항목 추가</button>`}`;
+  const B=$("pjBody");
+  if($("peAdd")) $("peAdd").onclick=()=>{ peEdit={isNew:true, id:"pe_"+uid(), projectId:w.id, description:"", kind:"OTHER", mode:"single", status:"planned", currency:"KRW", amount:0, expectedDate:"", beneficiary:"COMMON", purpose:"", taxTreatment:"REVIEW", memo:""}; renderPj(); };
+  B.querySelectorAll("[data-pe-edit]").forEach(b=>b.onclick=()=>{ const p=peOf(b.dataset.peEdit); peEdit={...JSON.parse(JSON.stringify(p)), isNew:false}; peCloseId=null; renderPj(); });
+  B.querySelectorAll("[data-pe-rec]").forEach(b=>b.onclick=()=>recordPe(peOf(b.dataset.peRec)));
+  B.querySelectorAll("[data-pe-close]").forEach(b=>b.onclick=()=>{ peCloseId=b.dataset.peClose; peEdit=null; renderPj(); });
+  B.querySelectorAll("[data-pe-cancel]").forEach(b=>b.onclick=async()=>{ if(b.dataset.c!=="1"){ b.dataset.c="1"; b.textContent="취소 — 한 번 더 누르기"; return; } const p=peOf(b.dataset.peCancel); p.prevStatus=p.status; p.status="cancelled"; p.cancelledAt=peNow(); p.updatedAt=peNow(); await savePj(); renderPj(); render(); });
+  B.querySelectorAll("[data-pe-reopen]").forEach(b=>b.onclick=async()=>{ const p=peOf(b.dataset.peReopen);
+    if(p.status==="cancelled"){ p.status=p.prevStatus||"planned"; p.cancelledAt=null; }
+    if(p.closedAt){ if(p.movedTo){ const t=peOf(p.movedTo.id); if(t) t.movedIn=(t.movedIn||[]).filter(x=>x.from!==p.id), t.updatedAt=peNow(); delete p.movedTo; } p.closedAt=null; p.closeReason=null; }
+    p.updatedAt=peNow(); await savePj(); renderPj(); render(); });
+  B.querySelectorAll("[data-pe-fx]").forEach(b=>b.onclick=async()=>{ const p=peOf(b.dataset.peFx); b.disabled=true; const r=await fetchFx(true,p.currency); if(!p.initialForecastRate){ p.initialForecastRate=p.forecastRate; p.initialForecastRateAt=p.forecastRateAt; } p.forecastRate=r; p.forecastRateAt=fxInfo(p.currency).d||todayISO(); p.updatedAt=peNow(); await savePj(); renderPj(); render(); });
+  bindPeEdit(w); bindPeClose(w);
+}
+function peEditUI(e,ppl,opt){ const fx=(e.currency||"KRW")!=="KRW";
+  return `<div class="pe-ed" id="peEd"><div class="brow">
+    <label class="fld" style="flex:2 1 220px">항목명<input data-pe="description" value="${esc(e.description||"")}" placeholder="예: 나나트래블 2일 단독투어"></label>
+    <label class="fld">종류<select data-pe="kind">${opt(PE_KIND,e.kind||"OTHER")}</select></label>
+    <label class="fld">방식<select data-pe="mode"><option value="single"${e.mode!=="limit"?" selected":""}>단건 (결제 한두 번)</option><option value="limit"${e.mode==="limit"?" selected":""}>한도 (여러 번 나눠 씀)</option></select></label>
+    <label class="fld">상태<select data-pe="status"><option value="planned"${e.status!=="committed"?" selected":""}>계획</option><option value="committed"${e.status==="committed"?" selected":""}>확정예정</option></select></label>
+  </div><div class="brow">
+    <label class="fld" style="flex:0 1 150px">통화<select data-pe="currency" data-re="1"><option value="KRW">원</option>${CURS.map(([c,sy,nm])=>`<option value="${c}"${e.currency===c?" selected":""}>${c} ${sy}</option>`).join("")}</select></label>
+    <label class="fld">예정금액 (${fx?esc(curSym(e.currency)):"원"})<input data-pe="amount" inputmode="${fx?"decimal":"numeric"}" value="${e.amount?(fx?String(+e.amount):(+e.amount).toLocaleString("ko-KR")):""}"></label>
+    <label class="fld">예상 결제일<input type="date" data-pe="expectedDate" value="${esc(e.expectedDate||"")}"></label>
+  </div>${fx?`<div class="hint" style="margin:4px 0">예상환율 <b>${(+(e.forecastRate||fxRate(e.currency))).toLocaleString("ko-KR")}원</b> ${e.forecastRateAt?`(${esc(e.forecastRateAt)} 기준, 고정)`:"(저장할 때 오늘 환율로 고정)"} → 약 ${won(Math.round((+e.amount||0)*(+(e.forecastRate||fxRate(e.currency)))))}</div>`:""}<div class="brow">
+    <label class="fld">비용 대상<select data-pe="beneficiary"><option value="COMMON"${e.beneficiary==="COMMON"?" selected":""}>공통</option><option value="SPLIT"${e.beneficiary==="SPLIT"?" selected":""}>배분 (결제 기록 때 사람별로)</option>${ppl.map(x=>`<option value="${esc(x)}"${e.beneficiary===x?" selected":""}>${esc(x)}</option>`).join("")}<option value=""${!e.beneficiary?" selected":""}>미지정</option></select></label>
+    <label class="fld">목적<select data-pe="purpose">${opt(PJ_PUR,e.purpose||"","미지정")}</select></label>
+    <label class="fld">세무 구분<select data-pe="taxTreatment">${opt(PJ_TAX,e.taxTreatment||"REVIEW")}</select></label>
+    <label class="fld" style="flex:2 1 200px">메모<input data-pe="memo" value="${esc(e.memo||"")}"></label>
+  </div><div class="brow" style="justify-content:flex-end;gap:6px;margin-top:6px"><button type="button" class="btn small" id="peCancelEd">닫기</button><button type="button" class="btn small primary" id="peSave">${e.isNew?"항목 추가":"저장"}</button></div></div>`; }
+function bindPeEdit(w){ const ed=$("peEd"); if(!ed) return;
+  ed.querySelectorAll("[data-pe]").forEach(el=>el.oninput=el.onchange=ev=>{ const k=el.dataset.pe;
+    if(k==="amount"){ if((peEdit.currency||"KRW")==="KRW"){ const n=el.value.replace(/[^\d]/g,""); peEdit.amount=+n||0; el.value=n?(+n).toLocaleString("ko-KR"):""; } else peEdit.amount=+el.value.replace(/[^\d.]/g,"")||0; }
+    else if(k==="currency"){ if(ev.type!=="change") return; peEdit.currency=el.value; peEdit.amount=0; delete peEdit.forecastRate; delete peEdit.forecastRateAt; delete peEdit.initialForecastRate; delete peEdit.initialForecastRateAt; if(el.value!=="KRW") fetchFx(false,el.value).then(()=>renderPj()); else renderPj(); }
+    else peEdit[k]=el.value;
+    if(k==="kind" && /^REWARD/.test(el.value) && !peEdit.taxTreatment) peEdit.taxTreatment="REVIEW"; });
+  $("peCancelEd").onclick=()=>{ peEdit=null; renderPj(); };
+  $("peSave").onclick=async()=>{ const e=peEdit; if(!e.description.trim()){ ed.querySelector('[data-pe="description"]').focus(); return; } if(!(+e.amount>0)){ ed.querySelector('[data-pe="amount"]').focus(); return; }
+    const now=peNow(), cur=e.currency||"KRW";
+    if(cur!=="KRW" && !e.forecastRate){ e.forecastRate=fxRate(cur); e.forecastRateAt=fxInfo(cur).d||todayISO(); }
+    if(cur!=="KRW" && !e.initialForecastRate){ e.initialForecastRate=e.forecastRate; e.initialForecastRateAt=e.forecastRateAt; }
+    if(cur==="KRW"){ delete e.forecastRate; delete e.forecastRateAt; delete e.initialForecastRate; delete e.initialForecastRateAt; }
+    const it={...e}; delete it.isNew; it.updatedAt=now;
+    if(e.isNew){ it.createdAt=now; pjp.items.push(it); } else pjp.items=pjp.items.map(x=>x.id===it.id?it:x);
+    peEdit=null; await savePj(); renderPj(); render(); }; }
+function peCloseUI(p,c,f){ const sug=c.used>=c.target?"COMPLETED":"UNDER_BUDGET", others=f.items.filter(x=>x.p.id!==p.id && !x.c.done && !x.c.cancelled);
+  const left=Math.max(0,c.target-c.used);
+  return `<div class="pe-ed" id="peCl"><div class="brow"><label class="fld">마감 사유<select id="peReason">${PE_CLOSE.map(([v,l])=>`<option value="${v}"${v===sug?" selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="fld" id="peMoveL" hidden>옮길 예정 항목<select id="peMoveTo"><option value="">— 고르기 —</option>${others.map(x=>`<option value="${x.p.id}">${esc(x.p.description)}</option>`).join("")}</select></label></div>
+    <div class="hint" style="margin:4px 0">연결된 결제 ${won(c.used)} / 예정 ${won(c.target)}. 마감하면 남은 ${won(left)}은 예상총액에서 빠지고 ‘안 쓴 금액’으로 남습니다(옮기기를 고르면 그 항목 한도에 더해짐).</div>
+    <div class="brow" style="justify-content:flex-end;gap:6px"><button type="button" class="btn small" id="peClX">닫기</button><button type="button" class="btn small primary" id="peClGo">마감</button></div></div>`; }
+function bindPeClose(w){ const box=$("peCl"); if(!box) return; const p=peOf(peCloseId), c=peCalc(p);
+  $("peReason").onchange=()=>{ $("peMoveL").hidden=$("peReason").value!=="MOVED"; }; $("peMoveL").hidden=$("peReason").value!=="MOVED";
+  $("peClX").onclick=()=>{ peCloseId=null; renderPj(); };
+  $("peClGo").onclick=async()=>{ const r=$("peReason").value, now=peNow(), left=Math.max(0,c.target-c.used);
+    if(r==="MOVED"){ const to=$("peMoveTo").value; if(!to){ $("peMoveTo").focus(); return; } const t=peOf(to); t.movedIn=(t.movedIn||[]).concat([{from:p.id, amt:left, at:now}]); t.updatedAt=now; p.movedTo={id:to, amt:left, at:now}; }
+    p.closedAt=now; p.closeReason=r; p.updatedAt=now; peCloseId=null; await savePj(); renderPj(); render(); }; }
+/* '기록하기': 예정 항목 값으로 기록 창을 채움 */
+function recordPe(p){ const c=peCalc(p), w=wsOf(p.projectId); closeOv("pjOv");
+  openTx(null,null); $("iDate").value=p.expectedDate||todayISO(); $("iDate").dispatchEvent(new Event("change"));
+  $("iDesc").value=p.description||""; if(w){ $("iWs").value=p.projectId; pjFields({bf:p.beneficiary==="SPLIT"?"":(p.beneficiary||""), pur:p.purpose||"", tax:p.taxTreatment||"REVIEW", pe:p.id}); }
+  const cur=p.currency||"KRW", single=(p.mode||"single")!=="limit";
+  if(cur!=="KRW"){ const left=single?Math.max(0,(+p.amount||0)-c.txs.reduce((a,t)=>a+(t.fx&&(t.fx.cur||"USD")===cur?+t.fx.amt:0),0)):0; fxFormSet({cur, amt:left||"", rate:fxRate(cur)}, true); }
+  else if(single && c.remaining) $("iAmt").value=c.remaining.toLocaleString("ko-KR");
+  if(p.beneficiary==="SPLIT"){ $("iAllocOn").checked=true; $("iAllocOn").dispatchEvent(new Event("change")); }
+  if(isCorpCat($("iCat").value)===false && (w&&w.owner)!=="me"){ const b=document.querySelector('#entInSeg [data-v="corp"]'); if(b) b.click(); }
+  updateHint(); }
 /* ---------- 렌더 ---------- */
 function monthTx(ym){ return months[ym]||[]; }
 function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym).forEach(t=>{ if(t.t==="out"&&t.st==="pending") out.push(t); })); return out; }
@@ -1614,6 +1746,12 @@ const bfLbl=v=>v==="COMMON"?"공통":v==="SPLIT"?"배분":v==="OTHER"?"기타 �
 /* 거래를 사람 몫으로 펼침: 배분이 있으면 몫마다(목적·세무는 몫 값, 없으면 거래 값), 없으면 거래 하나 */
 function txShares(t){ if(t.alloc && Object.keys(t.alloc).length) return Object.entries(t.alloc).map(([p,x])=>({who:p, amt:+x.a||0, pur:x.pur||t.pur||"", tax:x.tax||t.tax||"REVIEW"}));
   return [{who:t.bf||"", amt:+t.amt||0, pur:t.pur||"", tax:t.tax||"REVIEW"}]; }
+/* 승인예산 → 실제집행 → 확정예정 → 계획한도 → 예상총액 → 예상잔액, 세무검토(실제·예정) */
+function pjBar(f){ const B=Math.max(f.budget, f.forecast)||1, pc=v=>Math.max(0,Math.min(100,v/B*100)).toFixed(2);
+  return `<div class="pjbar" title="진한 색 실제집행 · 중간 확정예정 · 옅은 색 계획한도${f.budget?" · 세로선 승인예산":""}"><span style="width:${pc(f.spent)}%" class="a"></span><span style="width:${pc(f.committed)}%" class="c"></span><span style="width:${pc(f.plannedLimit)}%" class="p"></span>${f.budget?`<i style="left:${pc(f.budget)}%"></i>`:""}</div>`; }
+function pjKpis(f){ const cell=(k,v,cls,sub)=>`<div class="pjk ${cls||""}"><div class="k">${k}</div><div class="v num">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
+  return `<div class="pjks">${cell("승인예산",f.budget?won(f.budget):"—")}${cell("실제집행",won(f.spent),"a",f.budget?`집행률 ${pctTxt(f.rateActual)}`:"")}${cell("확정예정",won(f.committed),"c")}${cell("계획한도",won(f.plannedLimit),"p")}${cell("예상총액",won(f.forecast),f.overBudgetForecast?"bad":"",f.budget?`예상 집행률 ${pctTxt(f.rateForecast)}`:"")}${cell("예상잔액",f.budget?sgn(f.remainingForecast):"—",f.overBudgetForecast?"bad":"",f.budget?`실제 잔여 ${sgn(f.remainingActual)}`:"")}${cell("세무검토 (실제)",won(f.reviewActual))}${cell("세무검토 (예정)",won(f.reviewPlanned))}</div>${pjBar(f)}${f.overBudgetForecast?`<div class="hint warn" style="margin:4px 0 0">예상총액이 승인예산을 ${won(f.forecast-f.budget)} 넘습니다.</div>`:""}`; }
+function pjFinLine(w){ const f=pjFin(w); return `실제 ${won(f.spent)} · 확정예정 ${won(f.committed)} · 계획한도 ${won(f.plannedLimit)} · <b>예상총액 ${won(f.forecast)}</b>${f.budget?` · 예상잔액 <b class="${f.remainingForecast<0?"bad":""}">${sgn(f.remainingForecast)}</b>`:""} · 세무검토 실제 ${won(f.reviewActual)} / 예정 ${won(f.reviewPlanned)} <button type="button" class="btn small" data-pjopen="${esc(w.id)}" style="margin-left:6px">예산·예정비용 관리</button>`; }
 function renderWs(){
   const t=$("wsTbl"); if(!t) return; const L=wsList(), all=allTx().filter(x=>x.ws && x.t==="out");
   if(!L.length){ t.innerHTML=`<tbody><tr><td class="foot">아직 프로젝트·행사가 없습니다. 기록 창의 ‘프로젝트·행사’에서 새로 만들거나 ‘프로젝트·행사 관리’에서 추가하세요.</td></tr></tbody>`; return; }
@@ -1624,9 +1762,10 @@ function renderWs(){
     const fxN=xs.filter(x=>x.fx).length;
     return {w,n:xs.length,tot,corp,pre,top,bf:grp("who"),tax:grp("tax"),pur:grp("pur"),fxN}; }).sort((a,b)=>b.w.start.localeCompare(a.w.start));
   const bud=w=>+w.budget||0, chips=(g,lbl)=>Object.entries(g).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(lbl(k))} ${won(v)}`).join(" · ");
+  setTimeout(()=>t.querySelectorAll("[data-pjopen]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); openPj(b.dataset.pjopen); }),0);
   t.innerHTML=`<thead><tr><th>프로젝트·행사</th><th>기간</th><th class="r">건수</th><th class="r">합계</th><th class="r">승인예산</th><th class="r">남은 예산</th><th>집행률</th><th class="r">법인</th><th class="r">미리 낸 돈</th><th>많이 쓴 항목</th></tr></thead><tbody>`+
     rows.map(r=>`<tr ${r.n?`data-dt='${esc(JSON.stringify({k:"ws",v:r.w.id,t:"out",ym:allYms(),lbl:"프로젝트 · "+r.w.name}))}' style="cursor:pointer"`:""}><td><b>${esc(r.w.name)}</b>${r.w.status==="plan"?'<span class="tag">계획</span>':r.w.status==="done"?'<span class="tag">완료</span>':""}${(r.w.owner||"corp")==="corp"?'<span class="tag">법인 주관</span>':""}</td><td>${esc(wsPeriod(r.w))}</td><td class="r num">${r.n}</td><td class="r num"><b>${won(r.tot)}</b></td><td class="r num">${bud(r.w)?won(bud(r.w)):"—"}</td><td class="r num ${bud(r.w)&&r.tot>bud(r.w)?"bad":""}">${bud(r.w)?sgn(bud(r.w)-r.tot):"—"}</td><td>${bud(r.w)?bBar(r.tot,bud(r.w)):"—"}</td><td class="r num">${won(r.corp)}</td><td class="r num">${r.pre?won(r.pre):"—"}</td><td style="font-size:12.5px;color:var(--muted)">${r.top||"—"}</td></tr>`+
-      (`<tr class="pjsub"><td colspan="10" style="font-size:12px;color:var(--muted);padding-top:0">참가자: ${pjPeopleOf(r.w).length?esc(pjPeopleOf(r.w).join(", ")):'<span class="bad">미지정</span>'}${pjOtherN(r.w)?` + 기타 ${pjOtherN(r.w)}명${(r.w.others||[]).length?` (${esc(r.w.others.join(", "))})`:""}`:""} · 총 ${pjTotal(r.w)}명${r.n?`<br>사람별 귀속(배분 반영): ${chips(r.bf,bfLbl)||"—"}`:""}${r.n?`<br>목적: ${chips(r.pur,v=>pjLbl(PJ_PUR,v))||"—"}<br>세무 구분: ${chips(r.tax,v=>pjLbl(PJ_TAX,v))||"—"}${r.fxN?` · 외화 기록 ${r.fxN}건`:""}`:""}</td></tr>`)).join("")+`</tbody>`;
+      (`<tr class="pjsub"><td colspan="10" style="font-size:12px;color:var(--muted);padding-top:0">참가자: ${pjPeopleOf(r.w).length?esc(pjPeopleOf(r.w).join(", ")):'<span class="bad">미지정</span>'}${pjOtherN(r.w)?` + 기타 ${pjOtherN(r.w)}명${(r.w.others||[]).length?` (${esc(r.w.others.join(", "))})`:""}`:""} · 총 ${pjTotal(r.w)}명${r.n?`<br>사람별 귀속(배분 반영): ${chips(r.bf,bfLbl)||"—"}`:""}<br>${pjFinLine(r.w)}${r.n?`<br>목적: ${chips(r.pur,v=>pjLbl(PJ_PUR,v))||"—"}<br>세무 구분: ${chips(r.tax,v=>pjLbl(PJ_TAX,v))||"—"}${r.fxN?` · 외화 기록 ${r.fxN}건`:""}`:""}</td></tr>`)).join("")+`</tbody>`;
 }
 let wDraft=null;
 $("wsEdit").onclick=()=>{ wDraft=JSON.parse(JSON.stringify(wsList())); pjCandDraft=pjCands().slice(); $("pjCandIn").value=pjCandDraft.join(", "); renderWsEdit(); openOv("wsOv"); };
@@ -2034,6 +2173,40 @@ $("applyAdj").onclick=()=>{
 
 /* 예약 집행: 집행일이 지나면 거래 내역에 자동 기록 */
 let budQ=Promise.resolve();
+function savePj(){
+  if(!pjRef) return Promise.resolve();
+  pjPending=true; const body=JSON.parse(JSON.stringify(pjp));
+  pjQ=pjQ.catch(()=>{}).then(()=>pjRef.set(body)).catch(e=>showNotice("예정비용을 저장하지 못했습니다 ("+(e&&e.code||"오류")+").")).finally(()=>{ pjPending=false; });
+  return pjQ; }
+/* ---------- 프로젝트 예정비용 계산 ----------
+   단건(single): 연결된 결제 합이 예정에 이르면 자동 '결제완료'. 한도(limit): 연결된 결제만큼 남은 한도가 줄어듦.
+   예상총액 = 실제집행(spent) + 열린 예정 항목의 남은 금액(취소·마감·완료 제외). 연결된 결제는 spent에만 들어가므로 이중 집계 없음. */
+const PE_KIND=[["AIR","항공"],["HOTEL","숙박"],["TOUR","투어·관람"],["MEAL","식사"],["TRANSPORT","교통"],["REWARD_CASH","포상금(현금)"],["REWARD_INKIND","포상(현물)"],["CONTINGENCY","예비비"],["OTHER","기타"]];
+const PE_CLOSE=[["COMPLETED","완료"],["UNDER_BUDGET","예정보다 적게 씀"],["MOVED","남은 금액을 다른 항목으로 옮김"],["CANCELLED","남은 부분 취소"],["OTHER","기타"]];
+const peOf=id=>pjp.items.find(x=>x.id===id)||null;
+const pesOf=pid=>pjp.items.filter(x=>x.projectId===pid);
+function peBase(p){ const c=p.currency||"KRW"; return c==="KRW" ? Math.round(+p.amount||0) : Math.round((+p.amount||0)*(+p.forecastRate||fxRate(c))); }
+function peCalc(p){
+  const cur=p.currency||"KRW", base=peBase(p), movedIn=(p.movedIn||[]).reduce((a,x)=>a+(+x.amt||0),0), target=base+movedIn;
+  const txs=allTx().filter(t=>t.pe===p.id && t.t==="out"), used=sumOf(txs);
+  const cancelled=p.status==="cancelled", closed=!!p.closedAt, autoDone=(p.mode||"single")!=="limit" && target>0 && used>=target, done=closed||autoDone;
+  const remaining=cancelled||done?0:Math.max(0,target-used), movedOut=p.movedTo?(+p.movedTo.amt||0):0;
+  const unused=closed?Math.max(0,target-used-movedOut):0, overrun=Math.max(0,used-target);
+  let fxVar=null, amtVar=null;
+  if(done || (cancelled && used)){ if(cur==="KRW") fxVar=0; else if(txs.length && txs.every(t=>t.fx && (t.fx.cur||"USD")===cur)) fxVar=txs.reduce((a,t)=>a+((+t.amt||0)-Math.round((+t.fx.amt||0)*(+p.forecastRate||0))),0);
+    amtVar=(used-(target-movedOut))-(fxVar||0); } /* 다른 항목으로 옮긴 금액은 '덜 쓴 것'이 아니므로 차이에서 뺌 */
+  const st=cancelled?"cancelled":closed?"closed":autoDone?"paid":used>0?"partial":(p.status||"planned");
+  return {base, target, movedIn, movedOut, used, remaining, unused, overrun, fxVar, amtVar, txs, st, done, cancelled}; }
+const PE_ST_LBL={planned:"계획", committed:"확정예정", partial:"일부 결제", paid:"결제완료", closed:"마감", cancelled:"취소"};
+function pjFin(w){
+  const xs=allTx().filter(t=>t.ws===w.id && t.t==="out"), spent=sumOf(xs), items=pesOf(w.id).map(p=>({p, c:peCalc(p)}));
+  const open=items.filter(x=>x.c.remaining>0), committed=open.filter(x=>x.p.status==="committed").reduce((a,x)=>a+x.c.remaining,0), plannedLimit=open.filter(x=>x.p.status!=="committed").reduce((a,x)=>a+x.c.remaining,0);
+  const budget=+w.budget||0, forecast=spent+committed+plannedLimit;
+  let reviewActual=0; xs.forEach(t=>txShares(t).forEach(sh=>{ if((sh.tax||"REVIEW")==="REVIEW") reviewActual+=sh.amt; }));
+  const reviewPlanned=open.filter(x=>(x.p.taxTreatment||"REVIEW")==="REVIEW").reduce((a,x)=>a+x.c.remaining,0);
+  const ids=new Set(xs.map(t=>t.id)), refundTx=allTx().filter(t=>t.t==="in" && (t.ws===w.id || (t.refundOf && ids.has(t.refundOf)))), refunds=sumOf(refundTx);
+  return {xs, spent, items, committed, plannedLimit, forecast, budget, remainingActual:budget?budget-spent:null, remainingForecast:budget?budget-forecast:null,
+    rateActual:budget?spent/budget*100:null, rateForecast:budget?forecast/budget*100:null, reviewActual, reviewPlanned, refunds, refundTx, overBudgetActual:!!budget&&spent>budget, overBudgetForecast:!!budget&&forecast>budget}; }
 function saveBudgets(){
   if(!budRef) return Promise.resolve();
   budPending=true; const body=JSON.parse(JSON.stringify(budgets));
@@ -3350,7 +3523,16 @@ function pjFields(t){ const w=$("iWs").value, on=!!w && form.t!=="move"; $("pjBo
   $("iPur").innerHTML=`<option value="">미지정</option>`+PJ_PUR.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
   $("iTax").innerHTML=PJ_TAX.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
   $("iBf").value=cur.bf||""; $("iPur").value=cur.pur||""; $("iTax").value=cur.tax||"REVIEW";
-  const al=cur.alloc&&Object.keys(cur.alloc).length?cur.alloc:null; $("iAllocOn").checked=!!al; allocRender(al, ppl, pjOtherN(W)); }
+  const al=cur.alloc&&Object.keys(cur.alloc).length?cur.alloc:null; $("iAllocOn").checked=!!al; allocRender(al, ppl, pjOtherN(W));
+  /* 예정 항목 연결(지출) · 환불 원거래(수입) */
+  const isIn=form.t==="in", pe=t?(t.pe||""):$("iPe").value, rf=t?(t.refundOf||""):$("iRefund").value;
+  $("peRow").hidden=isIn; $("peHint").hidden=isIn; $("rfRow").hidden=!isIn;
+  const its=pesOf(w).map(p=>({p,c:peCalc(p)})).filter(x=>!x.c.cancelled || x.p.id===pe);
+  $("iPe").innerHTML=`<option value="">연결 안 함</option>`+its.map(({p,c})=>`<option value="${esc(p.id)}">[${PE_ST_LBL[c.st]}] ${esc(p.description)} · 남은 ${won(c.remaining)}${p.mode==="limit"?" (한도)":""}</option>`).join("");
+  $("iPe").value=its.some(x=>x.p.id===pe)?pe:"";
+  const exps=allTx().filter(x=>x.ws===w && x.t==="out").sort((a,b)=>(b.d||"").localeCompare(a.d||""));
+  $("iRefund").innerHTML=`<option value="">해당 없음</option>`+exps.map(x=>`<option value="${esc(x.id)}">${esc(x.d)} ${esc(x.desc||"")} ${won(x.amt)}</option>`).join("");
+  $("iRefund").value=exps.some(x=>x.id===rf)?rf:""; }
 /* ---------- 사람별 배분 ----------
    tx.alloc = {UJ:{a:금액, pur?, tax?}, ...} (원화, 합계 = 거래 금액). 몫의 목적·세무 구분을 비우면 거래 값을 따름.
    배분이 있으면 비용 대상은 SPLIT('배분'). COMMON은 나누지 않은 공동비용으로만 씀(이중 집계 방지). */
@@ -3585,6 +3767,9 @@ $("txForm").onsubmit=async e=>{
         tx.alloc=al; bf="SPLIT"; } else { delete tx.alloc; if(bf==="SPLIT") bf=""; }
       if(bf) tx.bf=bf; else delete tx.bf; if(pur) tx.pur=pur; else delete tx.pur; tx.tax=tax; }
     else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; delete tx.alloc; } } else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; delete tx.alloc; }
+  /* 예정 항목 연결은 거래 쪽(pe)에만 저장. 환불은 refundOf */
+  if(tx.ws && form.t==="out" && $("iPe").value){ tx.pe=$("iPe").value; } else delete tx.pe;
+  if(tx.ws && form.t==="in" && $("iRefund").value){ tx.refundOf=$("iRefund").value; } else delete tx.refundOf;
   if(base && isRecon(base) && (tx.amt!==base.amt || tx.t!==base.t)) tx.lock=true;
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
@@ -3612,6 +3797,10 @@ $("txForm").onsubmit=async e=>{
   try{ await saveMonths(touched); }catch(_){}
   if(note) showNotice(note);
   await syncTBUSave(); showUndo("기록을 저장했습니다.");
+  /* 초과는 막지 않고 경고만 */
+  if(tx.ws){ const w=wsOf(tx.ws), msg=[]; if(tx.pe){ const p=peOf(tx.pe); if(p){ const c=peCalc(p); if(c.overrun) msg.push(`예정 항목 ‘${p.description}’보다 ${won(c.overrun)} 많이 결제됐습니다`); } }
+    if(w){ const f=pjFin(w); if(f.overBudgetActual) msg.push(`‘${w.name}’ 실제집행이 승인예산을 ${won(f.spent-f.budget)} 넘었습니다`); else if(f.overBudgetForecast) msg.push(`‘${w.name}’ 예상총액이 승인예산을 ${won(f.forecast-f.budget)} 넘습니다`); }
+    if(msg.length) showNotice("주의: "+msg.join(" · ")+"."); }
 };
 /* 거래 여러 건 지우기: 정산 이체를 지우면 그 이체로 정산된 거래를 다시 정산 대기로 돌림 */
 function removeTxs(items){ const touched=new Set(); let reopened=0;

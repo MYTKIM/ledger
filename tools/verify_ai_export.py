@@ -83,6 +83,31 @@ def main(path, proj_q=None):
             if dict(g) != {k: v for k, v in ps[key].items() if v}: bad(f"{ps['name']} {key} 불일치: {dict(g)} vs {ps[key]}")
             if sum(g.values()) != s: bad(f"{ps['name']} {key} 합계가 지출과 다름 (이중 집계?)")
 
+    print("8) 예정비용: 연결 거래 = 거래의 plannedExpenseId, 남은 금액·차이 계산, 예상총액 = spent + 열린 예정의 남은 금액")
+    PE = d.get("plannedExpenses", [])
+    for pe in PE:
+        linked = [t for t in T if t.get("plannedExpenseId") == pe["plannedExpenseId"] and t["type"] == "expense"]
+        if sorted(t["id"] for t in linked) != sorted(pe["linkedTransactionIds"]) and pe["linkedTransactionIds"]:
+            # 내보낸 기간 밖 거래가 연결돼 있을 수 있음
+            if set(t["id"] for t in linked) - set(pe["linkedTransactionIds"]): bad(f"예정 '{pe['description']}' 연결 거래 목록 불일치")
+        used = pe["usedKRW"]
+        if set(pe["linkedTransactionIds"]) <= {t["id"] for t in T} and used != sum(t["amount"] for t in linked): bad(f"예정 '{pe['description']}' 사용액 {used:,} ≠ 연결 거래 합 {sum(t['amount'] for t in linked):,}")
+        if pe["overrunAmount"] != max(0, used - pe["plannedAmount"]): bad(f"예정 '{pe['description']}' 초과액 계산 오류")
+        if pe["amountVariance"] is not None and pe["amountVariance"] + (pe["fxVariance"] or 0) != used - (pe["plannedAmount"] - pe.get("movedOutKRW", 0)): bad(f"예정 '{pe['description']}' 금액차+환율차 ≠ 사용−(예정−옮긴 금액)")
+        if pe.get("movedTo") and not any(m.get("from") == pe["plannedExpenseId"] for x in PE if x["plannedExpenseId"] == pe["movedTo"]["id"] for m in x["movedIn"]): bad(f"예정 '{pe['description']}' 옮긴 곳에 기록이 없음")
+        if pe["effectiveStatus"] in ("cancelled", "closed", "paid") and pe["remainingKRW"] != 0: bad(f"예정 '{pe['description']}' 끝난 항목인데 남은 금액 있음")
+        if pe["effectiveStatus"] not in ("cancelled", "closed", "paid") and pe["remainingKRW"] != max(0, pe["plannedAmount"] - used): bad(f"예정 '{pe['description']}' 남은 금액 계산 오류")
+    for ps in d.get("projectSummary", []):
+        if "forecastTotal" not in ps: continue
+        mine = [pe for pe in PE if pe["projectId"] == ps["projectId"]]
+        com = sum(pe["remainingKRW"] for pe in mine if pe["status"] == "committed"); pl = sum(pe["remainingKRW"] for pe in mine if pe["status"] == "planned")
+        if (com, pl) != (ps["committed"], ps["plannedLimit"]): bad(f"{ps['name']} 확정예정/계획한도 {com:,}/{pl:,} ≠ 요약 {ps['committed']:,}/{ps['plannedLimit']:,}")
+        if ps["forecastTotal"] != ps["spent"] + com + pl: bad(f"{ps['name']} 예상총액 ≠ spent + 예정")
+        if ps["approvedBudget"] and ps["remainingForecast"] != ps["approvedBudget"] - ps["forecastTotal"]: bad(f"{ps['name']} 예상잔액 계산 오류")
+        if ps["spentNet"] != ps["spentGross"] - ps["refunds"]: bad(f"{ps['name']} spentNet 계산 오류")
+        rv = sum(pe["remainingKRW"] for pe in mine if (pe["taxTreatment"] or "REVIEW") == "REVIEW")
+        if rv != ps["reviewPlanned"]: bad(f"{ps['name']} 예정 세무검토 {rv:,} ≠ {ps['reviewPlanned']:,}")
+
     if proj_q:
         print(f"\n[재구성] '{proj_q}' 프로젝트 비용")
         P = [p for p in d.get("projectSummary", []) if proj_q.lower() in p["name"].lower()]
@@ -91,7 +116,11 @@ def main(path, proj_q=None):
             s = sum(t["amount"] for t in xs)
             pj = next((p for p in d.get("projects", []) if p["projectId"] == ps["projectId"]), {})
             print(f"  {ps['name']} · 참가자 {', '.join(pj.get('people', [])) or '미지정'} + 기타 {pj.get('otherPeopleCount', 0)}명 = 총 {pj.get('totalAttendees', '?')}명")
-            print(f"  승인예산 {ps['approvedBudget'] or 0:,} · 지출 {s:,} · 남은 예산 {(ps['approvedBudget'] or 0)-s:,}")
+            print(f"  승인예산 {ps['approvedBudget'] or 0:,} · 실제집행 {s:,} · 실제 잔여 {(ps['approvedBudget'] or 0)-s:,}")
+            if "forecastTotal" in ps:
+                print(f"  확정예정 {ps['committed']:,} · 계획한도 {ps['plannedLimit']:,} · 예상총액 {ps['forecastTotal']:,} · 예상잔액 {ps['remainingForecast'] if ps['remainingForecast'] is not None else '-':,} · 세무검토 실제 {ps['reviewActual']:,} / 예정 {ps['reviewPlanned']:,}")
+                for pe in [x for x in d.get('plannedExpenses', []) if x['projectId'] == ps['projectId']]:
+                    print(f"     [예정 {pe['effectiveStatus']}] {pe['description']} {pe['plannedAmount']:,} · 사용 {pe['usedKRW']:,} · 남음 {pe['remainingKRW']:,}" + (f" · 금액차 {pe['amountVariance']:,} 환율차 {pe['fxVariance']}" if pe['amountVariance'] is not None else "") + (f" · 안 씀 {pe['unusedAmount']:,}" if pe['unusedAmount'] else "") + (f" · 초과 {pe['overrunAmount']:,}" if pe['overrunAmount'] else ""))
             for i, nm in [(0, "사람별 귀속(배분 반영)"), (2, "목적"), (3, "세무 구분")]:
                 g = collections.Counter()
                 for t in xs:
