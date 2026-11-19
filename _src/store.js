@@ -13,7 +13,8 @@
   "use strict";
   const CFG = window.LEDGER_CONFIG || {};
   const DBN = "woojin-ledger", ST = "docs";
-  const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+  /* drive.appdata: 동기화(숨김 폴더). drive.file: AI 분석용 사본처럼 이 앱이 만든 일반 드라이브 파일만 */
+  const SCOPE = "https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file";
   const API = "https://www.googleapis.com/drive/v3", UP = "https://www.googleapis.com/upload/drive/v3";
   const DEL_KEEP_MS = 400 * 864e5;
 
@@ -152,6 +153,7 @@
     if (p.get("access_token") && p.get("state") === expected) {
       ls.set("ldg_token", p.get("access_token"));
       ls.set("ldg_token_exp", String(Date.now() + (+p.get("expires_in") || 3600) * 1000));
+      ls.set("ldg_token_scope", p.get("scope") || "");
       ls.set("ldg_signed_in", "1");
     } else if (p.get("error")) {
       if (!silent) ls.set("ldg_last_auth_error", p.get("error"));
@@ -280,6 +282,15 @@
     logout,
     hasConfig: () => !!CFG.googleClientId,
     _merge: { stampMonths, mergeMonths },
+    /* 일반 드라이브(내보내기) 전용: 동기화용 gfetch와 달리 권한 부족이어도 로그인 토큰을 지우지 않음 */
+    hasFileScope: () => !!token() && /drive\.file/.test(ls.get("ldg_token_scope") || ""),
+    async driveFetch(url, opts = {}) {
+      const t = token(); if (!t) { const e = new Error("auth"); e.code = "auth"; throw e; }
+      const r = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: "Bearer " + t } });
+      if (r.status === 401) { const e = new Error("auth"); e.code = "auth"; throw e; }
+      if (r.status === 403) { let m = ""; try { m = JSON.stringify(await r.clone().json()); } catch (_) {} if (/insufficient|scope/i.test(m)) { const e = new Error("scope"); e.code = "scope"; throw e; } }
+      return r;
+    },
   };
   // 앱은 claude.ai와 같은 방식으로 저장소를 요청합니다.
   window.claude = { use: async (name) => (name === "db" ? ready : null) };

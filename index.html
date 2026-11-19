@@ -614,6 +614,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <div class="panel"><h3>데이터</h3>
       <div class="set-row"><b>가져오기</b><span>구글 시트 가계부 불러오기</span><button type="button" class="btn" data-go="openImport">열기</button></div>
       <div class="set-row"><b>백업</b><span>백업 파일 내려받기·가져오기</span><button type="button" class="btn" data-go="openBackup">열기</button></div>
+      <div class="set-row"><b>AI 분석용 내보내기</b><span>고른 기간·범위의 장부를 내 구글 드라이브 ‘U JIN Ledger AI’ 폴더에 읽기용 사본으로 저장</span><button type="button" class="btn" data-go="openAi">열기</button><button type="button" id="openAi" hidden></button></div>
       <div class="set-row"><b>데이터 점검</b><span>ID가 겹친 거래, 중복 의심 거래, 끊어진 정산 연결 찾기</span><button type="button" class="btn" data-go="openCheck">열기</button><button type="button" id="openCheck" hidden></button></div>
       <div class="set-row"><b>예전 화면</b><span>메뉴 개편 전 화면(보관용). 이 기기의 장부를 그대로 봅니다</span><a class="btn" href="./v1/">열기</a></div>
     </div>
@@ -887,6 +888,34 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 </div>
 
 <!-- 백업 -->
+<div class="overlay" id="aiOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="aiTitle">
+    <h3><span id="aiTitle">AI 분석용 내보내기</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form">
+      <p class="hint" style="margin:0">장부를 내 구글 드라이브 <b>‘U JIN Ledger AI’</b> 폴더에 분석용 사본(JSON·CSV)으로 저장합니다. 원본 장부와 동기화 데이터(숨김 폴더)는 바뀌지 않습니다. 자동으로 다시 만들지 않으니, AI에게 보여 줄 시점에 직접 업데이트하세요.</p>
+      <div id="aiStatus" class="hint" style="margin:0"></div>
+      <div class="brow">
+        <label class="fld">기간<select id="aiPer"><option value="month">이번 달</option><option value="3m">최근 3개월</option><option value="year" selected>올해</option><option value="custom">직접 지정</option><option value="all">전체</option></select></label>
+        <label class="fld" id="aiFromL" hidden>시작 달<input type="month" id="aiFrom"></label>
+        <label class="fld" id="aiToL" hidden>끝 달<input type="month" id="aiTo"></label>
+      </div>
+      <div class="f"><span class="lbl">넣을 범위 <small style="font-weight:400;color:var(--muted)">기본은 분석에 꼭 필요한 최소 범위</small></span>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px">
+          <label class="check"><input type="checkbox" checked disabled style="width:auto"> 거래 (항상)</label>
+          <label class="check"><input type="checkbox" data-ai="meta" checked style="width:auto"> 계정과목·결제수단</label>
+          <label class="check"><input type="checkbox" data-ai="projects" checked style="width:auto"> 프로젝트·행사</label>
+          <label class="check"><input type="checkbox" data-ai="budgets" checked style="width:auto"> 예산 요약</label>
+          <label class="check"><input type="checkbox" data-ai="plans" style="width:auto"> 월별 계획 (시트)</label>
+          <label class="check"><input type="checkbox" data-ai="person" style="width:auto"> 거래의 사람 표시 (TY·YJ 등)</label>
+          <label class="check"><input type="checkbox" data-ai="people" style="width:auto"> 사람 장부 (맡은 돈·빌려 준 돈)</label>
+          <label class="check"><input type="checkbox" data-ai="balances" style="width:auto"> 계좌 잔액</label>
+          <label class="check"><input type="checkbox" data-ai="xfers" style="width:auto"> 자동이체 상세</label>
+        </div></div>
+      <div class="hint" id="aiMsg" hidden style="margin:0"></div>
+      <div class="actions"><span><button type="button" class="btn small" id="aiDel">드라이브의 분석본 삭제</button> <button type="button" class="btn small" id="aiDown">이 기기로 내려받기</button></span><div class="r"><button type="button" class="btn" data-close>닫기</button><button type="button" class="btn primary" id="aiGo">AI 분석본 만들기</button></div></div>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="ckOv" hidden>
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="ckTitle">
     <h3><span id="ckTitle">데이터 점검</span><button class="x" data-close aria-label="닫기">×</button></h3>
@@ -1256,6 +1285,126 @@ function renderCheck(){
     if(reopened) showNotice(`정산 이체를 지워 ${reopened}건을 다시 정산 대기로 돌렸습니다.`);
     showUndo(`중복 의심 기록 ${on.length}건을 지웠습니다.`); }; }
 }
+/* ---------- AI 분석용 내보내기 ----------
+   원본(기기 저장소·드라이브 숨김 폴더)은 그대로 두고, 고른 범위를 '읽기용 사본'으로 만듦.
+   이중 집계 방지: 거래마다 손익 효과(economicEffect)와 현금 흐름(cashFlowEffect)을 따로 넣고, 앱 합계에 들어가는지(includeInTotals)와 연결 ID를 붙임.
+   폴더·파일 ID는 동기화되는 설정(config.aiExport)에 저장해 어느 기기에서 내보내도 같은 파일을 갱신함. */
+const AI_DEF={meta:true, projects:true, budgets:true, plans:false, person:false, people:false, balances:false, xfers:false};
+const AI_SCHEMA="1.0";
+function aiOpts(){ return {...AI_DEF, ...((config.aiExport||{}).opts||{})}; }
+function aiRange(per, from, to){ const ys=allYms(), cur=CUR_YM;
+  if(per==="month") return [cur,cur]; if(per==="3m") return [ymAdd(cur,-2),cur]; if(per==="year") return [cur.slice(0,4)+"-01",cur];
+  if(per==="custom") return [from||ys[0]||cur, to||cur]; return [ys[0]||cur, ys[ys.length-1]||cur]; }
+const ENT_ID={corp:"SUSLAB", me:"PERSONAL"};
+function aiTxKind(t){
+  if(isRecon(t)) return "reconciliation";          /* 잔액 맞춤: 통장 잔액과 장부 차이를 메운 기록 */
+  if(t.tbu) return "card_unconfirmed";               /* 카드 청구액 중 아직 내역을 못 찾은 차액 */
+  if(t.t==="move") return (t.settles&&t.settles.length) ? "settlement_transfer" : "transfer";
+  return t.t==="out" ? "expense" : "income"; }
+function aiTx(t, o){
+  const m=methodOf(t.m)||null, kind=aiTxKind(t), inTot=t.t==="out"||t.t==="in";
+  const sign=t.t==="out"?-1:t.t==="in"?1:0, ent=t.t==="move"?null:(ENT_ID[t.ent==="corp"?"corp":"me"]);
+  const W=t.ws?wsOf(t.ws):null;
+  const links=[].concat(t.settles||[], t.settledBy?[t.settledBy]:[], t.schOf?["budget:"+t.schOf.split("|")[0]]:[], t.snapTs?["balanceSnapshot:"+t.snapTs]:[], t.bill&&t.tbu?["cardBill:"+t.m+"|"+t.bill]:[]);
+  const r={
+    id:t.id, date:t.d, time:null, type:kind==="expense"||kind==="card_unconfirmed"||(kind==="reconciliation"&&t.t==="out")?"expense":kind==="income"||(kind==="reconciliation"&&t.t==="in")?"income":"transfer", kind,
+    amount:+t.amt||0, currency:"KRW",
+    originalAmount:t.fx?+t.fx.amt:null, originalCurrency:t.fx?t.fx.cur||"USD":null, exchangeRate:t.fx?+t.fx.rate:null, effectiveRate:t.fx&&t.fx.rateEff?+t.fx.rateEff:null, cardFeePct:t.fx&&+t.fx.fee?+t.fx.fee:null,
+    merchant:null, description:t.desc||"", memo:"",
+    category:t.cat||null, categoryPath:t.cat?catSegs(t.cat):[],
+    entity:ent, paymentMethod:m?{code:m.code, name:m.name||"", kind:kindOf(m)}:(t.m?{code:t.m,name:"",kind:null}:null),
+    payVia:t.via||null, account:t.t==="move"||NOT_ACCT(txAcct(t))?null:(txAcct(t)||null), from:t.t==="move"?(effects(t).find(e=>e.v<0)||{}).acct||null:null, to:t.t==="move"?(effects(t).find(e=>e.v>0)||{}).acct||null:null,
+    projectId:t.ws||null, projectName:W?W.name:null, beneficiary:t.ws?(t.bf||null):null, purpose:t.ws?(t.pur||null):null, taxTreatment:t.ws?(t.tax||"REVIEW"):null,
+    settlement:t.st?{status:t.st, settledOn:t.settledOn||null}:null, installments:+t.inst>1?+t.inst:null,
+    includeInTotals:inTot,
+    economicEffect:{amount:inTot?sign*(+t.amt||0):0, entity:ent, note:kind==="transfer"||kind==="settlement_transfer"?"계좌 간 이동이라 손익 없음":kind==="reconciliation"?"통장 잔액에 맞춘 보정(빠진 지출·이자 등)":kind==="card_unconfirmed"?"카드 청구액 중 내역 미확인분(지출로 셈)":null},
+    cashFlowEffect:effects(t).filter(e=>e.acct && !NOT_ACCT(e.acct)).map(e=>({account:e.acct, date:e.d, amount:e.v, viaCard:!!e.card})),
+    linkedIds:links,
+    source:{month:t.d.slice(0,7), updatedAt:t.u||null, origin:t.src||"manual"}
+  };
+  if(isCustody(t)) r.custody=true;
+  if(o.person && t.pp) r.person=t.pp;
+  return r; }
+function buildAiExport(per, from, to, o){
+  const [a,b]=aiRange(per,from,to), yms=Object.keys(months).filter(k=>k>=a&&k<=b).sort();
+  const txs=[].concat(...yms.map(k=>monthTx(k))).sort((x,y)=>(x.d||"").localeCompare(y.d||"")||(x.ts||0)-(y.ts||0));
+  const T=txs.map(t=>aiTx(t,o));
+  const tz=-new Date().getTimezoneOffset(), off=(tz>=0?"+":"-")+pad(Math.floor(Math.abs(tz)/60))+":"+pad(Math.abs(tz)%60), now=new Date(Date.now()+tz*60000).toISOString().slice(0,19)+off;
+  /* 앱이 계산한 월별 합계(검산용): 홈 화면과 같은 규칙 — 지출·수입만, 이체 제외 */
+  const monthly=yms.map(k=>{ const L=monthTx(k), outs=L.filter(t=>t.t==="out"), ins=L.filter(t=>t.t==="in"); return {month:k, expenseCorp:sumOf(outs.filter(t=>t.ent==="corp")), expensePersonal:sumOf(outs.filter(t=>t.ent!=="corp")), expenseTotal:sumOf(outs), income:sumOf(ins), transactions:L.length}; });
+  const allT=allTx();
+  const out={schemaVersion:AI_SCHEMA, exportType:"ledger-ai", generatedAt:now, appVersion:window.LEDGER_VERSION||"", owner:{displayName:"U JIN"},
+    period:{from:a+"-01", to:b+"-"+pad(lastDay(+b.slice(0,4),+b.slice(5,7)))}, currency:"KRW",
+    readme:[
+      "transactions가 원본이고 나머지 요약은 검산용입니다. 요약과 거래 합계가 다르면 거래를 믿으세요.",
+      "지출·수입 합계는 includeInTotals가 true인 거래의 economicEffect.amount를 더하세요(지출은 음수). type이 transfer인 거래는 계좌 간 이동이라 손익에 넣지 않습니다.",
+      "카드 사용은 사용일(date)에 손익으로 잡히고, 실제 출금은 cashFlowEffect의 카드 결제일입니다. 카드 대금 출금은 따로 거래로 저장하지 않으므로 이중으로 셀 일이 없습니다.",
+      "kind=reconciliation은 통장 잔액과 장부 차이를 메운 보정, card_unconfirmed는 카드 청구액 중 내역을 아직 못 찾은 금액입니다. 둘 다 앱 합계에 들어갑니다.",
+      "settlement.status=pending은 법인 비용을 개인 돈으로 먼저 내고 아직 돌려받지 않은 것, settlement_transfer는 그 정산 이체입니다(손익 없음).",
+      "외화 거래는 amount(원화)가 확정 금액입니다. exchangeRate는 기록 당시 적용 환율, effectiveRate는 원화를 카드 청구액으로 고친 경우의 실제 환율입니다.",
+      "entity: SUSLAB=지속발전연구소(주) 법인, PERSONAL=개인·가계. 프로젝트 거래의 beneficiary(비용 대상)·purpose(목적)·taxTreatment(세무 구분)는 사용자가 입력한 값이고, taxTreatment=REVIEW는 세무 확인 전이라는 뜻입니다.",
+      "custody=true는 가족에게 맡거나 보낸 돈(예수금) 관련 기록이며 앱 기본 설정에서는 지출·수입에 포함됩니다."],
+    transactions:T, monthlyTotals:monthly};
+  if(o.meta){ out.categories={expense:config.outCats.slice(), income:(config.inCats||[]).slice()}; out.paymentMethods=config.methods.map(m=>({code:m.code, name:m.name||"", kind:kindOf(m), account:m.acct||null, owner:(resolve(m.code)||{}).own||null, linkedTo:m.link||null})); }
+  if(o.projects){ const W=wsList().filter(w=>allT.some(t=>t.ws===w.id) || (w.end||w.start)>=a+"-01");
+    out.projects=W.map(w=>({projectId:w.id, name:w.name, start:w.start, end:w.end||w.start, owner:w.owner==="me"?"PERSONAL":"SUSLAB", status:{plan:"planned",approved:"approved",done:"done"}[w.status||"approved"], approvedBudget:+w.budget||null, currency:"KRW", people:w.people||PJ_PEOPLE, note:w.note||""}));
+    /* 프로젝트 요약은 기간과 상관없이 그 프로젝트의 모든 지출로 계산 */
+    out.projectSummary=W.map(w=>{ const xs=allT.filter(t=>t.ws===w.id && t.t==="out"), spent=sumOf(xs), grp=f=>{ const g={}; xs.forEach(t=>{ const k=t[f]||(f==="tax"?"REVIEW":"UNSPECIFIED"); g[k]=(g[k]||0)+(+t.amt||0); }); return g; };
+      const bf={}; xs.forEach(t=>{ const k=t.bf||"UNSPECIFIED"; bf[k]=(bf[k]||0)+(+t.amt||0); });
+      return {projectId:w.id, name:w.name, approvedBudget:+w.budget||null, spent, remaining:+w.budget?(+w.budget-spent):null, transactions:xs.length, transactionIds:xs.map(t=>t.id), byBeneficiary:bf, byPurpose:grp("pur"), byTaxTreatment:grp("tax"), byEntity:{SUSLAB:sumOf(xs.filter(t=>t.ent==="corp")), PERSONAL:sumOf(xs.filter(t=>t.ent!=="corp"))}}; }); }
+  if(o.budgets){ out.budgets=budgets.items.filter(x=>x.key&&(+x.amount||0)>0).map(x=>({category:x.key.slice(2), type:typeOfKey(x.key)==="in"?"income":"expense", frequency:freqOf(x), amount:+x.amount, currency:x.cur||"KRW", monthlyEquivalentKRW:Math.round(monthEq(x)), start:x.start||null, end:x.end||null, name:x.name||null})); }
+  if(o.plans){ out.plans=Object.keys(plans||{}).filter(k=>k>=a&&k<=b).sort().map(k=>({month:k, expense:plans[k].out||{}, income:plans[k].inc||{}})); }
+  if(o.people){ out.people=(accounts.people||[]).map(P=>{ const L=personLedger(P); return {name:P.name, heldForThem:L.hold, lentToThem:L.loan, paidTotal:L.paid}; }); }
+  if(o.balances){ out.balances=accounts.list.map(x=>{ const tr=tracked(x.name, todayISO()); return {account:x.name, balance:tr?tr.bal:null, lastSnapshot:tr?{date:tr.snap.d, balance:tr.snap.bal}:null}; }); }
+  if(o.xfers){ out.autoTransfers=(accounts.xfers||[]).map(x=>({name:x.name||null, from:x.from, to:x.to, amount:+x.amt||0, rule:ruleTxt(xfAsBudget(x)), category:x.cat||null, end:x.end||null})); }
+  const st=(window.LedgerSync&&LedgerSync.status())||{};
+  out.metadata={syncState:st.pending?"pending":(st.state||"local"), lastSourceSync:st.last?new Date(st.last).toISOString():null, exportedFromDevice:true, included:Object.keys(o).filter(k=>o[k]), transactionCount:T.length, excludedByDefault:["people","balances","autoTransfers","person"].filter(k=>!o[k==="autoTransfers"?"xfers":k])};
+  return out; }
+function aiCsv(T){ const cols=["date","type","kind","amount","currency","originalAmount","originalCurrency","exchangeRate","description","entity","person","project","beneficiary","expensePurpose","taxTreatment","paymentMethod","category","includeInTotals","economicAmount","id"];
+  const q=v=>{ v=v==null?"":String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  return "\ufeff"+cols.join(",")+"\n"+T.map(t=>[t.date,t.type,t.kind,t.amount,t.currency,t.originalAmount,t.originalCurrency,t.exchangeRate,t.description,t.entity,t.person||"",t.projectName||"",t.beneficiary,t.purpose,t.taxTreatment,t.paymentMethod?t.paymentMethod.name||t.paymentMethod.code:"",t.category,t.includeInTotals,t.economicEffect.amount,t.id].map(q).join(",")).join("\n")+"\n"; }
+/* 일반 드라이브 쓰기 (drive.file 권한) */
+const DRV="https://www.googleapis.com/drive/v3/files", UPL="https://www.googleapis.com/upload/drive/v3/files";
+async function drvJson(url,opts){ const r=await LedgerSync.driveFetch(url,opts); if(!r.ok){ const e=new Error("http "+r.status); e.status=r.status; throw e; } return r.status===204?null:r.json(); }
+async function aiFolder(){ const ax=config.aiExport||{};
+  if(ax.folderId){ try{ const f=await drvJson(`${DRV}/${ax.folderId}?fields=id,trashed,webViewLink`); if(f && !f.trashed) return f; }catch(e){ if(e.code==="scope"||e.code==="auth") throw e; } }
+  return drvJson(`${DRV}?fields=id,webViewLink`,{method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:"U JIN Ledger AI", mimeType:"application/vnd.google-apps.folder"})}); }
+async function aiUpsert(fileId, name, mime, body, parent){
+  const bd="ldg"+Math.random().toString(36).slice(2), meta=fileId?{name}:{name, parents:[parent]};
+  const payload=`--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${bd}\r\nContent-Type: ${mime}\r\n\r\n${body}\r\n--${bd}--`;
+  const go=(id)=>drvJson(id?`${UPL}/${id}?uploadType=multipart&fields=id,webViewLink`:`${UPL}?uploadType=multipart&fields=id,webViewLink`,{method:id?"PATCH":"POST", headers:{"Content-Type":"multipart/related; boundary="+bd}, body:id?payload:payload.replace(JSON.stringify(meta),JSON.stringify({name,parents:[parent]}))});
+  try{ return await go(fileId); }catch(e){ if(fileId && (e.status===404||e.status===403)) return go(null); throw e; } }
+function aiMsg(h,warn){ const m=$("aiMsg"); m.hidden=!h; m.className="hint"+(warn?" warn":""); m.style.margin="0"; m.innerHTML=h||""; }
+function renderAi(){ const ax=config.aiExport||{}, o=aiOpts();
+  $("aiOv").querySelectorAll("[data-ai]").forEach(c=>{ c.checked=!!o[c.dataset.ai]; });
+  if(ax.per){ $("aiPer").value=ax.per; } $("aiFromL").hidden=$("aiToL").hidden=$("aiPer").value!=="custom";
+  $("aiStatus").innerHTML = ax.at ? `저장 위치: 내 드라이브 / <b>U JIN Ledger AI</b>${ax.link?` · <a href="${esc(ax.link)}" target="_blank" rel="noopener">드라이브에서 열기</a>`:""}<br>최근 생성: ${esc(new Date(ax.at).toLocaleString("ko-KR"))} · 대상 기간: ${esc(ax.from)} ~ ${esc(ax.to)} · 거래 ${ax.n}건 · 파일: ledger_ai_latest.json, ledger_ai_transactions.csv` : "아직 만든 분석본이 없습니다.";
+  $("aiGo").textContent = ax.at ? "AI 분석본 업데이트" : "AI 분석본 만들기"; $("aiDel").hidden=!ax.folderId; aiMsg(""); }
+$("openAi").onclick=()=>{ renderAi(); openOv("aiOv"); };
+$("aiPer").onchange=()=>{ $("aiFromL").hidden=$("aiToL").hidden=$("aiPer").value!=="custom"; };
+function aiCollect(){ const o={...AI_DEF}; $("aiOv").querySelectorAll("[data-ai]").forEach(c=>{ o[c.dataset.ai]=c.checked; }); return o; }
+$("aiDown").onclick=()=>{ const o=aiCollect(), data=buildAiExport($("aiPer").value,$("aiFrom").value,$("aiTo").value,o);
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:"application/json"})); a.download="ledger_ai_latest.json"; document.body.appendChild(a); a.click(); a.remove(); aiMsg(`이 기기로 내려받았습니다 (거래 ${data.transactions.length}건).`); };
+$("aiGo").onclick=async()=>{ const btn=$("aiGo"), o=aiCollect(), per=$("aiPer").value;
+  if(!window.LedgerSync || !LedgerSync.hasConfig()){ aiMsg("구글 드라이브 연결이 설정되지 않은 앱입니다. ‘이 기기로 내려받기’를 쓰세요.",true); return; }
+  if(!LedgerSync.hasFileScope()){ aiMsg(`드라이브에 분석본을 만들려면 구글 권한을 한 번 더 허용해야 합니다. <button type="button" class="btn small primary" id="aiLogin">구글 로그인·권한 허용</button><br><small>로그인 화면에서 “이 앱에서 사용하는 Google Drive 파일” 접근을 허용하세요. 돌아온 뒤 이 창을 다시 열어 버튼을 누르면 됩니다.</small>`,true); $("aiLogin").onclick=()=>LedgerSync.login(); return; }
+  btn.disabled=true; const old=btn.textContent;
+  try{
+    btn.textContent="동기화 중…"; try{ await Promise.race([LedgerSync.syncNow(), new Promise(r=>setTimeout(r,15000))]); }catch(_){}
+    btn.textContent="만드는 중…"; const data=buildAiExport(per,$("aiFrom").value,$("aiTo").value,o);
+    const folder=await aiFolder(); const ax={...(config.aiExport||{})}; if(ax.folderId!==folder.id){ ax.folderId=folder.id; delete ax.jsonId; delete ax.csvId; }
+    const j=await aiUpsert(ax.jsonId,"ledger_ai_latest.json","application/json",JSON.stringify(data,null,1),folder.id);
+    const c=await aiUpsert(ax.csvId,"ledger_ai_transactions.csv","text/csv",aiCsv(data.transactions),folder.id);
+    Object.assign(ax,{jsonId:j.id, csvId:c.id, link:folder.webViewLink||ax.link||"", at:Date.now(), from:data.period.from, to:data.period.to, n:data.transactions.length, per, opts:o});
+    config.aiExport=ax; await saveConfig(); renderAi(); aiMsg(`드라이브의 분석본을 ${ax.n}건으로 갱신했습니다.`);
+  }catch(e){ if(e.code==="scope"||e.code==="auth"){ aiMsg(`구글 권한이 필요합니다. <button type="button" class="btn small primary" id="aiLogin">구글 로그인·권한 허용</button>`,true); $("aiLogin").onclick=()=>LedgerSync.login(); } else aiMsg("드라이브에 저장하지 못했습니다: "+esc(e.message||String(e)),true); }
+  finally{ btn.disabled=false; if(btn.textContent!=="AI 분석본 업데이트") btn.textContent=(config.aiExport||{}).at?"AI 분석본 업데이트":old; } };
+$("aiDel").onclick=async()=>{ const b=$("aiDel"), ax=config.aiExport||{};
+  if(b.dataset.c!=="1"){ b.dataset.c="1"; b.textContent="드라이브의 AI 분석용 사본만 지웁니다 — 한 번 더 누르기"; aiMsg("원본 장부와 동기화 데이터는 지워지지 않습니다."); return; }
+  b.dataset.c=""; b.textContent="드라이브의 분석본 삭제";
+  try{ for(const id of [ax.jsonId, ax.csvId, ax.folderId]) if(id){ try{ await drvJson(`${DRV}/${id}`,{method:"DELETE"}); }catch(e){ if(e.code==="scope"||e.code==="auth") throw e; } }
+    config.aiExport={opts:ax.opts, per:ax.per}; await saveConfig(); renderAi(); aiMsg("드라이브의 AI 분석본을 지웠습니다. 원본 장부는 그대로입니다."); }
+  catch(e){ aiMsg("지우지 못했습니다. 구글 로그인·권한을 확인해 주세요.",true); } };
 /* ---------- 렌더 ---------- */
 function monthTx(ym){ return months[ym]||[]; }
 function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym).forEach(t=>{ if(t.t==="out"&&t.st==="pending") out.push(t); })); return out; }

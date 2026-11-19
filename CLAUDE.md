@@ -11,6 +11,7 @@
   - `sw.js` 오프라인 캐시. `build.py`가 버전 문자열을 넣는다.
   - `build.py` 원본을 합쳐 저장소 맨 위(index.html, config.js, store.js, ui.js, sw.js, manifest, icons, vendor)에 게시 파일을 만든다.
 - 저장소 맨 위 파일은 빌드 결과물. 직접 고치지 말 것.
+- `tools/verify_ai_export.py` AI 분석용 내보내기 파일 독립 검산(앱 코드 없이 파일만으로 월 합계·프로젝트 합계·외화 환산 재계산). `tools/AI_EXPORT_CHECK.md` ChatGPT 검증 절차.
 - `v1/` 메뉴 개편(2026-11-12) 전 화면을 보관한 정적 사본. 빌드가 건드리지 않음. 되돌릴 때 참고.
 
 ## 고치고 게시하는 법
@@ -20,4 +21,5 @@
 
 ## 데이터 원칙
 - 장부 데이터는 절대 저장소에 넣지 않는다 (기기 IndexedDB와 사용자 구글 드라이브 앱 전용 폴더에만 있음).
+- AI 분석용 내보내기: 사용자가 누를 때만 일반 드라이브 'U JIN Ledger AI' 폴더에 ledger_ai_latest.json·ledger_ai_transactions.csv를 덮어씀(drive.file 권한). 폴더·파일 ID는 config/main의 aiExport에 저장. 원본 동기화(appDataFolder)와 분리.
 - 문서 경로: months/YYYY-MM {ym, tx[], del{}}, plans/YYYY-MM {out{}, inc{}}, config/main(결제수단·계정), config/accounts(계좌·잔액), config/budgets(예산·집행일·자동기록).
