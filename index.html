@@ -2596,11 +2596,11 @@ function renderCats(){
         rows+=`<div class="cat-sg" data-drag="node" data-key="${esc(sp)}"><div class="cat-sub" draggable="true" data-drag="node" data-key="${esc(sp)}"><button type="button" class="tg" data-tg="${esc(sp)}" aria-expanded="${so}" aria-label="${so?"접기":"펼치기"}">${so?"▾":"▸"}</button><span class="drag" title="끌어서 소그룹 순서 바꾸기">⋮⋮</span><span class="snm">${esc(sg[1])}</span><span class="cnt" style="font-weight:400">${sl.length}개 · ${sn?`<span class="cnt-link"${dtAttr({k:"cat",v:sl,t:type,ym:allYms(),lbl:sp+" 전체"})}>${sn}건</span>`:"0건"}</span><span class="acts" style="margin-left:auto"><button type="button" class="mv" data-step="node|${esc(sp)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="node|${esc(sp)}|1" aria-label="아래로">↓</button>${btn("addin",sp,"하위 추가")}${btn("rengrp",sp,"소그룹 이름 바꾸기")}</span></div><div class="cat-sb" ${so?"":"hidden"}>`; }
       else if(sg.length<3 && lastSub!==null){ rows+=`</div></div>`; lastSub=null; }
       const label = sg.length>=3 ? sg.slice(2).join(" › ") : sg.length===2 ? sg[1] : "(그룹 자체)";
-      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button><button type="button" class="btn small bbadge" data-bud="${esc(c)}" title="이 계정의 ${type==="in"?"계획":"예산"} 정하기·고치기">${budBadge(type,c)?esc(budBadge(type,c)):(type==="in"?"+ 계획":"+ 예산")}</button>${btn("edit",c,"고치기")}${btn("merge",c,"합치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
+      rows+=`<div class="cat-l ${sg.length>=3?"d3":""}" draggable="true" data-drag="item" data-key="${esc(c)}"><span class="drag" title="끌어서 순서 바꾸기">⋮⋮</span><span class="nm">${esc(label)}${catFlag(type,c)}</span>${use[c]?`<span class="cnt cnt-link"${dtAttr({k:"cat",v:c,t:type,ym:allYms(),lbl:c})} title="마지막 기록 ${esc(lastUse[c]||"")}">${use[c]}건 · ${lastUse[c]?lastUse[c].slice(2,4)+"."+lastUse[c].slice(5,7):""}</span>`:`<span class="cnt">기록 없음</span>`}<span class="acts"><button type="button" class="mv" data-step="item|${esc(c)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="item|${esc(c)}|1" aria-label="아래로">↓</button><button type="button" class="btn small bbadge" data-bud="${esc(c)}" title="이 계정의 ${type==="in"?"계획":"예산"} 정하기·고치기">${budBadge(type,c)?esc(budBadge(type,c)):(type==="in"?"+ 계획":"+ 예산")}</button>${btn("edit",c,"고치기")}${btn("move",c,"옮기기")}${btn("merge",c,"합치기")}${btn("del",c,"삭제")}</span></div><div class="cat-edit" data-for="${esc(c)}" hidden></div>`;
     });
     if(lastSub!==null) rows+=`</div></div>`;
     const open=catOpen.has(type+":"+g);
-    return `<div class="cat-g" data-drag="grp" data-key="${esc(g)}"><div class="cat-h" draggable="true" data-drag="grp" data-key="${esc(g)}"><button type="button" class="tg" data-tg="${esc(g)}" aria-expanded="${open}" aria-label="${open?"접기":"펼치기"}">${open?"▾":"▸"}</button><span class="drag" title="끌어서 대그룹 순서 바꾸기">⋮⋮</span><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n?`<span class="cnt-link"${dtAttr({k:"cat",v:list,t:type,ym:allYms(),lbl:g+" 전체"})}>${n}건</span>`:"0건"}</span><span class="acts"><button type="button" class="mv" data-step="grp|${esc(g)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="grp|${esc(g)}|1" aria-label="아래로">↓</button>${btn("addin",g,"하위 추가")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div><div class="cat-body" ${open?"":"hidden"}>${rows}</div></div>`;
+    return `<div class="cat-g" data-drag="grp" data-key="${esc(g)}"><div class="cat-h" draggable="true" data-drag="grp" data-key="${esc(g)}"><button type="button" class="tg" data-tg="${esc(g)}" aria-expanded="${open}" aria-label="${open?"접기":"펼치기"}">${open?"▾":"▸"}</button><span class="drag" title="끌어서 대그룹 순서 바꾸기">⋮⋮</span><b>${esc(g)}</b>${type==="out"&&g==="지발연"?'<span class="chip corp">법인</span>':""}<span class="cnt">${list.length}개 · ${n?`<span class="cnt-link"${dtAttr({k:"cat",v:list,t:type,ym:allYms(),lbl:g+" 전체"})}>${n}건</span>`:"0건"}</span><span class="acts"><button type="button" class="mv" data-step="grp|${esc(g)}|-1" aria-label="위로">↑</button><button type="button" class="mv" data-step="grp|${esc(g)}|1" aria-label="아래로">↓</button>${btn("addin",g,"하위 추가")}${btn("mksub",g,"소그룹 만들기")}${btn("rengrp",g,"대그룹 이름 바꾸기")}</span></div><div class="cat-edit" data-for="grp:${esc(g)}" hidden></div><div class="cat-body" ${open?"":"hidden"}>${rows}</div></div>`;
   }).join("") || `<div class="hint">계정이 없습니다.</div>`;
   $("catTree").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>catAction(b.dataset.act, b.dataset.arg, b));
   $("catTree").querySelectorAll("[data-bud]").forEach(b=>b.onclick=()=>{ closeOv("catOv"); openBudEdit({type:catType, cat:b.dataset.bud}); });
@@ -2645,6 +2645,39 @@ function budBadge(type,c){ const L=budgets.items.filter(b=>b.key===bKey(type,c))
   return `${L.length}개 · 월 ${won(L.reduce((a,b)=>a+monthEq(b),0))}`; }
 function catAction(act, arg, el){
   const type=catType, use=catUse(type);
+  /* 소그룹 만들기: 대그룹 안에서 이름을 정하고, 넣을 계정을 골라 한 번에 옮김 (예: 생활비-식비 → 생활비-가족-식비) */
+  if(act==="mksub"){
+    const g=arg, inG=catKnown(type).filter(c=>catSegs(c)[0]===g).sort(catOrderSort(type));
+    const where=c=>{ const S=catSegs(c); return S.length>=3 ? S[1] : "바로 아래"; };
+    let lst="", cur=null; inG.forEach(c=>{ const w=where(c); if(w!==cur){ lst+=`<div style="flex-basis:100%;font-size:11.5px;color:var(--muted);margin-top:4px">${esc(w==="바로 아래"?g+" 바로 아래":g+" › "+w)}</div>`; cur=w; } lst+=`<label class="check" style="font-size:13px;margin-right:10px"><input type="checkbox" value="${esc(c)}" style="width:auto"> ${esc(catSegs(c).slice(-1)[0])}${use[c]?` <span style="color:var(--muted)">${use[c]}건</span>`:""}</label>`; });
+    const row=openEditRow("grp:"+g, `<span style="flex-basis:100%;font-size:12.5px">‘${esc(g)}’ 안에 새 소그룹을 만들고, 아래에서 고른 계정을 그 안으로 옮깁니다. 거래·예산·자동이체도 함께 따라갑니다.</span><input aria-label="새 소그룹 이름" placeholder="새 소그룹 이름 (예: 가족)" style="flex:1 1 200px"><div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:2px 0">${lst}</div><button type="button" class="btn primary small">소그룹 만들고 옮기기</button><button type="button" class="btn small">취소</button>`);
+    const [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
+    ok.onclick=async()=>{ const nm=row.querySelector("input:not([type])").value.trim().replace(/\s*-\s*/g," "); const pick=[...row.querySelectorAll("input[type=checkbox]:checked")].map(x=>x.value);
+      if(!nm){ row.querySelector("input:not([type])").focus(); return; } if(!pick.length){ catMsg("옮길 계정을 하나 이상 골라 주세요.",true); return; }
+      const sp=g+"-"+nm; if(catKnown(type).includes(sp)){ catMsg(`‘${esc(sp)}’라는 계정이 이미 있어 같은 이름의 소그룹을 만들 수 없습니다. 다른 이름을 쓰거나, 그 계정을 먼저 옮기거나 합쳐 주세요.`,true); return; }
+      const map={}; pick.forEach(c=>{ const to=sp+"-"+catSegs(c).slice(-1)[0]; if(to!==c) map[c]=to; });
+      const clash=Object.values(map).filter(t=>catKnown(type).includes(t)&&!(t in map));
+      if(clash.length && ok.dataset.c!=="1"){ ok.dataset.c="1"; ok.textContent=`같은 이름(${clash.length}개)은 합쳐집니다 — 한 번 더 누르기`; return; }
+      ok.disabled=true; ok.textContent="옮기는 중…"; await applyCatRename(type,map); catOpen.add(type+":"+g); catOpen.add(type+":"+sp); catOpenSave(); renderCats();
+      catMsg(`‘${esc(g)} › ${esc(nm)}’ 소그룹을 만들고 ${Object.keys(map).length}개 계정을 옮겼습니다.`); render(); };
+    return;
+  }
+  /* 옮기기: 계정 하나를 다른 대그룹·소그룹으로 (이름의 앞부분만 바뀜) */
+  if(act==="move"){
+    const c=arg, leaf=catSegs(c).slice(-1)[0], cur=catSegs(c).slice(0,-1).join("-");
+    const nodes=[]; catKnown(type).sort(catOrderSort(type)).forEach(x=>{ const S=catSegs(x); const g0=S[0]; if(!nodes.includes(g0)) nodes.push(g0); if(S.length>=3){ const sp=S.slice(0,2).join("-"); if(!nodes.includes(sp)) nodes.push(sp); } });
+    const opts=nodes.map(n=>{ const S=catSegs(n); return `<option value="${esc(n)}"${n===cur?" disabled":""}>${S.length===1?esc(n)+" (바로 아래)":"　"+esc(S.join(" › "))}${n===cur?" ← 지금 위치":""}</option>`; }).join("")+`<option value="__new">+ 새 소그룹 만들기…</option>`;
+    const row=openEditRow(c, `<span style="flex-basis:100%;font-size:12.5px">‘${esc(leaf)}’을(를) 옮길 곳을 고르세요. 거래·예산·자동이체도 함께 따라갑니다.</span><select aria-label="옮길 곳"><option value="">— 옮길 곳 고르기 —</option>${opts}</select><input aria-label="새 소그룹 이름" placeholder="새 소그룹 이름" hidden style="flex:0 1 160px"><button type="button" class="btn primary small">옮기기</button><button type="button" class="btn small">취소</button>`);
+    const sel=row.querySelector("select"), inp=row.querySelector("input"), [ok,cancel]=row.querySelectorAll("button"); cancel.onclick=()=>{ row.hidden=true; };
+    sel.onchange=()=>{ inp.hidden=sel.value!=="__new"; if(!inp.hidden) inp.focus(); ok.dataset.c=""; ok.textContent="옮기기"; };
+    ok.onclick=async()=>{ let dest=sel.value; if(!dest){ sel.focus(); return; }
+      if(dest==="__new"){ const nm=inp.value.trim().replace(/\s*-\s*/g," "); if(!nm){ inp.focus(); return; } dest=catSegs(c)[0]+"-"+nm; if(catKnown(type).includes(dest)){ catMsg(`‘${esc(dest)}’라는 계정이 이미 있어 같은 이름의 소그룹을 만들 수 없습니다.`,true); return; } }
+      const to=dest+"-"+leaf; if(to===c){ row.hidden=true; return; }
+      if(catKnown(type).includes(to) && ok.dataset.c!=="1"){ ok.dataset.c="1"; ok.textContent=`‘${catShow(to)}’이(가) 이미 있어 합쳐집니다 — 한 번 더 누르기`; return; }
+      ok.disabled=true; ok.textContent="옮기는 중…"; await applyCatRename(type,{[c]:to}); const S=catSegs(to); catOpen.add(type+":"+S[0]); if(S.length>=3) catOpen.add(type+":"+S.slice(0,2).join("-")); catOpenSave(); renderCats();
+      catMsg(`‘${esc(c)}’ → ‘${esc(to)}’(으)로 옮겼습니다.`); render(); };
+    return;
+  }
   if(act==="addin"){
     const holder = catSegs(arg).length===1 ? "grp:"+arg : (el.closest(".cat-g").querySelector('.cat-edit[data-for^="grp:"]').dataset.for);
     const row=openEditRow(holder, `<input value="${esc(arg)}-" aria-label="새 계정 이름"><button type="button" class="btn primary small">추가</button><button type="button" class="btn small">취소</button>`);
