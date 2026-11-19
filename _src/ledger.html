@@ -275,6 +275,10 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .bitem{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--paper);display:grid;gap:10px}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+.ckrow{display:flex;align-items:stretch;border-bottom:1px solid var(--line)}
+.ckrow .row{flex:1;border-bottom:0}
+.ckbox{display:flex;align-items:center;padding:0 4px 0 12px;cursor:pointer}
+.ckbox input{width:18px;height:18px}
 .brow label.fld{display:grid;gap:4px;font-size:11.5px;font-weight:600;color:var(--muted);flex:1 1 130px;min-width:0}
 .brow label.fld.wide{flex:2 1 220px}
 .brow label.fld.narrow{flex:0 1 96px}
@@ -1163,6 +1167,7 @@ async function fixDupIds(){
   return rep;
 }
 /* 점검 화면: ① 바로잡은 ID ② 중복 의심(같은 날·금액·적요) ③ 끊어진 정산 연결 */
+let ckSel=new Set();
 function renderCheck(){
   const all=[]; Object.keys(months).forEach(k=>monthTx(k).forEach(t=>all.push({...t, _ym:k})));
   const byId=new Map(all.map(t=>[t.id,t]));
@@ -1175,13 +1180,34 @@ function renderCheck(){
   let h=`<h4 style="margin:4px 0">① 같은 ID를 가진 거래</h4>`;
   h+= dupId.length ? `<p class="hint warn">아직 ${dupId.length}묶음이 남아 있습니다. <button type="button" class="btn small" id="ckFix">지금 바로잡기</button></p>` : `<p class="hint">지금은 없습니다.${log?` 마지막으로 바로잡은 때: ${esc(new Date(log.at).toLocaleString("ko-KR"))} · ${log.items.length}묶음 (내용이 다른 거래 ${log.renamed}건에 새 ID, 완전히 같은 중복 ${log.merged}건은 하나로)`:""}</p>`;
   if(log && log.items.length) h+=`<div class="hint" style="font-size:12px;max-height:140px;overflow:auto">${log.items.map(x=>`${esc(x.ym)}: ${x.desc.map(esc).join(" / ")}`).join("<br>")}</div>`;
-  h+=`<h4 style="margin:14px 0 4px">② 중복 의심 — 같은 날짜·금액·적요 ${susL.length}묶음</h4><p class="hint" style="margin:0 0 6px">실제로 두 번 낸 것이 아니라면 하나를 열어 지우세요. 눌러서 열 수 있습니다.</p>`;
-  h+= susL.length ? `<div class="ledger">${susL.map(l=>l.map(row).join("")+`<div style="height:6px;background:var(--line)"></div>`).join("")}</div>` : `<p class="hint">없습니다.</p>`;
+  h+=`<h4 style="margin:14px 0 4px">② 중복 의심 — 같은 날짜·금액·적요 ${susL.length}묶음</h4><p class="hint" style="margin:0 0 6px">실제로 두 번 낸 것이 아니라면 하나만 남기고 지우세요. 한 건씩 열어서 지워도 되고, 체크해서 한 번에 지울 수도 있습니다.</p>`;
+  if(susL.length){
+    h+=`<div class="brow" style="gap:6px;margin-bottom:6px"><button type="button" class="btn small" id="ckKeep1">묶음마다 하나만 남기고 모두 체크</button><button type="button" class="btn small" id="ckNone">체크 모두 해제</button><span class="hint" style="margin:0;padding:4px 8px">지울 기록 앞을 체크하고 맨 아래 ‘체크한 기록 지우기’를 누르세요. 줄을 누르면 내용을 열어 볼 수 있습니다.</span></div>`;
+    h+=`<div class="ledger">${susL.map((l,gi)=>l.map((t,j)=>`<div class="ckrow"><label class="ckbox" title="지울 기록으로 체크"><input type="checkbox" data-ck="${esc(t._ym)}|${esc(t.id)}" data-g="${gi}" data-j="${j}"${ckSel.has(t._ym+"|"+t.id)?" checked":""}></label>${row(t)}</div>`).join("")+`<div style="height:6px;background:var(--line)"></div>`).join("")}</div>`;
+    h+=`<div class="actions" style="position:sticky;bottom:-18px;background:var(--surface);padding:10px 0;border-top:1px solid var(--line);z-index:2"><span class="hint" id="ckSelInfo" style="margin:0;background:none"></span><div class="r"><button type="button" class="btn primary" id="ckDel" disabled>체크한 기록 지우기</button></div></div>`;
+  } else h+=`<p class="hint">없습니다.</p>`;
   h+=`<h4 style="margin:14px 0 4px">③ 끊어진 정산 연결 ${broken.length}건</h4>`;
   h+= broken.length ? `<p class="hint" style="margin:0 0 6px">정산 이체와 원래 거래의 연결이 끊긴 기록입니다. 열어서 정산 상태를 확인하세요.</p><div class="ledger">${broken.map(row).join("")}</div>` : `<p class="hint">없습니다.</p>`;
   const sh=$("ckOv").querySelector(".sheet"), st=sh?sh.scrollTop:0; $("ckBody").innerHTML=h; if(sh) sh.scrollTop=st;
   $("ckBody").querySelectorAll(".row[data-id]").forEach(b=>b.onclick=()=>openTx(b.dataset.ym, b.dataset.id)); /* 점검 화면은 그대로 두고 그 위에 기록 창을 엶 */
   const fx=$("ckFix"); if(fx) fx.onclick=async()=>{ fx.disabled=true; await fixDupIds(); renderCheck(); };
+  /* ② 체크해서 한 번에 지우기 */
+  const cbs=[...$("ckBody").querySelectorAll("input[data-ck]")], del=$("ckDel");
+  const upd=()=>{ if(!del) return; const on=cbs.filter(c=>c.checked); ckSel=new Set(on.map(c=>c.dataset.ck));
+    const groupsAll=[...new Set(cbs.map(c=>c.dataset.g))].filter(g=>cbs.filter(c=>c.dataset.g===g).every(c=>c.checked)).length;
+    const sum=on.reduce((a,c)=>{ const [ym,id]=c.dataset.ck.split("|"); const t=monthTx(ym).find(x=>x.id===id); return a+(t?+t.amt||0:0); },0);
+    $("ckSelInfo").innerHTML = on.length ? `${on.length}건 · ${won(sum)}${groupsAll?` · <span class="bad">묶음 ${groupsAll}개는 모두 체크되어 그 기록이 하나도 남지 않습니다</span>`:""}` : "체크한 기록이 없습니다.";
+    del.disabled=!on.length; del.dataset.c=""; del.textContent=on.length?`체크한 ${on.length}건 지우기`:"체크한 기록 지우기"; };
+  cbs.forEach(c=>{ c.onclick=e=>e.stopPropagation(); c.onchange=upd; });
+  const k1=$("ckKeep1"); if(k1) k1.onclick=()=>{ cbs.forEach(c=>{ c.checked=c.dataset.j!=="0"; }); upd(); };
+  const kn=$("ckNone"); if(kn) kn.onclick=()=>{ cbs.forEach(c=>{ c.checked=false; }); upd(); };
+  if(del){ upd(); del.onclick=async()=>{ const on=cbs.filter(c=>c.checked); if(!on.length) return;
+    if(del.dataset.c!=="1"){ del.dataset.c="1"; del.textContent=`${on.length}건을 지웁니다 — 한 번 더 누르기`; return; }
+    del.disabled=true; beginUndo();
+    const {touched,reopened}=removeTxs(on.map(c=>{ const [ym,id]=c.dataset.ck.split("|"); return {ym,id}; }));
+    ckSel=new Set(); render(); await saveMonths(touched); await syncTBUSave();
+    if(reopened) showNotice(`정산 이체를 지워 ${reopened}건을 다시 정산 대기로 돌렸습니다.`);
+    showUndo(`중복 의심 기록 ${on.length}건을 지웠습니다.`); }; }
 }
 /* ---------- 렌더 ---------- */
 function monthTx(ym){ return months[ym]||[]; }
@@ -3029,7 +3055,7 @@ $("tPendBox").onclick=pendGo; $("tPendBox").onkeydown=e=>{ if(e.key==="Enter"||e
 /* ---------- 오버레이 공통 ---------- */
 /* 창 위에 창을 열면 새 창이 늘 위로 오게 하고, Esc는 맨 위 창만 닫음 */
 let ovZ=0;
-function openOv(id){ const o=$(id); o.hidden=false; o.style.zIndex=String(30+(++ovZ)); }
+function openOv(id){ const o=$(id); const top=[...document.querySelectorAll(".overlay")].filter(x=>!x.hidden&&x!==o).reduce((m,x)=>Math.max(m,+x.style.zIndex||30),30); o.hidden=false; o.style.zIndex=String(Math.min(top+1,55)); /* 되돌리기 막대(60)보다 아래 */ }
 function topOv(){ return [...document.querySelectorAll(".overlay")].filter(o=>!o.hidden).sort((a,b)=>(+b.style.zIndex||30)-(+a.style.zIndex||30))[0]||null; }
 function closeOv(id){ $(id).hidden=true; }
 document.querySelectorAll(".overlay").forEach(ov=>{
@@ -3289,6 +3315,12 @@ $("txForm").onsubmit=async e=>{
   if(note) showNotice(note);
   await syncTBUSave(); showUndo("기록을 저장했습니다.");
 };
+/* 거래 여러 건 지우기: 정산 이체를 지우면 그 이체로 정산된 거래를 다시 정산 대기로 돌림 */
+function removeTxs(items){ const touched=new Set(); let reopened=0;
+  items.forEach(({ym,id})=>{ const gone=monthTx(ym).find(x=>x.id===id); if(!gone) return; months[ym]=monthTx(ym).filter(x=>x.id!==id); touched.add(ym);
+    if(Array.isArray(gone.settles) && gone.settles.length){ const ids=new Set(gone.settles);
+      Object.keys(months).forEach(k=>{ if(monthTx(k).some(x=>ids.has(x.id)&&x.settledBy===gone.id)){ months[k]=monthTx(k).map(x=>{ if(!(ids.has(x.id)&&x.settledBy===gone.id)) return x; reopened++; const r={...x,st:"pending"}; delete r.settledBy; delete r.settledOn; return r; }); touched.add(k); } }); } });
+  return {touched, reopened}; }
 $("delBtn").onclick=async()=>{
   if(!editing) return;
   const b=$("delBtn");
@@ -3343,7 +3375,7 @@ async function saveTextFile(name, text){
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type:"application/json"})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000); return "ok";
 }
 let bkStaged=null;
-$("openCheck").onclick=()=>{ renderCheck(); openOv("ckOv"); };
+$("openCheck").onclick=()=>{ ckSel=new Set(); renderCheck(); openOv("ckOv"); };
 $("openBackup").onclick=()=>{ const b=collectBackup(); const n=Object.keys(b.docs).filter(k=>k.startsWith("months/")).reduce((a,k)=>a+b.docs[k].tx.length,0); $("bkInfo").textContent=`거래 ${n.toLocaleString("ko-KR")}건 · 문서 ${Object.keys(b.docs).length}개`; bkStaged=null; $("bkPreview").innerHTML=""; $("bkImport").disabled=true; $("bkFile").value=""; openOv("bkOv"); };
 $("bkExport").onclick=async()=>{ const b=collectBackup(); const r=await saveTextFile(`우진장부-백업-${todayISO()}.json`, JSON.stringify(b)); $("bkInfo").textContent = r==="ok" ? "내려받기를 시작했습니다." : r==="cancelled" ? "취소했습니다." : "내려받지 못했습니다 ("+r+")."; };
 $("bkFile").onchange=async e=>{
