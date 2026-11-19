@@ -448,7 +448,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
             <span class="seg" id="entSeg"><button data-v="all" aria-pressed="true">전체</button><button data-v="corp" aria-pressed="false">법인</button><button data-v="me" aria-pressed="false">개인</button><button data-v="pending" aria-pressed="false">미정산</button></span>
             <select id="fMethod" aria-label="결제수단 필터"><option value="">모든 결제수단</option></select>
             <select id="fCat" aria-label="계정 필터"><option value="">모든 계정과목</option></select>
-            <select id="fWs" aria-label="워크샵 필터"><option value="">워크샵: 전체</option></select>
+            <select id="fWs" aria-label="프로젝트 필터"><option value="">프로젝트: 전체</option></select>
             <select id="fType" aria-label="거래 종류"><option value="">지출·수입·이체 모두</option><option value="out">지출만</option><option value="in">수입만</option><option value="move">이체·정산만</option></select>
             <input id="fText" type="search" placeholder="적요 검색" aria-label="적요 검색">
             <select id="fScope" aria-label="볼 기간"><option value="month">이 달</option><option value="quarter">이 분기</option><option value="year">올해</option><option value="all">전체 기간</option></select>
@@ -488,8 +488,8 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       </div>
     </div>
     <div class="panel">
-      <div class="ph"><h3>워크샵 비용</h3><button type="button" class="btn small" id="wsEdit">워크샵 관리</button></div>
-      <p class="sub">미리 낸 숙박·교통부터 기간 중 비용까지, 워크샵으로 표시한 기록을 모읍니다. 기간과 상관없이 전체 기록에서 셉니다. 줄을 누르면 거래를 봅니다.</p>
+      <div class="ph"><h3>프로젝트·행사 비용</h3><button type="button" class="btn small" id="wsEdit">프로젝트·행사 관리</button></div>
+      <p class="sub">미리 낸 숙박·교통부터 기간 중 비용까지, 프로젝트·행사로 표시한 기록을 모읍니다. 기간과 상관없이 전체 기록에서 셉니다. 줄을 누르면 거래를 봅니다.</p>
       <div class="scroll-x"><table class="dt" id="wsTbl"></table></div>
     </div>
     <div class="panel" id="avgPanel">
@@ -571,7 +571,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     </div>
     <div class="panel"><h3>대상·분류</h3>
       <div class="set-row"><b>예수금(맡은 돈) 대상자</b><span>YJ·TY 등 사람별 맡은 돈·빌려 준 돈, 묶을 계정과목</span><button type="button" class="btn" data-go="pplEdit">열기</button></div>
-      <div class="set-row"><b>워크샵</b><span>워크샵 이름과 기간</span><button type="button" class="btn" data-go="wsEdit">열기</button></div>
+      <div class="set-row"><b>프로젝트·행사</b><span>워크샵·행사·프로젝트의 기간, 승인예산, 비용 대상</span><button type="button" class="btn" data-go="wsEdit">열기</button></div>
     </div>
     <div class="panel"><h3>데이터</h3>
       <div class="set-row"><b>가져오기</b><span>구글 시트 가계부 불러오기</span><button type="button" class="btn" data-go="openImport">열기</button></div>
@@ -652,10 +652,11 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="f"><label for="iDate">날짜</label><input id="iDate" type="date" required></div>
         <div class="f"><label for="iAmt">금액 (원)</label><input id="iAmt" class="big" inputmode="numeric" placeholder="0" required></div>
       </div>
-      <div class="f" id="fxRow"><label class="check" style="font-size:13px"><input type="checkbox" id="iFxOn" style="width:auto"> 달러(USD)로 입력</label>
+      <div class="f" id="fxRow"><label class="check" style="font-size:13px"><input type="checkbox" id="iFxOn" style="width:auto"> 외화로 입력 (달러·위안 등)</label>
         <div class="brow" id="fxBox" hidden style="margin-top:6px">
-          <label class="fld">$ 금액<input id="iUsd" inputmode="decimal" placeholder="예: 20"></label>
-          <label class="fld">환율 (원/$)<input id="iRate" inputmode="decimal"></label>
+          <label class="fld" style="flex:0 1 150px">통화<select id="iCur"></select></label>
+          <label class="fld">외화 금액<input id="iUsd" inputmode="decimal" placeholder="예: 20"></label>
+          <label class="fld">환율 (원/<span id="iCurL">USD</span>)<input id="iRate" inputmode="decimal"></label>
           <label class="fld" style="flex:0 1 90px">수수료 %<input id="iFee" inputmode="decimal" placeholder="0"></label>
           <button type="button" class="btn small" id="iFxGet">오늘 환율 받기</button>
           <div class="hint" id="fxHint" style="flex-basis:100%;margin:0"></div>
@@ -677,8 +678,14 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="f"><label for="iMx">수단 이름</label><input id="iMx" placeholder="예: 알리페이, 현지 현금"></div>
         <div class="f"><label for="iVia">실제로 돈이 나간 곳</label><select id="iVia"></select></div>
       </div>
-      <div class="f" id="wsRow"><label for="iWs">워크샵</label><select id="iWs"></select>
-        <div id="wsNew" hidden style="grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="iWsName" placeholder="워크샵 이름 (예: 11월 제주 리더십)" style="grid-column:1/-1"><input id="iWsStart" type="date" aria-label="시작일"><input id="iWsEnd" type="date" aria-label="끝나는 날"></div></div>
+      <div class="f" id="wsRow"><label for="iWs">프로젝트·행사</label><select id="iWs"></select>
+        <div class="brow" id="pjBox" hidden style="margin-top:6px">
+          <label class="fld">비용 대상<select id="iBf"></select></label>
+          <label class="fld">목적<select id="iPur"></select></label>
+          <label class="fld">세무 구분<select id="iTax"></select></label>
+          <div class="hint" style="flex-basis:100%;margin:0;font-size:12px">프로젝트 비용을 누구 몫·무슨 목적·어떤 세무 처리인지 나눕니다. 세무 구분은 세무사 확인 전까지 ‘세무 검토 필요’로 두세요.</div>
+        </div>
+        <div id="wsNew" hidden style="grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="iWsName" placeholder="이름 (예: Winner Summit 2026 Shanghai)" style="grid-column:1/-1"><input id="iWsStart" type="date" aria-label="시작일"><input id="iWsEnd" type="date" aria-label="끝나는 날"></div></div>
       <div class="hint" id="flowHint"></div>
       <div class="hint" id="reconBox" hidden></div>
       <label class="check" id="settleRow"><input type="checkbox" id="iSettle"> 법인에서 아직 정산받지 않음</label>
@@ -802,14 +809,14 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   </div>
 </div>
 
-<!-- 워크샵 관리 -->
+<!-- 프로젝트·행사 관리 -->
 <div class="overlay" id="wsOv" hidden>
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="wsTitle">
-    <h3><span id="wsTitle">워크샵 관리</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <h3><span id="wsTitle">프로젝트·행사 관리</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
-      <p class="hint" style="margin:0">워크샵을 미리 만들어 두면, 기록을 넣을 때 ‘워크샵’에서 고를 수 있습니다. 기록 창에서 ‘새 워크샵 만들기’로 바로 만들 수도 있습니다. 워크샵을 지우면 그 표시만 없어지고 기록은 그대로 남습니다.</p>
+      <p class="hint" style="margin:0">프로젝트·행사를 미리 만들어 두면, 기록을 넣을 때 ‘프로젝트·행사’에서 고를 수 있습니다. 기록 창에서 ‘새 프로젝트·행사 만들기’로 바로 만들 수도 있습니다. 프로젝트·행사를 지우면 그 표시만 없어지고 기록은 그대로 남습니다.</p>
       <div id="wsList" class="xf-list"></div>
-      <button type="button" class="btn small" id="wsAdd" style="justify-self:start">워크샵 추가</button>
+      <button type="button" class="btn small" id="wsAdd" style="justify-self:start">프로젝트·행사 추가</button>
       <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="wsSave">저장</button></div></div>
     </div>
   </div>
@@ -1294,7 +1301,7 @@ function renderFilters(tx){
     return h; }).join("");
   fm.value=vals.includes(keepM)?keepM:""; view.method=fm.value;
   const fw=$("fWs"), wsIn=[...new Set(tx.map(t=>t.ws).filter(id=>id&&wsOf(id)))];
-  fw.innerHTML=`<option value="">워크샵: 전체</option><option value="__only">워크샵만</option><option value="__excl">워크샵 제외</option>`+wsIn.map(id=>`<option value="${esc(id)}">${esc(wsOf(id).name)}</option>`).join("");
+  fw.innerHTML=`<option value="">프로젝트: 전체</option><option value="__only">프로젝트만</option><option value="__excl">프로젝트 제외</option>`+wsIn.map(id=>`<option value="${esc(id)}">${esc(wsOf(id).name)}</option>`).join("");
   fw.value=[...fw.options].some(o=>o.value===view.ws)?view.ws:""; view.ws=fw.value;
   const cs=[...new Set(tx.map(t=>t.cat||""))].filter(Boolean).sort();
   const fc=$("fCat"); const keepC=view.cat;
@@ -1349,11 +1356,11 @@ function renderLedger(tx){
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
     const instChip = +t.inst>1 ? (()=>{ const sh=instShares(t); if(sh.length<2) return `<span class="chip plain">${t.inst}개월 할부</span>`; const f=x=>`${+x.d.slice(5,7)}/${+x.d.slice(8)}`;
       return `<span class="chip plain" title="${esc(sh.map(x=>`${x.i}회 ${f(x)} ${won(x.amt)}`).join(" · "))}">${t.inst}개월 할부 · ${f(sh[0])}~${f(sh[sh.length-1])} 매달 ${won(sh[sh.length-1].amt)}</span>`; })() : "";
-    const st = instChip + (t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "") + (t.ws&&wsOf(t.ws) ? `<span class="chip ws">워크샵 · ${esc(wsOf(t.ws).name)}</span>` : "");
+    const st = instChip + (t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "") + (t.ws&&wsOf(t.ws) ? `<span class="chip ws">프로젝트 · ${esc(wsOf(t.ws).name)}</span>` : "");
     const mv = t.t==="move" ? effects(t) : null;
     const flow = t.t==="move" ? `<span class="flow">${esc(isPerson(t.from)?dispAcct(t.from):(mv.find(e=>e.v<0)||{}).acct||"외부")} → <b>${esc(isPerson(t.to)?dispAcct(t.to):(mv.find(e=>e.v>0)||{}).acct||"외부")}</b></span>` : t.src==="recon" && t.ac ? `<span class="flow">잔액 맞춤 → <b>${esc(t.ac)}</b></span>` : t.t==="in" ? (NOT_ACCT(acct) ? `<span class="flow">입금 계좌 미지정</span>` : `<span class="flow">${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}<b>${esc(acct)}</b></span>`) : t.m ? `<span class="flow">${txMethodTxt(t)} → <b>${t.t==="in"?"입금 ":""}${esc(acct)}</b></span>` : t.ac ? `<span class="flow">계좌 → <b>${esc(t.ac)}</b></span>` : `<span class="flow">결제수단 미지정</span>`;
     const cls = t.t==="in"?"in":t.t==="move"?"move":"";
-    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num">${dayCell(t)}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${cls}">${t.t==="in"?"+":""}${won(t.amt)}${t.fx?`<small class="fxs">${usd(t.fx.amt)}</small>`:""}</div><div class="meta">${entChip}${st}<span>${esc(t.cat||"미분류")}</span><span>·</span>${flow}</div></button>`;
+    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num">${dayCell(t)}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${cls}">${t.t==="in"?"+":""}${won(t.amt)}${t.fx?`<small class="fxs">${fxTxt(t.fx.cur||"USD",t.fx.amt)}</small>`:""}</div><div class="meta">${entChip}${st}<span>${esc(t.cat||"미분류")}</span><span>·</span>${flow}</div></button>`;
   });
   const shown=sumOf(list.filter(t=>t.t==="out")), shownIn=sumOf(list.filter(t=>t.t==="in"));
   html+=`<div class="foot"><span>${list.length}건 표시</span><span class="num">지출 ${won(shown)}${shownIn?" · 수입 "+won(shownIn):""}</span></div></div>`;
@@ -1391,15 +1398,25 @@ function shareTable(rows,total,label,dtf){
   const maxP=Math.max(...show.map(r=>pct(r[1],total)));
   return `<thead><tr><th>${label}</th><th class="r">금액</th><th>비율</th></tr></thead><tbody>`+show.map((r,i)=>`<tr${dtf?dtAttr(dtf(r[2]||r[0], r[2]?r[0]:null)):""}><td><span class="sw" style="background:${PAL[Math.min(i,PAL.length-1)]}"></span>${esc(r[0])}</td><td class="r num">${won(r[1])}</td><td>${pbar(pct(r[1],total),maxP)}</td></tr>`).join("")+`</tbody><tfoot><tr><td>합계</td><td class="r num">${won(total)}</td><td></td></tr></tfoot>`;
 }
+/* 프로젝트 거래의 세 가지 구분 (프로젝트에 묶인 거래에서만 입력). 세무 구분은 앱이 정하지 않고 기본 '세무 검토 필요' */
+const PJ_PEOPLE=["UJ","MH","YJ","TY"];
+const PJ_PUR=[["BUSINESS","업무"],["EMPLOYEE_REWARD","임직원 포상"],["FAMILY_BENEFIT","가족동반 지원"],["PERSONAL","개인"]];
+const PJ_TAX=[["REVIEW","세무 검토 필요"],["CORPORATE","법인비용"],["PAYROLL_BENEFIT","급여·포상 귀속"],["NONDEDUCTIBLE","손금불산입 검토"],["PERSONAL","개인비용"]];
+const pjLbl=(L,v)=>(L.find(x=>x[0]===v)||[v,v||"미지정"])[1];
+const bfLbl=v=>v==="COMMON"?"공통":(v||"미지정");
 function renderWs(){
   const t=$("wsTbl"); if(!t) return; const L=wsList(), all=allTx().filter(x=>x.ws && x.t==="out");
-  if(!L.length){ t.innerHTML=`<tbody><tr><td class="foot">아직 워크샵이 없습니다. 기록 창의 ‘워크샵’에서 새로 만들거나 ‘워크샵 관리’에서 추가하세요.</td></tr></tbody>`; return; }
+  if(!L.length){ t.innerHTML=`<tbody><tr><td class="foot">아직 프로젝트·행사가 없습니다. 기록 창의 ‘프로젝트·행사’에서 새로 만들거나 ‘프로젝트·행사 관리’에서 추가하세요.</td></tr></tbody>`; return; }
   const rows=L.map(w=>{ const xs=all.filter(x=>x.ws===w.id), tot=sumOf(xs), corp=sumOf(xs.filter(x=>x.ent==="corp")), pre=sumOf(xs.filter(x=>x.d<w.start));
     const by={}; xs.forEach(x=>{ const c=(x.cat||"미분류").replace(/^지발연\s*-\s*/,""); by[c]=(by[c]||0)+(+x.amt||0); });
     const top=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([c,v])=>`${esc(c)} ${won(v)}`).join(" · ");
-    return {w,n:xs.length,tot,corp,pre,top}; }).sort((a,b)=>b.w.start.localeCompare(a.w.start));
-  t.innerHTML=`<thead><tr><th>워크샵</th><th>기간</th><th class="r">건수</th><th class="r">합계</th><th class="r">법인</th><th class="r">미리 낸 돈</th><th>많이 쓴 항목</th></tr></thead><tbody>`+
-    rows.map(r=>`<tr ${r.n?`data-dt='${esc(JSON.stringify({k:"ws",v:r.w.id,t:"out",ym:allYms(),lbl:"워크샵 · "+r.w.name}))}' style="cursor:pointer"`:""}><td><b>${esc(r.w.name)}</b></td><td>${esc(wsPeriod(r.w))}</td><td class="r num">${r.n}</td><td class="r num"><b>${won(r.tot)}</b></td><td class="r num">${won(r.corp)}</td><td class="r num">${r.pre?won(r.pre):"—"}</td><td style="font-size:12.5px;color:var(--muted)">${r.top||"—"}</td></tr>`).join("")+`</tbody>`;
+    const grp=f=>{ const g={}; xs.forEach(x=>{ const k=x[f]||""; g[k]=(g[k]||0)+(+x.amt||0); }); return g; };
+    const fxN=xs.filter(x=>x.fx).length;
+    return {w,n:xs.length,tot,corp,pre,top,bf:grp("bf"),tax:grp("tax"),pur:grp("pur"),fxN}; }).sort((a,b)=>b.w.start.localeCompare(a.w.start));
+  const bud=w=>+w.budget||0, chips=(g,lbl)=>Object.entries(g).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(lbl(k))} ${won(v)}`).join(" · ");
+  t.innerHTML=`<thead><tr><th>프로젝트·행사</th><th>기간</th><th class="r">건수</th><th class="r">합계</th><th class="r">승인예산</th><th class="r">남은 예산</th><th>집행률</th><th class="r">법인</th><th class="r">미리 낸 돈</th><th>많이 쓴 항목</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr ${r.n?`data-dt='${esc(JSON.stringify({k:"ws",v:r.w.id,t:"out",ym:allYms(),lbl:"프로젝트 · "+r.w.name}))}' style="cursor:pointer"`:""}><td><b>${esc(r.w.name)}</b>${r.w.status==="plan"?'<span class="tag">계획</span>':r.w.status==="done"?'<span class="tag">완료</span>':""}${(r.w.owner||"corp")==="corp"?'<span class="tag">법인 주관</span>':""}</td><td>${esc(wsPeriod(r.w))}</td><td class="r num">${r.n}</td><td class="r num"><b>${won(r.tot)}</b></td><td class="r num">${bud(r.w)?won(bud(r.w)):"—"}</td><td class="r num ${bud(r.w)&&r.tot>bud(r.w)?"bad":""}">${bud(r.w)?sgn(bud(r.w)-r.tot):"—"}</td><td>${bud(r.w)?bBar(r.tot,bud(r.w)):"—"}</td><td class="r num">${won(r.corp)}</td><td class="r num">${r.pre?won(r.pre):"—"}</td><td style="font-size:12.5px;color:var(--muted)">${r.top||"—"}</td></tr>`+
+      (r.n?`<tr class="pjsub"><td colspan="10" style="font-size:12px;color:var(--muted);padding-top:0">비용 대상: ${chips(r.bf,bfLbl)||"—"}<br>목적: ${chips(r.pur,v=>pjLbl(PJ_PUR,v))||"—"}<br>세무 구분: ${chips(r.tax,v=>pjLbl(PJ_TAX,v))||"—"}${r.fxN?` · 외화 기록 ${r.fxN}건`:""}</td></tr>`:"")).join("")+`</tbody>`;
 }
 let wDraft=null;
 $("wsEdit").onclick=()=>{ wDraft=JSON.parse(JSON.stringify(wsList())); renderWsEdit(); openOv("wsOv"); };
@@ -1409,13 +1426,20 @@ function renderWsEdit(){
       <label>시작일<input type="date" data-i="${i}" data-k="start" value="${esc(w.start||"")}"></label>
       <label>끝나는 날<input type="date" data-i="${i}" data-k="end" value="${esc(w.end||"")}"></label>
       <label>메모 (선택)<input data-i="${i}" data-k="note" value="${esc(w.note||"")}" placeholder="예: 해외, 고객사"></label>
-    </div><div class="ft"><span>표시한 기록 ${n}건</span><button type="button" class="btn small" data-wdel="${i}">삭제</button></div></div>`; }).join("") : `<div class="foot">아직 워크샵이 없습니다.</div>`;
-  $("wsList").querySelectorAll("[data-k]").forEach(el=>el.oninput=el.onchange=()=>{ wDraft[+el.dataset.i][el.dataset.k]=el.value.trim(); });
+      <label>승인예산 (원, 선택)<input data-i="${i}" data-k="budget" inputmode="numeric" value="${+w.budget?(+w.budget).toLocaleString("ko-KR"):""}" placeholder="예: 7,000,000"></label>
+      <label>주관<select data-i="${i}" data-k="owner"><option value="corp"${(w.owner||"corp")==="corp"?" selected":""}>법인 (지속발전연구소)</option><option value="me"${w.owner==="me"?" selected":""}>개인</option></select></label>
+      <label>상태<select data-i="${i}" data-k="status">${[["plan","계획"],["approved","승인"],["done","완료"]].map(([v,t])=>`<option value="${v}"${(w.status||"approved")===v?" selected":""}>${t}</option>`).join("")}</select></label>
+      <label>비용 대상 (쉼표로 구분)<input data-i="${i}" data-k="people" value="${esc((w.people||PJ_PEOPLE).join(", "))}" placeholder="UJ, MH, YJ"></label>
+    </div><div class="ft"><span>표시한 기록 ${n}건</span><button type="button" class="btn small" data-wdel="${i}">삭제</button></div></div>`; }).join("") : `<div class="foot">아직 프로젝트·행사가 없습니다.</div>`;
+  $("wsList").querySelectorAll("[data-k]").forEach(el=>el.oninput=el.onchange=()=>{ const w=wDraft[+el.dataset.i], k=el.dataset.k;
+    if(k==="budget"){ const n=el.value.replace(/[^\d]/g,""); w.budget=+n||0; if(el.type!=="number") el.value=n?(+n).toLocaleString("ko-KR"):""; }
+    else if(k==="people") w.people=el.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean);
+    else w[k]=el.value.trim(); });
   $("wsList").querySelectorAll("[data-wdel]").forEach(b=>b.onclick=()=>{ wDraft.splice(+b.dataset.wdel,1); renderWsEdit(); });
 }
-$("wsAdd").onclick=()=>{ const d=todayISO(); wDraft.push({id:uid(), name:"", start:d, end:d, note:""}); renderWsEdit(); };
+$("wsAdd").onclick=()=>{ const d=todayISO(); wDraft.push({id:uid(), name:"", start:d, end:d, note:"", owner:"corp", status:"approved", people:PJ_PEOPLE.slice()}); renderWsEdit(); };
 $("wsSave").onclick=async()=>{
-  if(wDraft.some(w=>!w.name||!w.start)){ showNotice("워크샵마다 이름과 시작일을 넣어 주세요."); return; } showNotice("");
+  if(wDraft.some(w=>!w.name||!w.start)){ showNotice("프로젝트·행사마다 이름과 시작일을 넣어 주세요."); return; } showNotice("");
   wDraft.forEach(w=>{ if(!w.end||w.end<w.start) w.end=w.start; });
   config.workshops=wDraft; closeOv("wsOv"); render(); await saveConfig();
 };
@@ -1592,23 +1616,29 @@ function budgetCatsT(type,ym){
 }
 /* ---------- 외화(USD) ----------
    환율은 무료 공개 환율(open.er-api.com, 하루 1번 갱신)에서 받아 설정에 저장. 인터넷이 없으면 마지막 환율을 씀 */
-const FX_FALLBACK={USD:1400};
+/* 다통화: 원화 1단위가 아니라 '외화 1단위 = 몇 원'으로 저장. 환율 서비스는 USD 기준이라 KRW÷통화로 계산 */
+const CURS=[["USD","$","미국 달러"],["CNY","CN¥","중국 위안"],["JPY","JP¥","일본 엔"],["EUR","€","유로"],["HKD","HK$","홍콩 달러"],["TWD","NT$","대만 달러"],["SGD","S$","싱가포르 달러"],["THB","฿","태국 바트"],["VND","₫","베트남 동"],["GBP","£","영국 파운드"]];
+const FX_FALLBACK={USD:1400,CNY:195,JPY:9.3,EUR:1500,HKD:180,TWD:44,SGD:1050,THB:40,VND:0.055,GBP:1800};
+const curSym=c=>(CURS.find(x=>x[0]===c)||[c,c])[1];
 function fxInfo(cur){ const f=(config.fx||{})[cur]; return f&&+f.rate ? f : {rate:FX_FALLBACK[cur]||0, d:"", tmp:true}; }
-function fxRate(cur){ return +fxInfo(cur).rate||0; }
+function fxRate(cur){ return +fxInfo(cur||"USD").rate||0; }
 let fxBusy=null;
-async function fetchFx(force){
-  const f=(config.fx||{}).USD; if(!force && f && f.d===todayISO() && !f.manual) return f.rate;
-  if(!navigator.onLine) return fxRate("USD");
-  if(fxBusy) return fxBusy;
-  fxBusy=(async()=>{ try{ const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(),6000);
+async function fetchFx(force, cur){
+  cur=cur||"USD"; const f=(config.fx||{})[cur]; if(!force && f && f.d===todayISO()) return f.rate;
+  if(!navigator.onLine) return fxRate(cur);
+  if(!fxBusy) fxBusy=(async()=>{ try{ const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(),6000);
       const r=await fetch("https://open.er-api.com/v6/latest/USD",{signal:ctl.signal,cache:"no-store"}); clearTimeout(tm); const j=await r.json();
-      const k=j&&j.rates&&+j.rates.KRW; if(k>0){ config.fx={...(config.fx||{}), USD:{rate:Math.round(k*100)/100, d:todayISO(), src:"open.er-api.com"}}; await saveConfig(); }
-    }catch(_){} finally{ const v=fxRate("USD"); fxBusy=null; return v; } })();
-  return fxBusy; }
-const usd=v=>"$"+(+v||0).toLocaleString("en-US",{minimumFractionDigits:(+v%1)?2:0, maximumFractionDigits:2});
-/* 예산 금액을 원화로: USD면 지금 환율 × (1+수수료%) */
-function bKRW(b){ const a=+b.amount||0; return b.cur==="USD" ? Math.round(a*fxRate("USD")*(1+(+b.fee||0)/100)) : a; }
-function bAmtTxt(b){ return b.cur==="USD" ? `${usd(b.amount)} <span style="color:var(--muted);font-weight:400">(≈${won(bKRW(b))})</span>` : won(+b.amount||0); }
+      const R=j&&j.rates||{}, k=+R.KRW; if(k>0){ const fx={...(config.fx||{})}, d=todayISO();
+        CURS.forEach(([c])=>{ const v=c==="USD"?1:+R[c]; if(v>0){ const rate=k/v; fx[c]={rate: rate>=100?Math.round(rate*100)/100:Math.round(rate*10000)/10000, d, src:"open.er-api.com"}; } });
+        config.fx=fx; await saveConfig(); }
+    }catch(_){} finally{ fxBusy=null; } })();
+  await fxBusy; return fxRate(cur); }
+const fxTxt=(cur,v)=>curSym(cur)+(+v||0).toLocaleString("en-US",{minimumFractionDigits:(+v%1)?2:0, maximumFractionDigits:2});
+const usd=v=>fxTxt("USD",v);
+const isFx=b=>!!(b && b.cur && b.cur!=="KRW");
+/* 예산 금액을 원화로: 외화면 지금 환율 × (1+수수료%) */
+function bKRW(b){ const a=+b.amount||0; return isFx(b) ? Math.round(a*fxRate(b.cur)*(1+(+b.fee||0)/100)) : a; }
+function bAmtTxt(b){ return isFx(b) ? `${fxTxt(b.cur,b.amount)} <span style="color:var(--muted);font-weight:400">(≈${won(bKRW(b))})</span>` : won(+b.amount||0); }
 function occUsd(b){ const a=+b.amount||0; return b.period==="year" && b.mode!=="lump" ? Math.round(a/12*100)/100 : a; }
 function occAmt(b){ const a=bKRW(b); if(b.period==="year" && b.mode!=="lump") return Math.round(a/12); return a; }
 function occurrences(b, from, to){
@@ -1652,7 +1682,7 @@ function schedTxt(b){
   const rt=ruleTxt(b);
   const man=execOf(b)==="manual";
   let t = b.period==="month" ? (man?"월 한도":`매달${rt?` ${rt}`:""}`) : b.period==="dates" ? `지정일 ${(b.dates||[]).length}회` : b.mode==="lump" ? `연 1회 · ${+b.month||1}월${rt?` ${rt}`:""}` : (man?"연 한도":`연 금액 매달 나눠 납부${rt?` · 매달 ${rt}`:""}`);
-  if(b.cur==="USD") t+=` · ${usd(b.amount)}`;
+  if(isFx(b)) t+=` · ${fxTxt(b.cur,b.amount)}`;
   if(b.start) t+=` · ${b.start}부터`; if(b.end) t+=` · ${b.end}까지`; if(b.auto) t+=" · 자동 기록"; return t;
 }
 function hasPlan(ym){ return !!plans[ym]; }
@@ -1810,7 +1840,7 @@ async function runSchedules(){
   ensureCats(); syncTBUSave();
   if(schedRunning || !monthsRef) return; schedRunning=true;
   try{
-    if(budgets.items.some(b=>b.cur==="USD" && b.auto)) await fetchFx();
+    if(budgets.items.some(b=>isFx(b) && b.auto)) await fetchFx();
     const today=todayISO(); const touched=new Set(); let changedBud=false, made=0;
     budgets.items.forEach(b=>{
       if(!b.auto || !hasDay(b)) return;
@@ -1820,7 +1850,7 @@ async function runSchedules(){
         const ym=o.d.slice(0,7), id="sch-"+b.id+"-"+o.d, cat=b.key.slice(2), inc=typeOfKey(b.key)==="in";
         if(!monthTx(ym).some(t=>t.id===id)){
           const tx={id, d:o.d, t:inc?"in":"out", amt:o.amt, desc:b.desc||b.name||cat, cat, m:inc?"":(b.m||""), ent:isCorpCat(cat)?"corp":"me", src:"sched", ts:Date.now()};
-          if(b.cur==="USD"){ const fi=fxInfo("USD"); tx.fx={cur:"USD", amt:occUsd(b), rate:fi.rate, fee:+b.fee||0, d:fi.d||todayISO()}; }
+          if(isFx(b)){ const fi=fxInfo(b.cur); tx.fx={cur:b.cur, amt:occUsd(b), rate:fi.rate, fee:+b.fee||0, d:fi.d||todayISO()}; }
           if(inc){ tx.ac=b.acct||mainAcct(); } else if(b.toP){ tx.t="move"; tx.m=""; tx.ent="me"; tx.from=b.acct||mainAcct(); tx.to="@"+b.toP; } else { if(isPayM(b.m) && b.via) tx.via=b.via; if(b.acct && b.acct!==acctOf(bPayCode(b))) tx.ac=b.acct; }
           tx.st = needsSettle(tx) ? "pending" : null;
           const ptx=toPersonMove(tx);
@@ -1905,7 +1935,7 @@ function recordOcc(b,o){
   $("iAmt").value=(+o.amt).toLocaleString("ko-KR"); $("iDesc").value=b.desc||b.key.slice(2);
   $("iDate").value = o.d>todayISO() ? o.d : todayISO();
   if(inc){ form.ac=b.acct||mainAcct(); fillAccts(); } else if(b.toP){ setType("move"); fillCatSelect("move", b.key.slice(2)); acctOptions($("iFrom"), b.acct||mainAcct()); acctOptions($("iTo"), "@"+b.toP); $("iPk").value=""; } else if(b.m){ form.m=b.m; fillMethods(); if(isPayM(b.m)){ payViaOptions($("iPayVia"), b.m, b.via||""); updateHint(); } }
-  if(b.cur==="USD") fxFormSet({cur:"USD", amt:occUsd(b), rate:fxRate("USD"), fee:+b.fee||0}, true);
+  if(isFx(b)) fxFormSet({cur:b.cur, amt:occUsd(b), rate:fxRate(b.cur), fee:+b.fee||0}, true);
   autoEnt(); form.schOf=b.id+"|"+o.d;
   $("txTitle").textContent=`예정 집행 기록 · ${+o.d.slice(5,7)}/${+o.d.slice(8)} 예정분`;
   updateHint(false);
@@ -1927,7 +1957,7 @@ function openBudEdit(focus){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.
 function bTargets(){ return [...new Set(config.outCats.concat(allTx().filter(t=>t.t==="out"&&t.cat).map(t=>t.cat)).concat(...Object.values(plans).map(p=>Object.keys(p.out))))].sort(); }
 function bSummary(b){
   const n=occurrences(b, todayISO(), "9999-12-31").slice(0,3).map(o=>o.d.slice(2).replace(/-/g,"."));
-  const per = (b.period==="year"&&b.mode!=="lump" ? `한 번에 <b>${won(occAmt(b))}</b> (연 ${bAmtTxt(b)} ÷ 12)` : `한 번에 <b>${won(occAmt(b))}</b>`)+(b.cur==="USD"?` <span style="color:var(--muted)">(${usd(occUsd(b))} × ${fxRate("USD").toLocaleString("ko-KR")}${+b.fee?` + 수수료 ${+b.fee}%`:""}, 집행일 환율로 다시 계산)</span>`:"");
+  const per = (b.period==="year"&&b.mode!=="lump" ? `한 번에 <b>${won(occAmt(b))}</b> (연 ${bAmtTxt(b)} ÷ 12)` : `한 번에 <b>${won(occAmt(b))}</b>`)+(isFx(b)?` <span style="color:var(--muted)">(${fxTxt(b.cur,occUsd(b))} × ${fxRate(b.cur).toLocaleString("ko-KR")}${+b.fee?` + 수수료 ${+b.fee}%`:""}, 집행일 환율로 다시 계산)</span>`:"");
   const ex=execOf(b);
   let t = ex==="manual" ? `<b>${b.period==="month"?"월 한도":b.period==="year"?(b.mode==="lump"?`연 1회 · ${+b.month||1}월 (날짜 없음)`:"연 한도 · 월 예산에는 1/12씩, 연 누적은 예산 탭 연간 표에서 비교"):"지정일"}</b> · ${per.replace("한 번에","예산")}` : `<b>${EXEC_LBL[ex]}</b> · ${esc(schedTxt(b).replace(" · 자동 기록",""))} · ${per}`;
   if(n.length && ex!=="manual") t+=` · 다음 집행 <b>${n.join(", ")}</b>`; else if(b.end && b.end<todayISO()) t+=` · <span class="warn">기한이 지나 더 이상 집행하지 않습니다</span>`;
@@ -1954,7 +1984,7 @@ function itemCard(b,i){
   const aOpts=v=>{ const names=acctNames(); if(v&&!names.includes(v)) names.unshift(v); return `<option value="">고르기</option>`+names.map(n=>`<option value="${esc(n)}"${v===n?" selected":""}>${esc(n)}</option>`).join(""); };
   const mOpts=v=>`<option value="">고르기</option>`+KINDS.map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k); return ms.length?`<optgroup label="${lbl}">`+ms.map(m=>`<option value="${esc(m.code)}"${v===m.code?" selected":""}>${esc(m.code)} · ${esc(m.name)}</option>`).join("")+`</optgroup>`:""; }).join("");
   /* 주기: 언제 돈이 나가는지(납부 주기) 하나로 고름. 월 예산 반영 방식은 주기에 따라 정해짐 */
-  const f=freqOf(b), ex=execOf(b), isUSD=b.cur==="USD";
+  const f=freqOf(b), ex=execOf(b), isUSD=isFx(b);
   const amtLbl={m1:"월 금액",y1:"연 금액 (1회)",dates:"1회 금액",mcap:"월 한도",ycap:"연 한도",ysplit:"연 금액"}[f];
   const ruleFld=(lbl)=>{ const r=b.dayRule||"date"; return `<label class="fld">${lbl}<select data-i="${i}" data-k="dayRule" data-re="1">${[["date","날짜 지정"],["last","마지막 날"],["lastBiz","마지막 평일"],["firstBiz","첫 평일"],["nth","몇 번째 무슨 요일"]].map(([v,t])=>`<option value="${v}"${r===v?" selected":""}>${t}</option>`).join("")}</select></label>`
     + (r==="date" ? `<label class="fld narrow">며칠<input data-i="${i}" data-k="day" inputmode="numeric" value="${+b.day||""}" placeholder="예: 25"></label>` : "")
@@ -1964,18 +1994,18 @@ function itemCard(b,i){
   else if(f==="y1") when=`<label class="fld narrow">납부 월<select data-i="${i}" data-k="ymonth" data-re="1">${Array.from({length:12},(_,j)=>`<option value="${j+1}"${(+b.month||1)===j+1?" selected":""}>${j+1}월</option>`).join("")}</select></label>`+(ex==="manual"?`<span class="hint" style="align-self:end;padding-bottom:8px">날짜 없이 ${+b.month||1}월 예산에만 잡습니다</span>`:ruleFld(`${+b.month||1}월 납부일`));
   else if(f==="dates") when=`<label class="fld">납부일 추가<input type="date" id="nd${i}" data-i="${i}" data-k="newdate"></label><button type="button" class="btn small" data-adddate="${i}">추가</button><div class="dchips">${(b.dates||[]).slice().sort().map(d=>`<span class="chip plain">${d}<button type="button" data-rmdate="${i}" data-d="${d}" aria-label="${d} 삭제">×</button></span>`).join("")}</div>`;
   const exOpts = f==="y1" ? ["date","auto","manual"] : (f==="mcap"||f==="ycap") ? [] : ["date","auto"];
-  const fxI=fxInfo("USD");
+  const fxI=fxInfo(b.cur||"USD");
   const ended=b.end && b.end<todayISO();
   return `<div class="bitem" style="border-radius:0;border-width:1px 0 0${ended?";opacity:.6":""}">
       <div class="brow"><label class="fld wide">이름 (선택)<input data-i="${i}" data-k="name" value="${esc(b.name||"")}" placeholder="예: 월 한도, Zoom 구독, 도메인 갱신"></label></div>
       <div class="brow">
         <label class="fld">주기<select data-i="${i}" data-k="freq" data-re="1">${[["m1","월 1회 납부"],["y1","연 1회 납부"],["dates","지정일 여러 번"],["mcap","월 한도 (수시로 씀)"],["ycap","연 한도 (수시로 씀)"]].concat(f==="ysplit"?[["ysplit","연 금액을 매달 나눠 납부 (예전 방식)"]]:[]).map(([v,t])=>`<option value="${v}"${f===v?" selected":""}>${t}</option>`).join("")}</select></label>
-        <label class="fld narrow">통화<select data-i="${i}" data-k="cur" data-re="1"><option value=""${isUSD?"":" selected"}>원</option><option value="USD"${isUSD?" selected":""}>USD ($)</option></select></label>
-        <label class="fld">${amtLbl} (${isUSD?"$":"원"})<input data-i="${i}" data-k="amount" inputmode="${isUSD?"decimal":"numeric"}" value="${b.amount?(isUSD?String(+b.amount):(+b.amount).toLocaleString("ko-KR")):""}"></label>
+        <label class="fld narrow">통화<select data-i="${i}" data-k="cur" data-re="1"><option value=""${isUSD?"":" selected"}>원</option>${CURS.map(([c,sy,nm])=>`<option value="${c}"${b.cur===c?" selected":""}>${c} ${sy} ${nm}</option>`).join("")}</select></label>
+        <label class="fld">${amtLbl} (${isUSD?esc(curSym(b.cur)):"원"})<input data-i="${i}" data-k="amount" inputmode="${isUSD?"decimal":"numeric"}" value="${b.amount?(isUSD?String(+b.amount):(+b.amount).toLocaleString("ko-KR")):""}"></label>
         ${isUSD?`<label class="fld narrow" title="카드 해외결제 수수료 등. 예: 1.1">수수료 %<input data-i="${i}" data-k="fee" inputmode="decimal" value="${+b.fee||""}" placeholder="0"></label>`:""}
         ${exOpts.length?`<label class="fld">그날 할 일<select data-i="${i}" data-k="exec" data-re="1">${exOpts.map(v=>`<option value="${v}"${ex===v?" selected":""}>${{manual:"없음 (그 달 예산에만 잡음)",date:"알림 (그날 알려 줌)",auto:"자동 기록 (그날 장부에 기록)"}[v]}</option>`).join("")}</select></label>`:""}
       </div>
-      ${isUSD?`<div class="brow"><span class="hint" style="margin:0">환율 <b>${fxI.rate.toLocaleString("ko-KR")}원/$</b> ${fxI.tmp?"(임시값 — 아직 받아 온 환율이 없음)":`(${esc(fxI.d)} 기준)`} <button type="button" class="btn small" data-fxnow="1">지금 환율 받기</button> · 예산 표에는 이 환율로 원화를 보여 주고, 실제 기록할 때는 그날 환율로 다시 계산합니다.</span></div>`:""}
+      ${isUSD?`<div class="brow"><span class="hint" style="margin:0">환율 <b>${fxI.rate.toLocaleString("ko-KR")}원/${esc(b.cur)}</b> ${fxI.tmp?"(임시값 — 아직 받아 온 환율이 없음)":`(${esc(fxI.d)} 기준)`} <button type="button" class="btn small" data-fxnow="1">지금 환율 받기</button> · 예산 표에는 이 환율로 원화를 보여 주고, 실제 기록할 때는 그날 환율로 다시 계산합니다.</span></div>`:""}
       ${when?`<div class="brow">${when}</div>`:""}
       <div class="brow">
         <label class="fld">시작일 (선택)<input type="date" data-i="${i}" data-k="start" value="${esc(b.start||"")}"></label>
@@ -2056,7 +2086,7 @@ function renderBudEdit(){
   box.querySelectorAll("[data-k]").forEach(el=>{
     const k=el.dataset.k; if(k==="newdate") return;
     const h=()=>{ const b=bDraft.items[+el.dataset.i];
-      if(k==="amount"){ if(b.cur==="USD"){ const n=el.value.replace(/[^\d.]/g,""); b.amount=+n||0; } else { const n=el.value.replace(/[^\d]/g,""); b.amount=+n||0; el.value=n?(+n).toLocaleString("ko-KR"):""; } }
+      if(k==="amount"){ if(isFx(b)){ const n=el.value.replace(/[^\d.]/g,""); b.amount=+n||0; } else { const n=el.value.replace(/[^\d]/g,""); b.amount=+n||0; el.value=n?(+n).toLocaleString("ko-KR"):""; } }
       else if(k==="day"){ const n=Math.min(31,+el.value.replace(/[^\d]/g,"")||0); b.day=n||null; el.value=n||""; }
       else if(k==="nth"||k==="wd"){ b[k]=+el.value; }
       else if(k==="mm"){ if(el.value==="spread") b.mode="spread"; else { b.mode="lump"; b.month=+el.value; } }
@@ -2065,7 +2095,7 @@ function renderBudEdit(){
       else if(k==="exec") setExec(b,el.value);
       else if(k==="freq") setFreq(b,el.value);
       else if(k==="ymonth"){ b.month=+el.value; b.mode="lump"; }
-      else if(k==="cur"){ if(el.value) b.cur=el.value; else { delete b.cur; delete b.fee; } b.amount=0; if(b.cur==="USD") fetchFx().then(()=>{ if(!$("budOv").hidden) renderBudEdit(); }); }
+      else if(k==="cur"){ if(el.value) b.cur=el.value; else { delete b.cur; delete b.fee; } b.amount=0; if(isFx(b)) fetchFx(false,b.cur).then(()=>{ if(!$("budOv").hidden) renderBudEdit(); }); }
       else if(k==="fee"){ const n=el.value.replace(/[^\d.]/g,""); if(+n) b.fee=+n; else delete b.fee; }
       else if(k==="period"){ b.period=el.value; if(b.period==="dates"){ if(!b.dates) b.dates=[]; if(b.exec==="manual") b.exec="date"; } }
       else b[k]=el.value;
@@ -2547,7 +2577,7 @@ function renderDetail(){
   $("dtBreak").innerHTML = cats.length>1 ? `<span style="font-size:12px;color:var(--muted);margin-right:2px">계정과목</span>`+cats.map(([c,v])=>`<span class="chip plain" data-sub="${esc(c)}" aria-pressed="${dtl.sub===c}">${esc(c.replace(/^지발연\s*-\s*/,""))} ${won(v)}</span>`).join("") : "";
   $("dtBreak").querySelectorAll("[data-sub]").forEach(x=>x.onclick=()=>{ dtl.sub = dtl.sub===x.dataset.sub ? null : (x.dataset.sub||null); renderDetail(); }); /* 다시 누르면 풀림 */
   if(hasWs){ const wsAmt=sumOf(all0.filter(t=>t.ws&&wsOf(t.ws)));
-    $("dtBreak").insertAdjacentHTML("afterbegin",`<span style="font-size:12px;color:var(--muted);margin-right:2px">워크샵</span><span class="chip plain" data-wsf="excl" aria-pressed="${dtl.ws==="excl"}">빼고</span><span class="chip plain" data-wsf="only" aria-pressed="${dtl.ws==="only"}">워크샵만 ${won(wsAmt)}</span><span style="flex-basis:100%;height:0"></span>`);
+    $("dtBreak").insertAdjacentHTML("afterbegin",`<span style="font-size:12px;color:var(--muted);margin-right:2px">프로젝트</span><span class="chip plain" data-wsf="excl" aria-pressed="${dtl.ws==="excl"}">빼고</span><span class="chip plain" data-wsf="only" aria-pressed="${dtl.ws==="only"}">프로젝트·행사만 ${won(wsAmt)}</span><span style="flex-basis:100%;height:0"></span>`);
     $("dtBreak").querySelectorAll("[data-wsf]").forEach(x=>x.onclick=()=>{ dtl.ws = dtl.ws===x.dataset.wsf ? null : (x.dataset.wsf||null); dtl.sub=null; renderDetail(); }); }
   if(!list.length){ $("dtList").innerHTML=`<div class="foot">해당하는 거래가 없습니다.</div>`; return; }
   let html=`<div style="display:flex;justify-content:flex-end;margin:0 0 6px">${sortSeg()}</div>`, last=null; const multi=months.length>1 && sortBy==="date";
@@ -2556,7 +2586,7 @@ function renderDetail(){
     const ym=t.d.slice(0,7); if(multi && ym!==last){ html+=`<div class="daysep">${+ym.slice(5)}월 · ${ym.slice(0,4)}</div>`; last=ym; }
     const acct=txAcct(t);
     const flow = t.t==="in" ? (NOT_ACCT(acct)?"입금 계좌 미지정":`${t.fromAc?esc(t.fromAc)+" → ":"입금 → "}${esc(acct)}`) : t.m ? `${txMethodTxt(t)} → ${esc(acct)}` : t.ac ? `계좌 → ${esc(t.ac)}` : "결제수단 미지정";
-    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num">${dayCell(t)}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${t.t==="in"?"in":""}">${t.t==="in"?"+":""}${won(t.amt)}${t.fx?`<small class="fxs">${usd(t.fx.amt)}</small>`:""}</div><div class="meta">${t.ent==="corp"?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}${t.st==="pending"?'<span class="chip warn">정산 대기</span>':""}${t.src==="sched"?'<span class="chip plain">예약 집행</span>':""}${isRecon(t)?'<span class="chip plain">잔액 맞춤</span>':""}<span>${esc(t.cat||"미분류")}</span><span>·</span><span class="flow">${flow}</span></div></button>`;
+    html+=`<button class="row" data-ym="${esc(ym)}" data-id="${esc(t.id)}"><div class="d num">${dayCell(t)}</div><div class="t">${esc(t.desc||"(적요 없음)")}</div><div class="amt num ${t.t==="in"?"in":""}">${t.t==="in"?"+":""}${won(t.amt)}${t.fx?`<small class="fxs">${fxTxt(t.fx.cur||"USD",t.fx.amt)}</small>`:""}</div><div class="meta">${t.ent==="corp"?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'}${t.st==="pending"?'<span class="chip warn">정산 대기</span>':""}${t.src==="sched"?'<span class="chip plain">예약 집행</span>':""}${isRecon(t)?'<span class="chip plain">잔액 맞춤</span>':""}<span>${esc(t.cat||"미분류")}</span><span>·</span><span class="flow">${flow}</span></div></button>`;
   });
   html+=`<div class="foot"><span>${list.length}건</span><span class="num">합계 ${won(tot)}</span></div>`;
   $("dtList").innerHTML=html;
@@ -2680,7 +2710,7 @@ async function catDelDo(type,arg,info){ if(type==="in") config.inCats=config.inC
   if(info.ps.length){ info.ps.forEach(P=>{ P.cats=P.cats.filter(c=>c!==arg); }); await saveAccounts(); }
   await saveConfig(); return !catKnown(type).includes(arg); }
 function budBadge(type,c){ const L=budgets.items.filter(b=>b.key===bKey(type,c)); if(!L.length) return "";
-  if(L.length===1){ const b=L[0]; return (b.cur==="USD"?usd(b.amount):won(+b.amount||0))+(b.period==="month"?"/월":b.period==="year"?"/년":"/회"); }
+  if(L.length===1){ const b=L[0]; return (isFx(b)?fxTxt(b.cur,b.amount):won(+b.amount||0))+(b.period==="month"?"/월":b.period==="year"?"/년":"/회"); }
   return `${L.length}개 · 월 ${won(L.reduce((a,b)=>a+monthEq(b),0))}`; }
 function catAction(act, arg, el){
   const type=catType, use=catUse(type);
@@ -3094,14 +3124,21 @@ function fillMethods(){
 function wsList(){ return config.workshops||[]; }
 function wsOf(id){ return wsList().find(w=>w.id===id); }
 function wsPeriod(w){ if(!w) return ""; const f=d=>d?`${+d.slice(5,7)}/${+d.slice(8)}`:""; const n=w.start&&w.end?Math.round((Date.parse(w.end)-Date.parse(w.start))/864e5):0; return `${w.start.slice(0,4)} ${f(w.start)}${w.end&&w.end!==w.start?"~"+f(w.end):""} · ${n?`${n}박 ${n+1}일`:"당일"}`; }
+/* 프로젝트를 고르면 비용 대상·목적·세무 구분 칸을 보여 줌 */
+function pjFields(t){ const w=$("iWs").value, on=!!w && form.t!=="move"; $("pjBox").hidden=!on; if(!on) return;
+  const W=wsOf(w)||{}, ppl=(W.people&&W.people.length?W.people:PJ_PEOPLE), cur=t||{bf:$("iBf").value, pur:$("iPur").value, tax:$("iTax").value};
+  $("iBf").innerHTML=`<option value="">미지정</option><option value="COMMON">공통 (여럿이 함께 씀)</option>`+ppl.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("")+(cur.bf&&cur.bf!=="COMMON"&&!ppl.includes(cur.bf)?`<option value="${esc(cur.bf)}">${esc(cur.bf)}</option>`:"");
+  $("iPur").innerHTML=`<option value="">미지정</option>`+PJ_PUR.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+  $("iTax").innerHTML=PJ_TAX.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+  $("iBf").value=cur.bf||""; $("iPur").value=cur.pur||""; $("iTax").value=cur.tax||"REVIEW"; }
 function wsOptions(d, val){
   const sel=$("iWs"), L=wsList().slice(), cur=w=>w.start<=d&&d<=(w.end||w.start);
   const inP=L.filter(cur), up=L.filter(w=>!cur(w)&&w.start>d).sort((a,b)=>a.start.localeCompare(b.start)), past=L.filter(w=>!cur(w)&&w.start<=d).sort((a,b)=>b.start.localeCompare(a.start));
   const o=w=>`<option value="${esc(w.id)}">${esc(w.name)} (${esc(wsPeriod(w))})</option>`;
-  sel.innerHTML=`<option value="">해당 없음</option>`+(inP.length?`<optgroup label="이 날짜가 기간 안">${inP.map(o).join("")}</optgroup>`:"")+(up.length?`<optgroup label="다가올 워크샵 (미리 결제)">${up.map(o).join("")}</optgroup>`:"")+(past.length?`<optgroup label="지난 워크샵">${past.slice(0,12).map(o).join("")}</optgroup>`:"")+`<option value="__new">＋ 새 워크샵 만들기…</option>`;
+  sel.innerHTML=`<option value="">해당 없음</option>`+(inP.length?`<optgroup label="이 날짜가 기간 안">${inP.map(o).join("")}</optgroup>`:"")+(up.length?`<optgroup label="다가올 프로젝트·행사 (미리 결제)">${up.map(o).join("")}</optgroup>`:"")+(past.length?`<optgroup label="지난 프로젝트·행사">${past.slice(0,12).map(o).join("")}</optgroup>`:"")+`<option value="__new">＋ 새 프로젝트·행사 만들기…</option>`;
   sel.value = val && [...sel.options].some(x=>x.value===val) ? val : "";
 }
-$("iWs").onchange=()=>{ const nw=$("iWs").value==="__new"; $("wsNew").hidden=!nw; if(nw){ const d=$("iDate").value||todayISO(); if(!$("iWsStart").value) $("iWsStart").value=d; if(!$("iWsEnd").value) $("iWsEnd").value=d; $("iWsName").focus(); } };
+$("iWs").onchange=()=>{ pjFields(); const nw=$("iWs").value==="__new"; $("wsNew").hidden=!nw; if(nw){ const d=$("iDate").value||todayISO(); if(!$("iWsStart").value) $("iWsStart").value=d; if(!$("iWsEnd").value) $("iWsEnd").value=d; $("iWsName").focus(); } };
 $("iDate").addEventListener("change",()=>{ budHintUpd(); const v=$("iWs").value; if(v!=="__new") wsOptions($("iDate").value||todayISO(), v); });
 function payViaOptions(sel, code, val){
   const pm=methodOf(code)||{}, link=pm.link||"", lm=methodOf(link);
@@ -3191,7 +3228,7 @@ function lastFromAc(cat){ let best=null; allTx().forEach(t=>{ if(t.t==="in" && t
 $("iFromAc").onchange=()=>updateHint(false);
 /* 같은 수입 항목이 마지막으로 들어온 계좌를 기본으로 */
 function lastInAcct(cat){ let best=null; allTx().forEach(t=>{ if(t.t==="in" && t.cat===cat && !isRecon(t)){ const a=txAcct(t); if(!NOT_ACCT(a) && (!best || t.d>best.d)) best={d:t.d,a}; } }); return best ? best.a : ""; }
-function setType(t){ form.t=t; segSet("typeSeg",t); $("fxRow").hidden = t==="move"; fillCatSelect(t, ""); if(!form.entTouched) autoEnt(); if(t==="in" && !form.ac){ form.ac=lastInAcct($("iCat").value)||mainAcct(); fillAccts(); } if(t==="in" && !editing) fillFromAc(lastFromAc($("iCat").value)); updateHint(true); }
+function setType(t){ form.t=t; segSet("typeSeg",t); $("fxRow").hidden = t==="move"; if($("pjBox")) pjFields(); fillCatSelect(t, ""); if(!form.entTouched) autoEnt(); if(t==="in" && !form.ac){ form.ac=lastInAcct($("iCat").value)||mainAcct(); fillAccts(); } if(t==="in" && !editing) fillFromAc(lastFromAc($("iCat").value)); updateHint(true); }
 function autoEnt(){ const c=$("iCat").value; form.ent = (form.t==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me"; segSet("entInSeg",form.ent); }
 segBind("typeSeg", v=>setType(v));
 segBind("entInSeg", v=>{ form.ent=v; form.entTouched=true; const cur=$("iCat").value;
@@ -3213,15 +3250,18 @@ $("iCat").onchange=()=>{ form.catPicked=true; form.entTouched=false; autoEnt();
   if(bi && bi.m && !form.m && !editing){ form.m=bi.m; fillMethods(); }
   updateHint(true); };
 /* 달러 입력: $ × 환율 × (1+수수료%) = 원화 금액. 장부에는 원화로 기록하고 달러·환율을 함께 남김 */
-function fxCalc(){ if(!$("iFxOn").checked) return; const u=+$("iUsd").value.replace(/[^\d.]/g,"")||0, r=+$("iRate").value.replace(/[^\d.]/g,"")||0, f=+$("iFee").value.replace(/[^\d.]/g,"")||0;
-  const a=Math.round(u*r*(1+f/100)); if(u&&r) $("iAmt").value=a.toLocaleString("ko-KR");
-  const fi=fxInfo("USD"); $("fxHint").innerHTML = u&&r ? `${usd(u)} × ${r.toLocaleString("ko-KR")}원${f?` × (1 + ${f}%)`:""} = <b>${won(a)}</b>${+r===+fi.rate&&fi.d?` · 환율 ${esc(fi.d)} 기준`:""}. 카드 청구액은 카드사 환율로 며칠 뒤 확정되니, 다르면 ‘카드 대금 맞추기’에서 맞추면 됩니다.` : "달러 금액을 넣으면 원화 금액이 자동으로 계산됩니다.";
+const fxCur=()=>$("iCur").value||"USD";
+$("iCur").innerHTML=CURS.map(([c,sy,nm])=>`<option value="${c}">${c} ${sy} ${nm}</option>`).join("");
+function fxCalc(){ if(!$("iFxOn").checked) return; const c=fxCur(), u=+$("iUsd").value.replace(/[^\d.]/g,"")||0, r=+$("iRate").value.replace(/[^\d.]/g,"")||0, f=+$("iFee").value.replace(/[^\d.]/g,"")||0;
+  $("iCurL").textContent=c; const a=Math.round(u*r*(1+f/100)); if(u&&r) $("iAmt").value=a.toLocaleString("ko-KR");
+  const fi=fxInfo(c); $("fxHint").innerHTML = u&&r ? `${fxTxt(c,u)} × ${r.toLocaleString("ko-KR")}원${f?` × (1 + ${f}%)`:""} = <b>${won(a)}</b>${+r===+fi.rate&&fi.d?` · 환율 ${esc(fi.d)} 기준`:""}. 저장하면 이 환율과 원화 금액이 이 기록에 고정됩니다. 카드 청구액이 다르면 원화 금액을 고쳐 저장하세요(처음 환율은 그대로 남고 실제 환율이 따로 기록됩니다).` : "외화 금액을 넣으면 원화 금액이 자동으로 계산됩니다.";
   updateHint(false); }
-function fxFormSet(fx,on){ $("iFxOn").checked=!!on; $("fxBox").hidden=!on; $("iUsd").value=fx&&fx.amt?String(+fx.amt):""; $("iRate").value=fx&&fx.rate?String(+fx.rate):(on?String(fxRate("USD")):""); $("iFee").value=fx&&+fx.fee?String(+fx.fee):""; if(on) fxCalc(); }
+function fxFormSet(fx,on){ $("iFxOn").checked=!!on; $("fxBox").hidden=!on; $("iCur").value=fx&&fx.cur||"USD"; $("iCurL").textContent=fxCur(); $("iUsd").value=fx&&fx.amt?String(+fx.amt):""; $("iRate").value=fx&&fx.rate?String(+fx.rate):(on?String(fxRate(fxCur())):""); $("iFee").value=fx&&+fx.fee?String(+fx.fee):""; if(on && !(fx&&fx.krwEdited)) fxCalc(); else if(on){ $("iCurL").textContent=fxCur(); } }
 $("iFxOn").addEventListener("change",async()=>{ const on=$("iFxOn").checked; $("fxBox").hidden=!on; if(!on){ $("fxHint").textContent=""; return; }
-  if(!$("iRate").value) $("iRate").value=String(fxRate("USD")); fxCalc(); const before=$("iRate").value; const r=await fetchFx(); if($("iRate").value===before && r){ $("iRate").value=String(r); fxCalc(); } });
+  if(!$("iRate").value) $("iRate").value=String(fxRate(fxCur())); fxCalc(); const before=$("iRate").value; const r=await fetchFx(false,fxCur()); if($("iRate").value===before && r){ $("iRate").value=String(r); fxCalc(); } });
+$("iCur").addEventListener("change",async()=>{ $("iRate").value=String(fxRate(fxCur())); fxCalc(); const r=await fetchFx(false,fxCur()); if(r){ $("iRate").value=String(r); fxCalc(); } });
 ["iUsd","iRate","iFee"].forEach(id=>$(id).addEventListener("input",fxCalc));
-$("iFxGet").onclick=async()=>{ const b=$("iFxGet"); b.disabled=true; b.textContent="받는 중…"; const r=await fetchFx(true); $("iRate").value=String(r); b.disabled=false; b.textContent="오늘 환율 받기"; fxCalc(); };
+$("iFxGet").onclick=async()=>{ const b=$("iFxGet"); b.disabled=true; b.textContent="받는 중…"; const r=await fetchFx(true,fxCur()); $("iRate").value=String(r); b.disabled=false; b.textContent="오늘 환율 받기"; fxCalc(); };
 $("iAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; updateHint(false); });
 
 function showReconBox(t){
@@ -3252,7 +3292,7 @@ function openTx(ym, id, force){
   $("iMx").value = t&&t.m==="기타" ? (t.mx||"") : ""; viaOptions($("iVia"), t&&t.m==="기타" ? (t.via||"") : "");
   $("iInst").value = t && +t.inst>1 ? String(t.inst) : "";
   $("iPayVia").dataset.m=""; if(t && isPayM(t.m)) payViaOptions($("iPayVia"), t.m, t.via||"");
-  wsOptions(t ? t.d : todayISO(), t ? (t.ws||"") : ""); $("wsNew").hidden=true; $("iWsName").value=$("iWsStart").value=$("iWsEnd").value="";
+  wsOptions(t ? t.d : todayISO(), t ? (t.ws||"") : ""); $("wsNew").hidden=true; $("iWsName").value=$("iWsStart").value=$("iWsEnd").value=""; pjFields(t&&t.ws?t:{});
   if(!t){ form.ac=""; } fillAccts(); fillFromAc(t&&t.t==="in" ? (t.fromAc||"") : "");
   fillMethods(); updateHint(!t);
   showReconBox(t);
@@ -3279,14 +3319,19 @@ $("txForm").onsubmit=async e=>{
   else { delete tx.fromAc; if(base && base.t==="in" && !isRecon(base)) delete tx.ac; }
   if(form.t==="out" && !$("instRow").hidden && +$("iInst").value>1) tx.inst=+$("iInst").value; else delete tx.inst;
   { const u=+$("iUsd").value.replace(/[^\d.]/g,"")||0, r=+$("iRate").value.replace(/[^\d.]/g,"")||0;
-    if(form.t!=="move" && $("iFxOn").checked && u && r) tx.fx={cur:"USD", amt:u, rate:r, fee:+$("iFee").value.replace(/[^\d.]/g,"")||0, d:(base&&base.fx&&+base.fx.rate===r?base.fx.d:(+r===+fxRate("USD")?fxInfo("USD").d:""))||d}; else delete tx.fx; }
+    if(form.t!=="move" && $("iFxOn").checked && u && r){ const c=fxCur(), fee=+$("iFee").value.replace(/[^\d.]/g,"")||0, calc=Math.round(u*r*(1+fee/100));
+      /* 적용 환율·원화 금액을 기록에 고정. 원화를 직접 고쳤으면(카드 청구 확정 등) 실제 환율을 따로 남김 */
+      tx.fx={cur:c, amt:u, rate:r, fee, d:(base&&base.fx&&+base.fx.rate===r?base.fx.d:(+r===+fxRate(c)?fxInfo(c).d:""))||d, krw:amt};
+      if(Math.abs(amt-calc)>1){ tx.fx.krwEdited=true; tx.fx.rateEff=Math.round(amt/u*10000)/10000; } }
+    else delete tx.fx; }
   if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; }
   else if(form.t==="out" && isPayM(form.m) && $("iPayVia").value){ delete tx.mx; tx.via=$("iPayVia").value; }
   else { delete tx.mx; delete tx.via; }
   /* 워크샵 */
   if(form.t!=="move"){ let w=$("iWs").value;
     if(w==="__new"){ const nm=$("iWsName").value.trim(); if(!nm){ $("iWsName").focus(); return; } const W={id:uid(), name:nm, start:$("iWsStart").value||d, end:$("iWsEnd").value||$("iWsStart").value||d}; config.workshops=(config.workshops||[]).concat([W]); saveConfig(); w=W.id; }
-    if(w) tx.ws=w; else delete tx.ws; } else delete tx.ws;
+    if(w){ tx.ws=w; const bf=$("iBf").value, pur=$("iPur").value, tax=$("iTax").value||"REVIEW"; if(bf) tx.bf=bf; else delete tx.bf; if(pur) tx.pur=pur; else delete tx.pur; tx.tax=tax; }
+    else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; } } else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; }
   if(base && isRecon(base) && (tx.amt!==base.amt || tx.t!==base.t)) tx.lock=true;
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
