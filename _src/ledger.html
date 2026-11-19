@@ -1001,7 +1001,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="scroll-x"><table class="cfg" id="mTable"><thead><tr><th style="width:80px">약어</th><th>이름</th><th style="width:110px">종류</th><th>돈이 나가는 곳</th><th style="width:84px">소유</th><th style="width:80px">결제일</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
         <button class="btn small" id="addM" style="margin-top:8px">결제수단 추가</button>
       </div>
-      <div class="f"><label for="setHol">추가 휴일 <small style="font-weight:400;color:var(--muted)">카드 결제일이 주말·공휴일이면 다음 영업일로 계산합니다. 2024~2027년 공휴일은 들어 있고, 새로 정해진 임시공휴일만 넣으세요 (예: 2027-03-03, 쉼표로 여러 개)</small></label><input id="setHol" placeholder="YYYY-MM-DD, YYYY-MM-DD"></div>
+      <div class="f"><label for="setHol">추가 휴일 <small style="font-weight:400;color:var(--muted)">카드 결제일이 주말·공휴일이면 다음 영업일로 계산합니다. 공휴일은 한국천문연구원 자료로 매달 자동으로 받습니다<span id="holSrc"></span>. 그래도 빠진 날만 넣으세요 (예: 2027-03-03, 쉼표로 여러 개)</small></label><input id="setHol" placeholder="YYYY-MM-DD, YYYY-MM-DD"></div>
       <p class="hint" style="margin:0">지출·수입 계정은 위쪽의 <b>계정 관리</b>에서 추가하고 고칩니다.</p>
       <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveSet">저장</button></div></div>
     </div>
@@ -1111,7 +1111,13 @@ const KR_HOL=new Set(("2024-01-01 2024-02-09 2024-02-10 2024-02-11 2024-02-12 20
  "2025-01-01 2025-01-27 2025-01-28 2025-01-29 2025-01-30 2025-03-01 2025-03-03 2025-05-05 2025-05-06 2025-06-03 2025-06-06 2025-08-15 2025-10-03 2025-10-05 2025-10-06 2025-10-07 2025-10-08 2025-10-09 2025-12-25 "+
  "2026-01-01 2026-02-16 2026-02-17 2026-02-18 2026-03-01 2026-03-02 2026-05-01 2026-05-05 2026-05-24 2026-05-25 2026-06-03 2026-06-06 2026-07-17 2026-08-15 2026-08-17 2026-09-24 2026-09-25 2026-09-26 2026-10-03 2026-10-05 2026-10-09 2026-12-25 "+
  "2027-01-01 2027-02-06 2027-02-07 2027-02-08 2027-02-09 2027-03-01 2027-05-01 2027-05-03 2027-05-05 2027-05-13 2027-06-06 2027-07-17 2027-07-19 2027-08-15 2027-08-16 2027-09-14 2027-09-15 2027-09-16 2027-10-03 2027-10-04 2027-10-09 2027-10-11 2027-12-25 2027-12-27").split(" "));
-function isHoliday(iso){ return KR_HOL.has(iso) || (config.holidays||[]).includes(iso); }
+/* 한국천문연구원 공휴일(holidays.json, 저장소 자동 작업이 매달 갱신). 못 받으면 마지막으로 받은 것 → 내장 표 순서로 씁니다 */
+let REMOTE_HOL=new Set(), holInfo=null;
+function setRemoteHol(j){ if(!j||!j.years) return false; const S=new Set(); Object.values(j.years).forEach(L=>(L||[]).forEach(x=>x&&x.d&&S.add(x.d))); const ch=[...S].sort().join()!==[...REMOTE_HOL].sort().join(); REMOTE_HOL=S; holInfo={updated:j.updated||"", years:Object.keys(j.years)}; return ch; }
+try{ setRemoteHol(JSON.parse(localStorage.getItem("ldg_holidays")||"null")); }catch(_){}
+fetch("holidays.json",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{ if(!j) return; try{ localStorage.setItem("ldg_holidays",JSON.stringify(j)); }catch(_){}
+  if(setRemoteHol(j) && typeof render==="function"){ render(); if(loaded.months&&loaded.acc) syncTBUSave(); } }).catch(()=>{});
+function isHoliday(iso){ return KR_HOL.has(iso) || REMOTE_HOL.has(iso) || (config.holidays||[]).includes(iso); }
 function bizDay(iso){ if(!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso; let x=new Date(iso+"T00:00"), out=iso;
   for(let i=0;i<15;i++){ const w=x.getDay(); out=x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate()); if(w!==0 && w!==6 && !isHoliday(out)) return out; x.setDate(x.getDate()+1); } return out; }
 function effDate(t){
@@ -3960,7 +3966,7 @@ $("delBtn").onclick=async()=>{
 
 /* ---------- 설정 ---------- */
 let draft=null;
-function openSettings(){ draft=JSON.parse(JSON.stringify(config)); $("setHol").value=(config.holidays||[]).join(", "); renderSettings(); openOv("setOv"); }
+function openSettings(){ draft=JSON.parse(JSON.stringify(config)); $("setHol").value=(config.holidays||[]).join(", "); $("holSrc").textContent=holInfo?` (마지막 갱신 ${holInfo.updated} · ${holInfo.years.join("·")}년)`:" (아직 받은 자료 없음 — 내장 표 2024~2027년 사용)"; renderSettings(); openOv("setOv"); }
 function renderSettings(){
   const tb=$("mTable").querySelector("tbody");
   tb.innerHTML=draft.methods.map((m,i)=>{

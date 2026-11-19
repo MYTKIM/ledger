@@ -12,6 +12,7 @@
   - `build.py` 원본을 합쳐 저장소 맨 위(index.html, config.js, store.js, ui.js, sw.js, manifest, icons, vendor)에 게시 파일을 만든다.
 - 저장소 맨 위 파일은 빌드 결과물. 직접 고치지 말 것.
 - `tools/verify_ai_export.py` AI 분석용 내보내기 파일 독립 검산(앱 코드 없이 파일만으로 월 합계·프로젝트 합계·외화 환산 재계산). `tools/AI_EXPORT_CHECK.md` ChatGPT 검증 절차.
+- `holidays.json` 공휴일(한국천문연구원 특일 정보). `.github/workflows/holidays.yml`이 매달 `tools/fetch_holidays.py`로 갱신(인증키는 저장소 Secrets `KASI_KEY`). 앱은 이것 + 내장 표(KR_HOL) + 설정의 추가 휴일로 카드 결제일을 다음 영업일로 보정. 자동 작업이 커밋하므로 push 전에 pull.
 - `v1/` 메뉴 개편(2026-11-12) 전 화면, `v2/` 내비게이션 개편(2026-11-20) 전 화면을 보관한 정적 사본. 빌드가 건드리지 않음. 되돌릴 때 참고(설정 › 점검·도구에서 열림).
 
 ## 화면 규칙 (2026-11-20 개편)

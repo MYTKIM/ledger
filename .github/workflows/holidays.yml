@@ -1,0 +1,23 @@
+# 공휴일 자동 갱신: 매달 1일 한국천문연구원 특일 정보에서 받아 holidays.json에 저장
+name: 공휴일 갱신
+on:
+  schedule:
+    - cron: "17 18 1 * *"   # 매달 2일 03:17 (한국 시간)
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/holidays.yml", "tools/fetch_holidays.py"]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/fetch_holidays.py
+        env:
+          KASI_KEY: ${{ secrets.KASI_KEY }}
+      - run: |
+          if ! git diff --quiet -- holidays.json || [ -n "$(git status --porcelain holidays.json)" ]; then
+            git config user.name "ledger-bot"; git config user.email "ledger-bot@users.noreply.github.com"
+            git add holidays.json && git commit -m "공휴일 갱신 (한국천문연구원)" && git push
+          fi
