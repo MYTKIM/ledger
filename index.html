@@ -610,6 +610,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <div class="panel"><h3>데이터</h3>
       <div class="set-row"><b>가져오기</b><span>구글 시트 가계부 불러오기</span><button type="button" class="btn" data-go="openImport">열기</button></div>
       <div class="set-row"><b>백업</b><span>백업 파일 내려받기·가져오기</span><button type="button" class="btn" data-go="openBackup">열기</button></div>
+      <div class="set-row"><b>데이터 점검</b><span>ID가 겹친 거래, 중복 의심 거래, 끊어진 정산 연결 찾기</span><button type="button" class="btn" data-go="openCheck">열기</button><button type="button" id="openCheck" hidden></button></div>
       <div class="set-row"><b>예전 화면</b><span>메뉴 개편 전 화면(보관용). 이 기기의 장부를 그대로 봅니다</span><a class="btn" href="./v1/">열기</a></div>
     </div>
     <div class="panel"><h3>기기</h3>
@@ -875,6 +876,12 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 </div>
 
 <!-- 백업 -->
+<div class="overlay" id="ckOv" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="ckTitle">
+    <h3><span id="ckTitle">데이터 점검</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <div class="form" id="ckBody"></div>
+  </div>
+</div>
 <div class="overlay" id="bkOv" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="bkTitle">
     <h3><span id="bkTitle">백업</span><button class="x" data-close aria-label="닫기">×</button></h3>
@@ -1167,10 +1174,55 @@ async function boot(){
     months = next;
     if(first){ first=false; const keys=Object.keys(months).filter(k=>months[k].length).sort(); if(keys.length && !months[CUR_YM]) curYM=keys[keys.length-1]; }
     loaded.months=true;
-    render(); maybeRunSchedules();
+    render(); maybeRunSchedules(); fixDupIdsSoon();
   }, e=>showNotice("장부를 읽지 못했습니다 ("+e.code+")."));
 }
 
+/* ---------- 데이터 점검: 같은 달에 ID가 같은 거래 바로잡기 ----------
+   ID가 겹치면 한 줄을 눌렀는데 다른 거래가 열리고, 저장하면 같은 ID 거래가 함께 덮어써지며, 기기 간 병합 때 하나가 사라질 수 있음.
+   내용까지 똑같은 것은 하나로 합치고, 내용이 다른 것은 모두 새 ID를 줌(옛 ID는 삭제 표시가 남아 다른 기기의 옛 사본도 정리됨). */
+const canonTx=t=>{ const o={...t}; delete o.u; delete o.ts; return JSON.stringify(Object.keys(o).sort().map(k=>[k,o[k]])); };
+function findDupIds(){ const out=[]; Object.keys(months).forEach(k=>{ const g={}; monthTx(k).forEach(t=>{ (g[t.id]=g[t.id]||[]).push(t); }); Object.entries(g).forEach(([id,l])=>{ if(l.length>1) out.push({ym:k,id,list:l}); }); }); return out; }
+let dupTimer=null;
+function fixDupIdsSoon(){ clearTimeout(dupTimer); dupTimer=setTimeout(fixDupIds, 1500); }
+async function fixDupIds(){
+  const groups=findDupIds(); if(!groups.length) return null;
+  const touched=new Set(), rep={merged:0, renamed:0, items:[]}, idMap={};
+  groups.forEach(({ym,id,list})=>{
+    const uniq=[]; list.forEach(t=>{ if(!uniq.some(u=>canonTx(u)===canonTx(t))) uniq.push(t); else rep.merged++; });
+    let arr=monthTx(ym).filter(t=>t.id!==id);
+    if(uniq.length===1) arr.push(uniq[0]);
+    /* 새 ID는 옛 ID + 내용으로 정해서 어느 기기에서 바로잡아도 같은 ID가 나오게 함 (기기마다 다르면 병합 때 중복이 생김) */
+    else uniq.forEach(t=>{ const c=canonTx({...t, was:undefined}); let h=5381; for(let i=0;i<c.length;i++) h=((h*33)^c.charCodeAt(i))>>>0; const nid=id+"-"+h.toString(36); idMap[ym+"|"+id]=(idMap[ym+"|"+id]||[]).concat([nid]); arr.push({...t, id:nid, u:Math.max(+t.u||0, 1), was:id}); rep.renamed++; });
+    months[ym]=arr; touched.add(ym); rep.items.push({ym, id, n:list.length, kinds:uniq.length, desc:uniq.map(t=>`${t.d} ${t.desc||"(적요 없음)"} ${won(t.amt)}`)});
+  });
+  /* 옛 ID를 가리키던 정산 연결은 끊어질 수 있어 점검 화면에서 보여 줌 */
+  await saveMonths(touched); render();
+  try{ localStorage.setItem("dupFixLog", JSON.stringify({at:new Date().toISOString(), ...rep})); }catch(_){}
+  showNotice(`데이터 점검: ID가 겹친 거래 ${groups.length}묶음을 바로잡았습니다${rep.merged?` (완전히 같은 중복 ${rep.merged}건은 하나로)`:""}. 설정 › 데이터 › 데이터 점검에서 확인하세요.`);
+  return rep;
+}
+/* 점검 화면: ① 바로잡은 ID ② 중복 의심(같은 날·금액·적요) ③ 끊어진 정산 연결 */
+function renderCheck(){
+  const all=[]; Object.keys(months).forEach(k=>monthTx(k).forEach(t=>all.push({...t, _ym:k})));
+  const byId=new Map(all.map(t=>[t.id,t]));
+  let log=null; try{ log=JSON.parse(localStorage.getItem("dupFixLog")||"null"); }catch(_){}
+  const dupId=findDupIds();
+  const sus={}; all.filter(t=>!isRecon(t) && t.t!=="move").forEach(t=>{ const k=[t.d,t.t,+t.amt,(t.desc||"").trim()].join("|"); (sus[k]=sus[k]||[]).push(t); });
+  const susL=Object.values(sus).filter(l=>l.length>1).sort((a,b)=>b[0].d.localeCompare(a[0].d));
+  const broken=all.filter(t=>(t.settledBy && !byId.has(t.settledBy)) || (Array.isArray(t.settles) && t.settles.some(i=>!byId.has(i))));
+  const row=t=>`<button type="button" class="row" data-ym="${esc(t._ym)}" data-id="${esc(t.id)}"><div class="d num"><b style="font-size:13px">${+t.d.slice(5,7)}/${+t.d.slice(8,10)}</b>${t.d.slice(2,4)}년</div><div class="t">${esc(t.desc||"(적요 없음)")}<div class="meta">${t.ent==="corp"?'<span class="chip corp">법인</span>':'<span class="chip me">개인</span>'} ${esc(t.cat||"")} · ${esc(t.m?((methodOf(t.m)||{}).name||t.m):"결제수단 미지정")}${t.was?` · <span class="tag">ID 바로잡음</span>`:""}</div></div><div class="amt num">${won(t.amt)}</div></button>`;
+  let h=`<h4 style="margin:4px 0">① 같은 ID를 가진 거래</h4>`;
+  h+= dupId.length ? `<p class="hint warn">아직 ${dupId.length}묶음이 남아 있습니다. <button type="button" class="btn small" id="ckFix">지금 바로잡기</button></p>` : `<p class="hint">지금은 없습니다.${log?` 마지막으로 바로잡은 때: ${esc(new Date(log.at).toLocaleString("ko-KR"))} · ${log.items.length}묶음 (내용이 다른 거래 ${log.renamed}건에 새 ID, 완전히 같은 중복 ${log.merged}건은 하나로)`:""}</p>`;
+  if(log && log.items.length) h+=`<div class="hint" style="font-size:12px;max-height:140px;overflow:auto">${log.items.map(x=>`${esc(x.ym)}: ${x.desc.map(esc).join(" / ")}`).join("<br>")}</div>`;
+  h+=`<h4 style="margin:14px 0 4px">② 중복 의심 — 같은 날짜·금액·적요 ${susL.length}묶음</h4><p class="hint" style="margin:0 0 6px">실제로 두 번 낸 것이 아니라면 하나를 열어 지우세요. 눌러서 열 수 있습니다.</p>`;
+  h+= susL.length ? `<div class="ledger">${susL.map(l=>l.map(row).join("")+`<div style="height:6px;background:var(--line)"></div>`).join("")}</div>` : `<p class="hint">없습니다.</p>`;
+  h+=`<h4 style="margin:14px 0 4px">③ 끊어진 정산 연결 ${broken.length}건</h4>`;
+  h+= broken.length ? `<p class="hint" style="margin:0 0 6px">정산 이체와 원래 거래의 연결이 끊긴 기록입니다. 열어서 정산 상태를 확인하세요.</p><div class="ledger">${broken.map(row).join("")}</div>` : `<p class="hint">없습니다.</p>`;
+  $("ckBody").innerHTML=h;
+  $("ckBody").querySelectorAll(".row[data-id]").forEach(b=>b.onclick=()=>{ closeOv("ckOv"); openTx(b.dataset.ym, b.dataset.id); });
+  const fx=$("ckFix"); if(fx) fx.onclick=async()=>{ fx.disabled=true; await fixDupIds(); renderCheck(); };
+}
 /* ---------- 렌더 ---------- */
 function monthTx(ym){ return months[ym]||[]; }
 function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym).forEach(t=>{ if(t.t==="out"&&t.st==="pending") out.push(t); })); return out; }
@@ -3327,6 +3379,7 @@ async function saveTextFile(name, text){
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type:"application/json"})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000); return "ok";
 }
 let bkStaged=null;
+$("openCheck").onclick=()=>{ renderCheck(); openOv("ckOv"); };
 $("openBackup").onclick=()=>{ const b=collectBackup(); const n=Object.keys(b.docs).filter(k=>k.startsWith("months/")).reduce((a,k)=>a+b.docs[k].tx.length,0); $("bkInfo").textContent=`거래 ${n.toLocaleString("ko-KR")}건 · 문서 ${Object.keys(b.docs).length}개`; bkStaged=null; $("bkPreview").innerHTML=""; $("bkImport").disabled=true; $("bkFile").value=""; openOv("bkOv"); };
 $("bkExport").onclick=async()=>{ const b=collectBackup(); const r=await saveTextFile(`우진장부-백업-${todayISO()}.json`, JSON.stringify(b)); $("bkInfo").textContent = r==="ok" ? "내려받기를 시작했습니다." : r==="cancelled" ? "취소했습니다." : "내려받지 못했습니다 ("+r+")."; };
 $("bkFile").onchange=async e=>{
@@ -3403,7 +3456,9 @@ function parseWorkbook(wb, title){
       if(/정산|개인카드\s*사용\s*지급/.test(desc) || /적금/.test(desc+" "+cat+" "+((methodOf(m)||{}).name||""))) t="move";
       const ent = t==="move" ? "me" : (t==="in" ? (/^지발연/.test(cat)?"corp":"me") : (isCorpCat(cat)?"corp":"me"));
       const ym=d.slice(0,7); seen[ym]=(seen[ym]||0)+1;
-      const tx={id:`imp-${ym}-${b.type}-${r}`, d, t, amt, desc, cat, m, ent, src:"import", ts:r};
+      /* 같은 줄에 같은 종류의 칸(예: 법인 지출·개인 지출)이 여럿이면 칸 번호(bi)로 구분해 ID가 겹치지 않게 함 */
+      let id0=`imp-${ym}-${b.type}${bi?"b"+bi:""}-${r}`; while(out.some(x=>x.id===id0)) id0+="x";
+      const tx={id:id0, d, t, amt, desc, cat, m, ent, src:"import", ts:r};
       if(t==="move") tx.io=b.type;
       if(needsSettle(tx)) tx.st = ym>=CUR_YM ? "pending" : "done";
       out.push(tx);
