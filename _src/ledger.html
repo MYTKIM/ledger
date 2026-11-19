@@ -83,7 +83,8 @@ tr[data-dt] td:first-child{text-decoration:underline;text-decoration-color:var(-
 #dtBreak .chip[aria-pressed="true"]{border-color:var(--ink);color:var(--ink)}
 .linkbtn{border:0;background:none;color:var(--corp);font-size:12px;padding:0;cursor:pointer;text-decoration:underline}
 .tools{display:flex;gap:8px;flex-wrap:wrap}
-header.top .tools #openImport, header.top .tools #openSettings, header.top .tools #openCats, header.top .tools #openBackup, header.top .tools #openDevice, #xfBtn, #accEditBtn, #pplEdit, #wsEdit{display:none}
+header.top .tools #openDevice{display:none} /* 이 기기 메뉴는 설정 › 기기·보안에서 */
+#legacyTriggers{display:none}
 .grid.solo{grid-template-columns:minmax(0,1fr)}
 .set-grid{display:grid;gap:14px}
 .set-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
@@ -239,6 +240,8 @@ table.cfg input,table.cfg select{width:100%;border:1px solid var(--line);border-
 .views a{padding:7px 14px;font-weight:600;text-decoration:none;color:var(--ink);font-size:13.5px}
 .views a[aria-current="page"]{background:var(--ink);color:var(--paper)}
 .dash{margin-top:20px;display:grid;gap:24px}
+.dash[hidden]{display:none}
+@media (max-width:640px){ header.top .month.off{display:none} }
 .dash-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
 .dash-bar p{margin:0;color:var(--muted);font-size:13px}
 .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
@@ -275,6 +278,15 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .bitem{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--paper);display:grid;gap:10px}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+.todo{display:grid;gap:6px}
+.todo-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-size:13.5px}
+.todo-row small{color:var(--muted);font-size:12px} .todo-row .r{display:flex;gap:6px}
+#todoSec .notice{margin:0}
+.badge{display:inline-block;min-width:16px;padding:0 5px;margin-left:5px;border-radius:999px;background:var(--warn);color:#fff;font-size:10.5px;font-weight:700;line-height:16px;text-align:center;vertical-align:2px}
+.fixrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.fix{display:grid;gap:4px;align-content:start} .fix .btn{justify-self:start} .fix span{font-size:12.5px;color:var(--muted)}
+.accp{background:none;border:0;padding:0;box-shadow:none}
+.guardbar{flex:1 1 100%;margin:0 0 6px!important;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .pjks{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px;margin:4px 0 8px}
 .pjk{border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:var(--surface)}
 .pjk .k{font-size:11.5px;color:var(--muted)} .pjk .v{font-size:15px;font-weight:600} .pjk .s{font-size:11px;color:var(--muted)}
@@ -394,21 +406,22 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <button class="label" id="mPick" type="button" aria-label="연도와 달 고르기"><small id="mYear">2026</small><span id="mLabel">10월</span></button>
       <button id="nextM" aria-label="다음 달">›</button>
     </div>
-    <nav class="views" aria-label="화면 선택"><a href="#home" id="vHome" aria-current="page">홈</a><a href="#tx" id="vLedger">거래</a><a href="#dashboard" id="vDash">분석</a><a href="#budget" id="vBud">예산</a><a href="#accounts" id="vAcc">자산</a><a href="#settings" id="vSet">⚙ 설정</a></nav>
-    <div class="tools">
-      <button class="btn" id="openImport">가계부 불러오기</button>
-      <button class="btn" id="openSettings">결제수단 설정</button>
-      <button class="btn" id="openCats">계정 관리</button>
-      <button class="btn" id="openBackup">백업</button>
-    </div>
+    <div class="tools" aria-label="동기화 상태"></div>
+    <nav class="views" aria-label="화면 선택"><a href="#home" id="vHome" aria-current="page">홈<span class="badge" id="todoBadge" hidden></span></a><a href="#tx" id="vLedger">거래</a><a href="#dashboard" id="vDash">분석</a><a href="#budget" id="vBud">예산</a><a href="#accounts" id="vAcc">자산</a><a href="#settings" id="vSet">⚙ 설정</a></nav>
   </header>
+  <!-- 설정 화면 버튼이 누르는 숨은 단추 (화면에는 안 보임) -->
+  <div id="legacyTriggers"><button class="btn" id="openImport">가져오기</button><button class="btn" id="openSettings">결제수단</button><button class="btn" id="openCats">계정과목</button><button class="btn" id="openBackup">백업</button></div>
   <div id="notice" class="notice" hidden></div>
-  <div id="dueBar" class="notice due" hidden></div>
-  <div id="tbuBar" class="notice due" hidden></div>
   <nav id="jumpBar" class="jump" aria-label="이 화면 바로 가기" hidden></nav>
 
   <div class="grid" id="ledgerView">
     <div class="col">
+      <section id="todoSec" hidden>
+        <h2>할 일 <span class="aside" id="todoN"></span></h2>
+        <div id="dueBar" class="notice due" hidden></div>
+        <div id="tbuBar" class="notice due" hidden></div>
+        <div id="todoList" class="todo"></div>
+      </section>
       <section>
         <h2>월 요약 <span class="aside" id="sumNote"></span></h2>
         <div class="totals">
@@ -436,14 +449,14 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       </section>
 
       <section>
-        <h2>지출 구성 <span class="aside" title="( ) 안은 이 계정의 이번 달 예산 대비 사용률입니다. 이 달에 예산이 없는 계정은 NA로 표시합니다.">(%) = 이번 달 예산 대비 사용률</span>
+        <h2>이번 달 지출 구성 <span class="aside" title="( ) 안은 이 계정의 이번 달 예산 대비 사용률입니다. 이 달에 예산이 없는 계정은 NA로 표시합니다.">(%) = 이번 달 예산 대비 사용률</span>
           <span class="seg" id="catSeg"><button data-v="all" aria-pressed="true">전체</button><button data-v="corp" aria-pressed="false">법인</button><button data-v="me" aria-pressed="false">개인</button></span>
         </h2>
         <div class="bars" id="byCat"></div>
       </section>
 
       <section>
-        <h2>수입 구성 <span class="aside" id="incNote"></span></h2>
+        <h2>이번 달 수입 구성 <span class="aside" id="incNote"></span></h2>
         <div class="bars" id="byInc"></div>
       </section>
     </div>
@@ -483,20 +496,20 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     </div>
     <div class="two-col">
       <div class="panel">
-        <h3>지출 구성비</h3>
+        <h3>기간 지출 구성</h3>
         <p class="sub" id="grpSub"></p>
         <div class="stack" id="grpStack"></div>
         <div class="scroll-x"><table class="dt" id="grpTbl"></table></div>
       </div>
       <div class="panel">
-        <h3>수입 구성</h3>
+        <h3>기간 수입 구성</h3>
         <p class="sub" id="incSub"></p>
         <div class="stack" id="incStack"></div>
         <div class="scroll-x"><table class="dt" id="incTbl"></table></div>
       </div>
     </div>
     <div class="panel">
-      <div class="ph"><h3>프로젝트·행사 비용</h3><button type="button" class="btn small" id="wsEdit">프로젝트·행사 관리</button></div>
+      <div class="ph"><h3>프로젝트·행사 비용</h3><button type="button" class="btn small" data-gopj="">예산 › 프로젝트·행사에서 관리 →</button></div>
       <p class="sub">미리 낸 숙박·교통부터 기간 중 비용까지, 프로젝트·행사로 표시한 기록을 모읍니다. 기간과 상관없이 전체 기록에서 셉니다. 줄을 누르면 거래를 봅니다.</p>
       <div class="scroll-x"><table class="dt" id="wsTbl"></table></div>
     </div>
@@ -525,6 +538,12 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   </div>
 
   <div class="dash" id="budView" hidden>
+    <div class="dash-bar"><span class="seg" id="budMode" aria-label="예산 보기"><button type="button" data-v="month" aria-pressed="true">월·연 예산</button><button type="button" data-v="pj" aria-pressed="false">프로젝트·행사</button></span></div>
+    <div id="budPj" class="dash" style="margin-top:0" hidden>
+      <div class="dash-bar"><p style="flex:1 1 260px">프로젝트·행사마다 승인예산 → 실제집행 → 확정예정 → 계획한도 → 예상총액 → 예상잔액을 봅니다. 카드의 ‘예정비용 관리’에서 예정 항목을 넣고 결제와 연결합니다.</p><div class="tools"><button class="btn" id="wsEdit">프로젝트·행사 관리</button></div></div>
+      <div id="pjCards" style="display:grid;gap:16px"></div>
+    </div>
+    <div id="budMonth" class="dash" style="margin-top:0">
     <div class="dash-bar">
       <span class="seg" id="budTSeg"><button type="button" data-v="out" aria-pressed="true">지출</button><button type="button" data-v="in" aria-pressed="false">수입</button></span>
       <p id="budNote" style="flex:1 1 200px"></p>
@@ -568,25 +587,32 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <p class="sub" id="nbSub">이 달에 쓴 돈 중 어떤 예산에도 묶이지 않은 항목입니다</p>
       <div class="scroll-x"><table class="dt" id="bNoTbl"></table></div>
     </div>
+    </div>
   </div>
 
   <div class="dash" id="setView" hidden>
-    <div class="panel"><h3>기본 정보</h3>
-      <div class="set-row"><b>계정과목</b><span>지출·수입 항목과 그룹, 일괄 변경</span><button type="button" class="btn" data-go="openCats">열기</button></div>
+    <div class="panel"><h3>장부 구조</h3>
+      <div class="set-row"><b>계정과목</b><span>지출·수입 항목과 그룹, 순서, 합치기·옮기기</span><button type="button" class="btn" data-go="openCats">열기</button></div>
       <div class="set-row"><b>결제수단</b><span>카드·페이·계좌이체·현금과 결제일, 연결 계좌</span><button type="button" class="btn" data-go="openSettings">열기</button></div>
-      <div class="set-row"><b>계좌</b><span>통장·CMA·적금·현금 목록과 주 통장</span><button type="button" class="btn" data-go="accEditBtn">열기</button></div>
-      <div class="set-row"><b>자동이체</b><span>적금·보험료 등 매달 자동으로 나가는 이체 (예산 › 집행 일정에도 보임)</span><button type="button" class="btn" data-go="xfBtn">열기</button></div>
+      <div class="set-row"><b>계좌 편집</b><span>통장·CMA·적금·현금 목록과 주 통장</span><button type="button" class="btn" data-go="accEditBtn">열기</button></div>
     </div>
-    <div class="panel"><h3>대상·분류</h3>
-      <div class="set-row"><b>예수금(맡은 돈) 대상자</b><span>YJ·TY 등 사람별 맡은 돈·빌려 준 돈, 묶을 계정과목</span><button type="button" class="btn" data-go="pplEdit">열기</button></div>
-      <div class="set-row"><b>프로젝트·행사</b><span>워크샵·행사·프로젝트의 기간, 승인예산, 비용 대상</span><button type="button" class="btn" data-go="wsEdit">열기</button></div>
+    <div class="panel"><h3>사람</h3>
+      <div class="set-row"><b>사람 (가족·관계자)</b><span>한 목록으로 관리: 프로젝트 참가 후보, 예수금(맡은 돈)·대여금 대상</span><button type="button" class="btn" data-go="pplEdit">열기</button></div>
+    </div>
+    <div class="panel"><h3>반복·계획</h3>
+      <div class="set-row"><b>자동이체</b><span>적금·보험료 등 매달 자동으로 나가는 이체 (자산 탭에도 보임)</span><button type="button" class="btn" data-go="xfBtn">열기</button></div>
+      <div class="set-row"><b>예산 설정</b><span>계정별 월·연 예산, 납부일, 자동 기록 (예산 탭과 같은 창)</span><button type="button" class="btn" data-go="budEdit">열기</button></div>
+      <div class="set-row"><b>프로젝트·행사 관리</b><span>기간, 승인예산, 참가자 (예정비용은 예산 › 프로젝트·행사)</span><button type="button" class="btn" data-go="wsEdit">열기</button></div>
     </div>
     <div class="panel"><h3>데이터</h3>
       <div class="set-row"><b>가져오기</b><span>구글 시트 가계부 불러오기</span><button type="button" class="btn" data-go="openImport">열기</button></div>
       <div class="set-row"><b>백업</b><span>백업 파일 내려받기·가져오기</span><button type="button" class="btn" data-go="openBackup">열기</button></div>
       <div class="set-row"><b>AI 분석용 내보내기</b><span>고른 기간·범위의 장부를 내 구글 드라이브 ‘U JIN Ledger AI’ 폴더에 읽기용 사본으로 저장</span><button type="button" class="btn" data-go="openAi">열기</button><button type="button" id="openAi" hidden></button></div>
-      <div class="set-row"><b>데이터 점검</b><span>ID가 겹친 거래, 중복 의심 거래, 끊어진 정산 연결 찾기</span><button type="button" class="btn" data-go="openCheck">열기</button><button type="button" id="openCheck" hidden></button></div>
-      <div class="set-row"><b>예전 화면</b><span>메뉴 개편 전 화면(보관용). 이 기기의 장부를 그대로 봅니다</span><a class="btn" href="./v1/">열기</a></div>
+    </div>
+    <div class="panel"><h3>점검·도구</h3>
+      <div class="set-row"><b>데이터 점검</b><span>ID가 겹친 거래, 중복 의심 거래, 끊어진 정산 연결 (문제가 있으면 홈 ‘할 일’에도 뜸)</span><button type="button" class="btn" data-go="openCheck">열기</button><button type="button" id="openCheck" hidden></button></div>
+      <div class="set-row"><b>예전 화면 v2</b><span>2026-11-20 내비게이션 개편 전 화면(보관용). 이 기기의 장부를 그대로 봅니다</span><a class="btn" href="./v2/">열기</a></div>
+      <div class="set-row"><b>예전 화면 v1</b><span>2026-11-12 메뉴 개편 전 화면(보관용)</span><a class="btn" href="./v1/">열기</a></div>
     </div>
     <div class="panel"><h3>기기</h3>
       <div class="set-row"><b>기기·보안</b><span>구글 로그인·동기화, 잠금 비밀번호, 앱 버전</span><button type="button" class="btn" data-go="openDevice">열기</button></div>
@@ -595,12 +621,27 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
   <div class="dash" id="accView" hidden>
     <div class="dash-bar">
       <p id="accNote">통장 잔액을 입력하면, 그 뒤의 기록을 더하고 빼서 지금 잔액을 추적합니다.</p>
-      <div class="tools"><button class="btn primary" id="balBtn">잔액 입력</button><button class="btn" id="settleBtn">법인 정산</button><button class="btn" id="cbBtn">카드 대금 맞추기(대사)</button><button class="btn" id="xfBtn">자동이체</button><button class="btn" id="accEditBtn">계좌 편집</button></div>
+
     </div>
     <div class="kpis" id="fKpis"></div>
-    <div class="acc-grid" id="accGrid"></div>
     <div class="panel">
-      <div class="ph"><h3>예수금(맡은 돈) · 대여금(빌려 준 돈)</h3><button type="button" class="btn small" id="pplEdit">대상자 설정</button></div>
+      <h3>맞추기·정산</h3>
+      <div class="fixrow">
+        <div class="fix"><button class="btn primary" id="balBtn">잔액 입력</button><span id="fixBal">통장 잔액을 넣어 장부와 맞춥니다</span></div>
+        <div class="fix"><button class="btn" id="cbBtn">카드 대금 맞추기(대사)</button><span id="fixCb">카드 청구액과 기록을 맞춥니다</span></div>
+        <div class="fix"><button class="btn" id="settleBtn">법인 정산</button><span id="fixSt">개인 돈으로 먼저 낸 법인 비용을 돌려받습니다</span></div>
+      </div>
+    </div>
+    <div class="panel accp">
+      <div class="ph"><h3>계좌</h3><button type="button" class="btn small" id="accEditBtn">계좌 편집</button></div>
+      <div class="acc-grid" id="accGrid"></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h3>자동이체</h3><button type="button" class="btn small" id="xfBtn">자동이체 고치기</button></div>
+      <div class="scroll-x"><table class="dt" id="xfTbl"></table></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h3>예수금(맡은 돈) · 대여금(빌려 준 돈)</h3><button type="button" class="btn small" id="pplEdit">사람</button></div>
       <p class="sub">다른 사람의 돈을 내 통장에 맡아 두었거나, 내가 빌려 준 돈입니다. 이 사람에게 보내거나 받은 돈은 <b>이체·정산</b>에서 보낸 곳·받는 곳을 그 사람으로 고르면 됩니다. 수입·지출 합계에는 넣지 않고, 맡아 둔 돈은 여유자금 계산에서 뺍니다.</p>
       <div class="acc-grid" id="pplGrid"></div>
     </div>
@@ -647,6 +688,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <div class="dt-sum" id="dtSum"></div>
       <div class="dchips" id="dtBreak"></div>
       <div class="ledger" id="dtList"></div>
+      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>닫기</button></div></div>
     </div>
   </div>
 </div>
@@ -725,7 +767,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <div class="mp-years"><button type="button" id="mpPrevY" aria-label="이전 해">‹</button><b id="mpY" class="num">2026</b><button type="button" id="mpNextY" aria-label="다음 해">›</button></div>
     <div class="mp-grid" id="mpGrid"></div>
     <div class="mp-chips" id="mpChips"></div>
-    <div class="actions" style="margin-top:14px"><span class="hint" style="background:none;padding:0;font-size:12px">점이 있는 달은 기록이 있는 달입니다.</span><div class="r"><button type="button" class="btn" id="mpNow">이번 달</button></div></div>
+    <div class="actions" style="margin-top:14px"><span class="hint" style="background:none;padding:0;font-size:12px">점이 있는 달은 기록이 있는 달입니다.</span><div class="r"><button type="button" class="btn" data-close>닫기</button><button type="button" class="btn" id="mpNow">이번 달</button></div></div>
   </div>
 </div>
 
@@ -741,6 +783,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
       <button type="button" class="btn small" id="bulkOpen" style="justify-self:start">계정과목 일괄 변경 (목록 붙여 넣기)</button>
       <div class="cat-tools"><button type="button" class="btn small" id="catOpenAll">모두 펼치기</button><button type="button" class="btn small" id="catCloseAll">모두 접기</button><button type="button" class="btn small" id="catAbc">가나다순으로 정렬</button><span class="hint" style="background:none;padding:0;font-size:12px">⋮⋮를 끌거나 ↑↓로 순서를 바꿉니다. 바꾼 순서는 바로 저장되고, 기록 창의 계정 목록도 이 순서를 따릅니다. 추가·이름 변경도 누르는 즉시 저장됩니다.</span></div>
       <div class="cat-tree" id="catTree"></div>
+      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>닫기</button></div></div>
     </div>
   </div>
 </div>
@@ -832,7 +875,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <h3><span id="wsTitle">프로젝트·행사 관리</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
       <p class="hint" style="margin:0">프로젝트·행사를 미리 만들어 두면, 기록을 넣을 때 ‘프로젝트·행사’에서 고를 수 있습니다. 기록 창에서 ‘새 프로젝트·행사 만들기’로 바로 만들 수도 있습니다. 프로젝트·행사를 지우면 그 표시만 없어지고 기록은 그대로 남습니다.</p>
-      <label class="fld" style="max-width:420px">전체 사람 후보 (쉼표로 구분)<input id="pjCandIn" placeholder="UJ, MH, YJ, TY"></label>
+      <p class="hint" style="margin:0">참가자 후보는 <b>설정 › 사람</b>에서 한 목록으로 관리합니다. <button type="button" class="btn small" id="pjCandGo">사람 목록 열기</button></p>
       <div id="wsList" class="xf-list"></div>
       <button type="button" class="btn small" id="wsAdd" style="justify-self:start">프로젝트·행사 추가</button>
       <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="wsSave">저장</button></div></div>
@@ -843,11 +886,16 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 <!-- 사람 (맡은 돈·빌려 준 돈) -->
 <div class="overlay" id="pplOv" hidden>
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="pplTitle">
-    <h3><span id="pplTitle">예수금(맡은 돈) · 대여금(빌려 준 돈) — 사람</span><button class="x" data-close aria-label="닫기">×</button></h3>
+    <h3><span id="pplTitle">사람 (가족·관계자)</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
       <p class="hint" style="margin:0"><b>기준일</b>의 잔액을 적으면, 그 다음 날부터의 이체로 잔액을 이어 셉니다. 지금까지의 기록을 하나하나 이 사람으로 바꿔 둘 거라면 기준일과 잔액은 비워 두세요. <b>약정 총액</b>을 적으면 남은 납입액과 앞으로 더 빌려 줄 돈을 계산해 보여 줍니다.</p>
+      <h4 style="margin:2px 0 0">가족·관계자 목록</h4>
+      <p class="hint" style="margin:0">한 사람은 한 번만 적습니다. 체크한 사람이 프로젝트·행사의 참가 후보가 되고(프로젝트마다 실제 참가자는 따로 고름), 아래에 예수금·대여금을 등록한 사람에게는 ‘예수금 대상’ 표시가 붙습니다.</p>
+      <div id="pplCands" style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center"></div>
+      <div class="brow" style="gap:6px"><input id="pplCandNew" placeholder="새 이름 (예: 외부강사 홍길동)" style="flex:0 1 240px"><button type="button" class="btn small" id="pplCandAdd">목록에 추가</button></div>
+      <h4 style="margin:10px 0 0">예수금(맡은 돈) · 대여금(빌려 준 돈) 대상</h4>
       <div id="pplList" class="xf-list"></div>
-      <button type="button" class="btn small" id="pplAdd" style="justify-self:start">사람 추가</button>
+      <button type="button" class="btn small" id="pplAdd" style="justify-self:start">예수금 대상 추가</button>
       <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="pplSave">저장</button></div></div>
     </div>
   </div>
@@ -870,7 +918,9 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 <div class="overlay" id="pjOv" hidden>
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="pjTitle">
     <h3><span id="pjTitle">프로젝트 예산</span><button class="x" data-close aria-label="닫기">×</button></h3>
-    <div class="form" id="pjBody"></div>
+    <div class="form"><div id="pjBody" style="display:grid;gap:12px;min-width:0"></div>
+      <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>닫기</button></div></div>
+    </div>
   </div>
 </div>
 <div class="overlay" id="aiOv" hidden>
@@ -904,7 +954,9 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 <div class="overlay" id="ckOv" hidden>
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="ckTitle">
     <h3><span id="ckTitle">데이터 점검</span><button class="x" data-close aria-label="닫기">×</button></h3>
-    <div class="form" id="ckBody"></div>
+    <div class="form"><div id="ckBody" style="display:grid;gap:10px;min-width:0"></div>
+      <div class="actions"><span class="hint" id="ckSelInfo" style="margin:0;background:none;padding:0"></span><div class="r"><button type="button" class="btn" data-close>닫기</button><button type="button" class="btn primary" id="ckDel" disabled hidden>체크한 기록 지우기</button></div></div>
+    </div>
   </div>
 </div>
 <div class="overlay" id="bkOv" hidden>
@@ -949,7 +1001,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <button class="btn small" id="addM" style="margin-top:8px">결제수단 추가</button>
       </div>
       <p class="hint" style="margin:0">지출·수입 계정은 위쪽의 <b>계정 관리</b>에서 추가하고 고칩니다.</p>
-      <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveSet">설정 저장</button></div></div>
+      <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveSet">저장</button></div></div>
     </div>
   </div>
 </div>
@@ -1226,7 +1278,7 @@ async function fixDupIds(){
   /* 옛 ID를 가리키던 정산 연결은 끊어질 수 있어 점검 화면에서 보여 줌 */
   await saveMonths(touched); render();
   try{ localStorage.setItem("dupFixLog", JSON.stringify({at:new Date().toISOString(), ...rep})); }catch(_){}
-  showNotice(`데이터 점검: ID가 겹친 거래 ${groups.length}묶음을 바로잡았습니다${rep.merged?` (완전히 같은 중복 ${rep.merged}건은 하나로)`:""}. 설정 › 데이터 › 데이터 점검에서 확인하세요.`);
+  showNotice(`데이터 점검: ID가 겹친 거래 ${groups.length}묶음을 바로잡았습니다${rep.merged?` (완전히 같은 중복 ${rep.merged}건은 하나로)`:""}. 설정 › 점검·도구 › 데이터 점검에서 확인하세요.`);
   return rep;
 }
 /* 점검 화면: ① 바로잡은 ID ② 중복 의심(같은 날·금액·적요) ③ 끊어진 정산 연결 */
@@ -1247,7 +1299,6 @@ function renderCheck(){
   if(susL.length){
     h+=`<div class="brow" style="gap:6px;margin-bottom:6px"><button type="button" class="btn small" id="ckKeep1">묶음마다 하나만 남기고 모두 체크</button><button type="button" class="btn small" id="ckNone">체크 모두 해제</button><span class="hint" style="margin:0;padding:4px 8px">지울 기록 앞을 체크하고 맨 아래 ‘체크한 기록 지우기’를 누르세요. 줄을 누르면 내용을 열어 볼 수 있습니다.</span></div>`;
     h+=`<div class="ledger">${susL.map((l,gi)=>l.map((t,j)=>`<div class="ckrow"><label class="ckbox" title="지울 기록으로 체크"><input type="checkbox" data-ck="${esc(t._ym)}|${esc(t.id)}" data-g="${gi}" data-j="${j}"${ckSel.has(t._ym+"|"+t.id)?" checked":""}></label>${row(t)}</div>`).join("")+`<div style="height:6px;background:var(--line)"></div>`).join("")}</div>`;
-    h+=`<div class="actions" style="position:sticky;bottom:-18px;background:var(--surface);padding:10px 0;border-top:1px solid var(--line);z-index:2"><span class="hint" id="ckSelInfo" style="margin:0;background:none"></span><div class="r"><button type="button" class="btn primary" id="ckDel" disabled>체크한 기록 지우기</button></div></div>`;
   } else h+=`<p class="hint">없습니다.</p>`;
   h+=`<h4 style="margin:14px 0 4px">③ 끊어진 정산 연결 ${broken.length}건</h4>`;
   h+= broken.length ? `<p class="hint" style="margin:0 0 6px">정산 이체와 원래 거래의 연결이 끊긴 기록입니다. 열어서 정산 상태를 확인하세요.</p><div class="ledger">${broken.map(row).join("")}</div>` : `<p class="hint">없습니다.</p>`;
@@ -1255,7 +1306,7 @@ function renderCheck(){
   $("ckBody").querySelectorAll(".row[data-id]").forEach(b=>b.onclick=()=>openTx(b.dataset.ym, b.dataset.id)); /* 점검 화면은 그대로 두고 그 위에 기록 창을 엶 */
   const fx=$("ckFix"); if(fx) fx.onclick=async()=>{ fx.disabled=true; await fixDupIds(); renderCheck(); };
   /* ② 체크해서 한 번에 지우기 */
-  const cbs=[...$("ckBody").querySelectorAll("input[data-ck]")], del=$("ckDel");
+  const cbs=[...$("ckBody").querySelectorAll("input[data-ck]")], del=cbs.length?$("ckDel"):null; $("ckDel").hidden=!cbs.length; if(!cbs.length) $("ckSelInfo").textContent="";
   const upd=()=>{ if(!del) return; const on=cbs.filter(c=>c.checked); ckSel=new Set(on.map(c=>c.dataset.ck));
     const groupsAll=[...new Set(cbs.map(c=>c.dataset.g))].filter(g=>cbs.filter(c=>c.dataset.g===g).every(c=>c.checked)).length;
     const sum=on.reduce((a,c)=>{ const [ym,id]=c.dataset.ck.split("|"); const t=monthTx(ym).find(x=>x.id===id); return a+(t?+t.amt||0:0); },0);
@@ -1416,6 +1467,33 @@ $("aiDel").onclick=async()=>{ const b=$("aiDel"), ax=config.aiExport||{};
   try{ for(const id of [ax.jsonId, ax.csvId, ax.folderId]) if(id){ try{ await drvJson(`${DRV}/${id}`,{method:"DELETE"}); }catch(e){ if(e.code==="scope"||e.code==="auth") throw e; } }
     config.aiExport={opts:ax.opts, per:ax.per}; await saveConfig(); renderAi(); aiMsg("드라이브의 AI 분석본을 지웠습니다. 원본 장부는 그대로입니다."); }
   catch(e){ aiMsg("지우지 못했습니다. 구글 로그인·권한을 확인해 주세요.",true); } };
+/* ---------- 홈 '할 일': 해야 할 일 알림을 한 칸에 ----------
+   오늘 집행(dueBar) · 카드 미확인(tbuBar)은 그대로 이 칸 안에서 보이고, 정산 대기 · 7일 안 예정 결제 · 데이터 문제를 줄로 더함 */
+function renderTodo(){ const sec=$("todoSec"); if(!sec) return; const today=todayISO(), soon=ymdAdd(today,7), rows=[];
+  const pend=allPending(); if(pend.length) rows.push({t:`법인 정산 대기 <b>${pend.length}건 · ${won(sumOf(pend))}</b>`, sub:"개인 돈으로 먼저 낸 법인 비용", b:"정산하기", f:()=>$("settleBtn").click()});
+  pjp.items.forEach(p=>{ const c=peCalc(p); if(c.remaining>0 && p.expectedDate && p.expectedDate<=soon){ const w=wsOf(p.projectId); rows.push({t:`${p.expectedDate<today?'<b class="warn">지난</b> ':""}예정 결제 <b>${esc(p.description)}</b> · ${+p.expectedDate.slice(5,7)}/${+p.expectedDate.slice(8,10)} · ${won(c.remaining)}`, sub:w?esc(w.name):"", b:"기록하기", f:()=>recordPe(p), b2:"예정비용", f2:()=>openPj(p.projectId)}); } });
+  const dup=findDupIds().length, ids=new Set(allTx().map(t=>t.id)), broken=allTx().filter(t=>(t.settledBy&&!ids.has(t.settledBy))||(Array.isArray(t.settles)&&t.settles.some(i=>!ids.has(i)))).length;
+  if(dup||broken) rows.push({t:`데이터 점검 필요 <b>${[dup?`ID 겹침 ${dup}묶음`:"", broken?`끊어진 정산 연결 ${broken}건`:""].filter(Boolean).join(" · ")}</b>`, sub:"", b:"점검 열기", f:()=>$("openCheck").click()});
+  $("todoList").innerHTML=rows.map((r,i)=>`<div class="todo-row"><div><div>${r.t}</div>${r.sub?`<small>${r.sub}</small>`:""}</div><div class="r"><button type="button" class="btn small primary" data-td="${i}">${r.b}</button>${r.b2?`<button type="button" class="btn small" data-td2="${i}">${r.b2}</button>`:""}</div></div>`).join("");
+  $("todoList").querySelectorAll("[data-td]").forEach(b=>b.onclick=()=>rows[+b.dataset.td].f()); $("todoList").querySelectorAll("[data-td2]").forEach(b=>b.onclick=()=>rows[+b.dataset.td2].f2());
+  const n=rows.length+($("dueBar").hidden?0:1)+($("tbuBar").hidden?0:1);
+  sec.hidden=!n; $("todoN").textContent=n?`${n}가지`:""; $("todoBadge").hidden=!n; $("todoBadge").textContent=n; }
+function ymdAdd(d,n){ const x=new Date(d+"T00:00"); x.setDate(x.getDate()+n); return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate()); }
+/* ---------- 예산 탭: 월·연 예산 | 프로젝트·행사 ---------- */
+let budMode=(()=>{ try{ return localStorage.getItem("budMode")||"month"; }catch(_){ return "month"; } })();
+function setBudMode(v){ budMode=v; try{ localStorage.setItem("budMode",v); }catch(_){} segSet("budMode",v); $("budMonth").hidden=v!=="month"; $("budPj").hidden=v!=="pj"; if(v==="pj") renderPjCards(); else renderBud(); setTimeout(buildJump,0); }
+/* 다른 화면에서 '예산에서 관리' → 예산 탭 프로젝트 보기(프로젝트를 주면 그 예정비용 창까지) */
+function goPj(id){ setBudMode("pj"); if(location.hash!=="#budget") location.hash="#budget"; else route(); if(id) setTimeout(()=>openPj(id),50); }
+function renderPjCards(){ const box=$("pjCards"); if(!box) return; const today=todayISO();
+  const L=wsList().slice().sort((a,b)=>{ const ra=(a.end||a.start)<today?1:0, rb=(b.end||b.start)<today?1:0; return ra-rb || (ra? (b.start||"").localeCompare(a.start||"") : (a.start||"").localeCompare(b.start||"")); });
+  if(!L.length){ box.innerHTML=`<div class="panel"><p class="hint" style="margin:0">아직 프로젝트·행사가 없습니다. 위의 ‘프로젝트·행사 관리’에서 추가하세요.</p></div>`; return; }
+  box.innerHTML=L.map(w=>{ const f=pjFin(w), past=(w.end||w.start)<today;
+    return `<div class="panel"${past?' style="opacity:.85"':""}><div class="ph"><h3>${esc(w.name)}</h3><span class="tag">${esc(wsPeriod(w))}</span>${w.status==="plan"?'<span class="tag">계획</span>':w.status==="done"?'<span class="tag">완료</span>':""}${(w.owner||"corp")==="corp"?'<span class="tag">법인 주관</span>':""}</div>
+      <p class="sub" style="margin:0 0 6px">참가자: ${pjPeopleOf(w).length?esc(pjPeopleOf(w).join(", ")):'<span class="bad">미지정</span>'}${pjOtherN(w)?` + 기타 ${pjOtherN(w)}명`:""} · 총 ${pjTotal(w)}명 · 예정 항목 ${f.items.length}개 · 실제 결제 ${f.xs.length}건</p>
+      ${pjKpis(f)}
+      <div class="brow" style="gap:6px;margin-top:8px"><button type="button" class="btn small primary" data-pjopen="${esc(w.id)}">예정비용 관리</button><button type="button" class="btn small" data-pjlist="${esc(w.id)}">실제 결제 ${f.xs.length}건 보기</button></div></div>`; }).join("");
+  box.querySelectorAll("[data-pjopen]").forEach(b=>b.onclick=()=>openPj(b.dataset.pjopen));
+  box.querySelectorAll("[data-pjlist]").forEach(b=>b.onclick=()=>{ const w=wsOf(b.dataset.pjlist); openDetail({k:"ws",v:w.id,t:"out",ym:allYms(),lbl:"프로젝트 · "+w.name}); }); }
 /* ---------- 프로젝트 예산·예정비용 창 ---------- */
 let pjCur=null, peEdit=null, peCloseId=null;
 function openPj(id){ pjCur=id; peEdit=null; peCloseId=null; renderPj(); openOv("pjOv"); }
@@ -1515,7 +1593,7 @@ function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym)
 function sumOf(list){ return list.reduce((a,t)=>a+(+t.amt||0),0); }
 
 function render(){
-  SL=computeSchLinks(); setTimeout(checkDue,0); setTimeout(buildJump,0); setTimeout(renderTbuBar,0);
+  SL=computeSchLinks(); setTimeout(checkDue,0); setTimeout(buildJump,0); setTimeout(renderTbuBar,0); setTimeout(renderTodo,0);
   const [y,m] = curYM.split("-");
   $("mYear").textContent = y; $("mLabel").textContent = (+m)+"월";
   const tx = vis(monthTx(curYM));
@@ -1532,7 +1610,7 @@ function render(){
   renderTrend(); renderAcct(outs); renderCat(outs); renderInc(tx.filter(t=>t.t==="in")); const ltx=ledgerBase(tx); renderFilters(ltx); renderLedger(ltx);
   if(!$("dashView").hidden) renderDash();
   if(!$("accView").hidden) renderAcc();
-  if(!$("budView").hidden) renderBud();
+  if(!$("budView").hidden){ if(budMode==="pj") renderPjCards(); else renderBud(); }
   if(!reconBusy) scheduleRecon();
   if(dtl && !$("dtOv").hidden) renderDetail();
   if(!$("catOv").hidden) renderCats();
@@ -1695,7 +1773,8 @@ function shareTable(rows,total,label,dtf){
 const PJ_PEOPLE=["UJ","MH","YJ","TY"];
 let pjCandDraft=null;
 /* 전체 후보(설정)와 프로젝트별 실제 참가자는 따로. 참가자를 안 정한 프로젝트는 '미지정'(전체로 간주하지 않음) */
-const pjCands=()=>((pjCandDraft&&!$("wsOv").hidden)?pjCandDraft:(config.pjPeople&&config.pjPeople.length?config.pjPeople:PJ_PEOPLE));
+/* 사람 목록 하나: 프로젝트 참가 후보(config.pjPeople) — 사람 창에서 고침 */
+const pjCands=()=>(config.pjPeople&&config.pjPeople.length?config.pjPeople:PJ_PEOPLE);
 const pjPeopleOf=w=>Array.isArray(w&&w.people)?w.people:[];
 const pjOtherN=w=>Math.max(+(w&&w.otherCount)||0, ((w&&w.others)||[]).length);
 const pjTotal=w=>pjPeopleOf(w).length+pjOtherN(w);
@@ -1711,7 +1790,7 @@ function pjBar(f){ const B=Math.max(f.budget, f.forecast)||1, pc=v=>Math.max(0,M
   return `<div class="pjbar" title="진한 색 실제집행 · 중간 확정예정 · 옅은 색 계획한도${f.budget?" · 세로선 승인예산":""}"><span style="width:${pc(f.spent)}%" class="a"></span><span style="width:${pc(f.committed)}%" class="c"></span><span style="width:${pc(f.plannedLimit)}%" class="p"></span>${f.budget?`<i style="left:${pc(f.budget)}%"></i>`:""}</div>`; }
 function pjKpis(f){ const cell=(k,v,cls,sub)=>`<div class="pjk ${cls||""}"><div class="k">${k}</div><div class="v num">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
   return `<div class="pjks">${cell("승인예산",f.budget?won(f.budget):"—")}${cell("실제집행",won(f.spent),"a",f.budget?`집행률 ${pctTxt(f.rateActual)}`:"")}${cell("확정예정",won(f.committed),"c")}${cell("계획한도",won(f.plannedLimit),"p")}${cell("예상총액",won(f.forecast),f.overBudgetForecast?"bad":"",f.budget?`예상 집행률 ${pctTxt(f.rateForecast)}`:"")}${cell("예상잔액",f.budget?sgn(f.remainingForecast):"—",f.overBudgetForecast?"bad":"",f.budget?`실제 잔여 ${sgn(f.remainingActual)}`:"")}${cell("세무검토 (실제)",won(f.reviewActual))}${cell("세무검토 (예정)",won(f.reviewPlanned))}</div>${pjBar(f)}${f.overBudgetForecast?`<div class="hint warn" style="margin:4px 0 0">예상총액이 승인예산을 ${won(f.forecast-f.budget)} 넘습니다.</div>`:""}`; }
-function pjFinLine(w){ const f=pjFin(w); return `실제 ${won(f.spent)} · 확정예정 ${won(f.committed)} · 계획한도 ${won(f.plannedLimit)} · <b>예상총액 ${won(f.forecast)}</b>${f.budget?` · 예상잔액 <b class="${f.remainingForecast<0?"bad":""}">${sgn(f.remainingForecast)}</b>`:""} · 세무검토 실제 ${won(f.reviewActual)} / 예정 ${won(f.reviewPlanned)} <button type="button" class="btn small" data-pjopen="${esc(w.id)}" style="margin-left:6px">예산·예정비용 관리</button>`; }
+function pjFinLine(w){ const f=pjFin(w); return `실제 ${won(f.spent)} · 확정예정 ${won(f.committed)} · 계획한도 ${won(f.plannedLimit)} · <b>예상총액 ${won(f.forecast)}</b>${f.budget?` · 예상잔액 <b class="${f.remainingForecast<0?"bad":""}">${sgn(f.remainingForecast)}</b>`:""} · 세무검토 실제 ${won(f.reviewActual)} / 예정 ${won(f.reviewPlanned)} <button type="button" class="btn small" data-gopj="${esc(w.id)}" style="margin-left:6px">예산에서 관리 →</button>`; }
 function renderWs(){
   const t=$("wsTbl"); if(!t) return; const L=wsList(), all=allTx().filter(x=>x.ws && x.t==="out");
   if(!L.length){ t.innerHTML=`<tbody><tr><td class="foot">아직 프로젝트·행사가 없습니다. 기록 창의 ‘프로젝트·행사’에서 새로 만들거나 ‘프로젝트·행사 관리’에서 추가하세요.</td></tr></tbody>`; return; }
@@ -1722,14 +1801,15 @@ function renderWs(){
     const fxN=xs.filter(x=>x.fx).length;
     return {w,n:xs.length,tot,corp,pre,top,bf:grp("who"),tax:grp("tax"),pur:grp("pur"),fxN}; }).sort((a,b)=>b.w.start.localeCompare(a.w.start));
   const bud=w=>+w.budget||0, chips=(g,lbl)=>Object.entries(g).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(lbl(k))} ${won(v)}`).join(" · ");
-  setTimeout(()=>t.querySelectorAll("[data-pjopen]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); openPj(b.dataset.pjopen); }),0);
+  setTimeout(()=>document.querySelectorAll("#dashView [data-gopj]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); goPj(b.dataset.gopj); }),0);
   t.innerHTML=`<thead><tr><th>프로젝트·행사</th><th>기간</th><th class="r">건수</th><th class="r">합계</th><th class="r">승인예산</th><th class="r">남은 예산</th><th>집행률</th><th class="r">법인</th><th class="r">미리 낸 돈</th><th>많이 쓴 항목</th></tr></thead><tbody>`+
     rows.map(r=>`<tr ${r.n?`data-dt='${esc(JSON.stringify({k:"ws",v:r.w.id,t:"out",ym:allYms(),lbl:"프로젝트 · "+r.w.name}))}' style="cursor:pointer"`:""}><td><b>${esc(r.w.name)}</b>${r.w.status==="plan"?'<span class="tag">계획</span>':r.w.status==="done"?'<span class="tag">완료</span>':""}${(r.w.owner||"corp")==="corp"?'<span class="tag">법인 주관</span>':""}</td><td>${esc(wsPeriod(r.w))}</td><td class="r num">${r.n}</td><td class="r num"><b>${won(r.tot)}</b></td><td class="r num">${bud(r.w)?won(bud(r.w)):"—"}</td><td class="r num ${bud(r.w)&&r.tot>bud(r.w)?"bad":""}">${bud(r.w)?sgn(bud(r.w)-r.tot):"—"}</td><td>${bud(r.w)?bBar(r.tot,bud(r.w)):"—"}</td><td class="r num">${won(r.corp)}</td><td class="r num">${r.pre?won(r.pre):"—"}</td><td style="font-size:12.5px;color:var(--muted)">${r.top||"—"}</td></tr>`+
       (`<tr class="pjsub"><td colspan="10" style="font-size:12px;color:var(--muted);padding-top:0">참가자: ${pjPeopleOf(r.w).length?esc(pjPeopleOf(r.w).join(", ")):'<span class="bad">미지정</span>'}${pjOtherN(r.w)?` + 기타 ${pjOtherN(r.w)}명${(r.w.others||[]).length?` (${esc(r.w.others.join(", "))})`:""}`:""} · 총 ${pjTotal(r.w)}명${r.n?`<br>사람별 귀속(배분 반영): ${chips(r.bf,bfLbl)||"—"}`:""}<br>${pjFinLine(r.w)}${r.n?`<br>목적: ${chips(r.pur,v=>pjLbl(PJ_PUR,v))||"—"}<br>세무 구분: ${chips(r.tax,v=>pjLbl(PJ_TAX,v))||"—"}${r.fxN?` · 외화 기록 ${r.fxN}건`:""}`:""}</td></tr>`)).join("")+`</tbody>`;
 }
 let wDraft=null;
-$("wsEdit").onclick=()=>{ wDraft=JSON.parse(JSON.stringify(wsList())); pjCandDraft=pjCands().slice(); $("pjCandIn").value=pjCandDraft.join(", "); renderWsEdit(); openOv("wsOv"); };
-$("pjCandIn").addEventListener("change",()=>{ const L=$("pjCandIn").value.split(/[,，]/).map(x=>x.trim()).filter(Boolean); pjCandDraft=[...new Set(L)]; renderWsEdit(); });
+$("wsEdit").onclick=()=>{ wDraft=JSON.parse(JSON.stringify(wsList())); renderWsEdit(); openOv("wsOv"); };
+$("pjCandGo").onclick=()=>$("pplEdit").click();
+
 function renderWsEdit(){
   $("wsList").innerHTML = wDraft.length ? wDraft.map((w,i)=>{ const n=allTx().filter(x=>x.ws===w.id).length; return `<div class="xf"><div class="g">
       <label>이름<input data-i="${i}" data-k="name" value="${esc(w.name||"")}"></label>
@@ -1758,7 +1838,7 @@ $("wsAdd").onclick=()=>{ const d=todayISO(); wDraft.push({id:uid(), name:"", sta
 $("wsSave").onclick=async()=>{
   if(wDraft.some(w=>!w.name||!w.start)){ showNotice("프로젝트·행사마다 이름과 시작일을 넣어 주세요."); return; } showNotice("");
   wDraft.forEach(w=>{ if(!w.end||w.end<w.start) w.end=w.start; });
-  config.workshops=wDraft; if(pjCandDraft&&pjCandDraft.length) config.pjPeople=pjCandDraft; closeOv("wsOv"); render(); await saveConfig();
+  config.workshops=wDraft; closeOv("wsOv"); render(); await saveConfig();
 };
 function renderDash(){
   renderWs(); renderAvg();
@@ -1859,15 +1939,16 @@ function route(){
   const lv=v==="home"||v==="tx"; $("ledgerView").hidden=!lv; $("dashView").hidden=v!=="dash"; $("accView").hidden=v!=="acc"; $("budView").hidden=v!=="bud"; $("setView").hidden=v!=="set";
   if(lv){ const cols=$("ledgerView").querySelectorAll(":scope > .col"); cols[0].hidden=v!=="home"; cols[1].hidden=v!=="tx"; $("ledgerView").classList.add("solo"); }
   [["vHome","home"],["vLedger","tx"],["vDash","dash"],["vBud","bud"],["vAcc","acc"],["vSet","set"]].forEach(([id,k])=>$(id).setAttribute("aria-current",v===k?"page":"false"));
-  $("fab").hidden = !(v==="home"||v==="tx"||v==="dash");
-  if(v==="dash") renderDash(); if(v==="acc") renderAcc(); if(v==="bud") renderBud();
+  $("fab").hidden = v==="set"; /* 거래 입력은 설정을 뺀 모든 탭 */
+  { const mb=document.querySelector("header.top .month"), off=(v==="acc"||v==="set"); mb.style.visibility=off?"hidden":""; mb.classList.toggle("off",off); } /* 달을 고를 일이 없는 화면에선 숨김 */
+  if(v==="dash") renderDash(); if(v==="acc") renderAcc(); if(v==="bud") setBudMode(budMode);
   setTimeout(buildJump,0);
 }
 window.addEventListener("hashchange",route);
 if(location.hash==="#ledger") history.replaceState(null,"",location.pathname+location.search+"#tx"); /* 예전 주소 */
 document.querySelectorAll("#setView [data-go]").forEach(b=>b.onclick=()=>{ const el=$(b.dataset.go); if(el) el.click(); });
 /* 예산 화면: 계획 · 실적 · 일정 세 구역으로 묶기 */
-(function(){ const bv=$("budView"); if(!bv) return; const P=id=>{ const h=$(id); return h?h.closest(".panel"):null; };
+(function(){ const bv=$("budMonth"); if(!bv) return; const P=id=>{ const h=$(id); return h?h.closest(".panel"):null; };
   const sch=$("schTbl")?$("schTbl").closest(".panel"):null;
   const grp=[["계획",[P("bMonTitle"),P("bYearTitle"),P("baTitle")]],["실적",[P("mxTitle"),P("adjTitle"),P("nbTitle")]],["일정",[sch]]];
   grp.forEach(([name,ps])=>{ const h=document.createElement("h2"); h.className="grp"; h.textContent=name; bv.appendChild(h); ps.filter(Boolean).forEach(p=>bv.appendChild(p)); });
@@ -2124,6 +2205,7 @@ function renderBud(){
 }
 segBind("mxSeg", v=>{ mxEnt=v; renderBud(); });
 segBind("budTSeg", v=>{ budT=v; renderBud(); });
+segBind("budMode", v=>setBudMode(v));
 $("mxQ").addEventListener("input",e=>{ mxQ=e.target.value.trim(); renderBud(); });
 $("applyAdj").onclick=()=>{
   openBudEdit(); bT=budT; segSet("bTSeg",bT);
@@ -2590,7 +2672,16 @@ function passbookHTML(name){
   const n=rows.filter(x=>x.kind!=="snap").length;
   return `<details data-pb="${esc(name)}" ${accOpen.has(name)?"open":""}><summary>내역 ${n}건 · ${rows[rows.length-1].d.slice(5).replace("-","/")} 잔액 입력부터</summary><ul class="pb">${lis}</ul></details>`;
 }
+/* 자산 탭: 맞추기·정산 건수, 자동이체 목록 */
+function renderAccExtras(){ const today=todayISO();
+  const pend=allPending(), tbu=allTx().filter(t=>t.tbu), old=accounts.list.filter(a=>{ const s=lastSnap(a.name); return !s || (new Date(today)-new Date(s.d))/864e5>30; });
+  $("fixBal").innerHTML = old.length ? `<b class="warn">${old.length}개 계좌</b>가 30일 넘게 잔액을 안 넣었습니다 (${esc(old.slice(0,3).map(a=>a.name).join(", "))}${old.length>3?" 등":""})` : "모든 계좌가 최근 30일 안에 잔액을 넣었습니다";
+  $("fixCb").innerHTML = tbu.length ? `<b class="warn">미확인 차액 ${tbu.length}건 · ${won(sumOf(tbu))}</b>` : "확인할 미확인 차액이 없습니다";
+  $("fixSt").innerHTML = pend.length ? `<b class="warn">정산 대기 ${pend.length}건 · ${won(sumOf(pend))}</b>` : "정산 대기가 없습니다";
+  const xs=(accounts.xfers||[]).map(x=>({x, nx:xfNext(x)})).sort((a,b)=>(a.nx||"9999").localeCompare(b.nx||"9999"));
+  $("xfTbl").innerHTML = xs.length ? `<thead><tr><th>이름</th><th>보내는 곳 → 받는 곳</th><th>언제</th><th class="r">금액</th><th>다음 이체</th></tr></thead><tbody>`+xs.map(({x,nx})=>`<tr${nx?"":' style="opacity:.55"'}><td>${esc(x.name||"자동이체")}</td><td>${esc(x.from||"")} → ${esc(xfTo(x))}</td><td>매달 ${esc(ruleTxt(xfAsBudget(x))||"?")}</td><td class="r num">${won(+x.amt||0)}</td><td>${nx?`${+nx.slice(5,7)}/${+nx.slice(8,10)}`:"끝남"}</td></tr>`).join("")+`</tbody>` : `<tbody><tr><td class="foot">등록한 자동이체가 없습니다. ‘자동이체 고치기’에서 추가하세요.</td></tr></tbody>`; }
 function renderAcc(){
+  setTimeout(renderAccExtras,0);
   const today=todayISO();
   let liquid=0, upcoming=0, missing=[];
   const cards=accounts.list.map(a=>{
@@ -2786,7 +2877,7 @@ $("settleBtn").onclick=openSettle;
 /* 사람 (맡은 돈·빌려 준 돈) */
 function renderPeople(){
   const ppl=accounts.people||[], g=$("pplGrid"); if(!g) return;
-  if(!ppl.length){ g.innerHTML=`<div class="foot">아직 등록한 사람이 없습니다. ‘대상자 설정’에서 넣어 주세요.</div>`; return; }
+  if(!ppl.length){ g.innerHTML=`<div class="foot">아직 등록한 사람이 없습니다. 오른쪽 위 ‘사람’에서 넣어 주세요.</div>`; return; }
   g.innerHTML=ppl.map(P=>{ const L=personLedger(P), tgt=+P.target||0, left=tgt?Math.max(0,tgt-L.paid):0, more=tgt?Math.max(0,left-Math.max(L.hold,0)):0;
     const lis=L.rows.slice().reverse().map(r=>{ const t=r.t, d=t.d.slice(5).replace("-","/");
       const parts=[r.dh?`맡은 돈 ${r.dh>0?"+":"−"}${won(Math.abs(r.dh))}`:"", r.dl?`빌려 준 돈 ${r.dl>0?"+":"−"}${won(Math.abs(r.dl))}`:""].filter(Boolean).join(" · ");
@@ -2801,8 +2892,17 @@ function renderPeople(){
   g.querySelectorAll(".pb li[data-id]").forEach(li=>li.onclick=()=>openTx(li.dataset.ym,li.dataset.id));
 }
 let pDraft=null;
-$("pplEdit").onclick=()=>{ pDraft=JSON.parse(JSON.stringify(accounts.people||[])); pDraft.forEach(P=>P._old=P.name); renderPplEdit(); openOv("pplOv"); };
+$("pplEdit").onclick=()=>{ pDraft=JSON.parse(JSON.stringify(accounts.people||[])); pDraft.forEach(P=>P._old=P.name);
+  /* 한 목록: 프로젝트 후보 + 예수금 대상 이름을 합쳐 보여 줌 */
+  const all=[...new Set(pjCands().concat(pDraft.map(P=>P.name).filter(Boolean)))]; pjCandDraft={all, on:new Set(pjCands())};
+  renderPplEdit(); openOv("pplOv"); };
+function renderPplCands(){ const D=pjCandDraft, cust=new Set(pDraft.map(P=>P.name)), used=new Set(); wsList().forEach(w=>pjPeopleOf(w).forEach(p=>used.add(p)));
+  $("pplCands").innerHTML=D.all.map(n=>`<span style="display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:2px 10px"><label class="check" style="font-size:13px"><input type="checkbox" data-pc="${esc(n)}"${D.on.has(n)?" checked":""} style="width:auto"> <b>${esc(n)}</b></label>${cust.has(n)?'<span class="tag">예수금 대상</span>':""}${used.has(n)?'<span class="tag">프로젝트 참가</span>':""}${!cust.has(n)&&!used.has(n)?`<button type="button" data-pcdel="${esc(n)}" aria-label="${esc(n)} 빼기" style="border:0;background:none;cursor:pointer;color:var(--muted)">×</button>`:""}</span>`).join("")||'<span class="hint">아직 없습니다.</span>';
+  $("pplCands").querySelectorAll("[data-pc]").forEach(c=>c.onchange=()=>{ c.checked?D.on.add(c.dataset.pc):D.on.delete(c.dataset.pc); });
+  $("pplCands").querySelectorAll("[data-pcdel]").forEach(b=>b.onclick=()=>{ D.all=D.all.filter(x=>x!==b.dataset.pcdel); D.on.delete(b.dataset.pcdel); renderPplCands(); }); }
+$("pplCandAdd").onclick=()=>{ const n=$("pplCandNew").value.trim(); if(!n) return; if(!pjCandDraft.all.includes(n)) pjCandDraft.all.push(n); pjCandDraft.on.add(n); $("pplCandNew").value=""; renderPplCands(); };
 function renderPplEdit(){
+  if(pjCandDraft && pjCandDraft.all){ pDraft.forEach(P=>{ if(P.name && !pjCandDraft.all.includes(P.name)) pjCandDraft.all.push(P.name); }); renderPplCands(); }
   const num=v=>v?(+v).toLocaleString("ko-KR"):"";
   $("pplList").innerHTML = pDraft.length ? pDraft.map((P,i)=>`<div class="xf"><div class="g">
       <label>이름<input data-i="${i}" data-k="name" value="${esc(P.name||"")}" placeholder="예: YJ"></label>
@@ -2831,7 +2931,10 @@ $("pplSave").onclick=async()=>{
   if(names.length!==pDraft.length || new Set(names).size!==names.length){ showNotice("사람마다 서로 다른 이름을 넣어 주세요."); return; } showNotice("");
   const touched=new Set();
   pDraft.forEach(P=>{ if(P._old && P._old!==P.name){ const o="@"+P._old, n="@"+P.name; Object.keys(months).forEach(k=>{ if(monthTx(k).some(t=>t.from===o||t.to===o)){ months[k]=monthTx(k).map(t=>t.from===o||t.to===o?{...t, from:t.from===o?n:t.from, to:t.to===o?n:t.to, u:Date.now()}:t); touched.add(k); } }); budgets.items.forEach(b=>{ if(b.toP===P._old) b.toP=P.name; }); } delete P._old; });
-  accounts.people=pDraft; closeOv("pplOv"); render(); await saveAccounts(); if(touched.size){ await saveMonths(touched); saveBudgets(); }
+  /* 이름을 바꾼 예수금 대상은 사람 목록에서도 같이 바꿈 */
+  if(pjCandDraft && pjCandDraft.all){ pDraft.forEach(P=>{ if(P._old && P._old!==P.name){ pjCandDraft.all=pjCandDraft.all.map(x=>x===P._old?P.name:x); if(pjCandDraft.on.has(P._old)){ pjCandDraft.on.delete(P._old); pjCandDraft.on.add(P.name); } } });
+    config.pjPeople=pjCandDraft.all.filter(n=>pjCandDraft.on.has(n)); saveConfig(); }
+  accounts.people=pDraft; closeOv("pplOv"); render(); if(!$("wsOv").hidden) renderWsEdit(); await saveAccounts(); if(touched.size){ await saveMonths(touched); saveBudgets(); }
 };
 
 /* 자동이체 (적금 등) */
@@ -3436,13 +3539,31 @@ $("tPendBox").onclick=pendGo; $("tPendBox").onkeydown=e=>{ if(e.key==="Enter"||e
 /* ---------- 오버레이 공통 ---------- */
 /* 창 위에 창을 열면 새 창이 늘 위로 오게 하고, Esc는 맨 위 창만 닫음 */
 let ovZ=0;
-function openOv(id){ const o=$(id); const top=[...document.querySelectorAll(".overlay")].filter(x=>!x.hidden&&x!==o).reduce((m,x)=>Math.max(m,+x.style.zIndex||30),30); o.hidden=false; o.style.zIndex=String(Math.min(top+1,55)); /* 되돌리기 막대(60)보다 아래 */ }
+function openOv(id){ const o=$(id); o.querySelectorAll(".guardbar").forEach(g=>g.remove()); o._sig=null; if(GUARD_OV.includes(id)) setTimeout(()=>{ if(!o.hidden) o._sig=ovSig(o); },80); const top=[...document.querySelectorAll(".overlay")].filter(x=>!x.hidden&&x!==o).reduce((m,x)=>Math.max(m,+x.style.zIndex||30),30); o.hidden=false; o.style.zIndex=String(Math.min(top+1,55)); /* 되돌리기 막대(60)보다 아래 */ }
 function topOv(){ return [...document.querySelectorAll(".overlay")].filter(o=>!o.hidden).sort((a,b)=>(+b.style.zIndex||30)-(+a.style.zIndex||30))[0]||null; }
 function closeOv(id){ $(id).hidden=true; }
+/* 팝업 닫기 규칙(모든 팝업 같음)
+   - 닫는 길: 오른쪽 위 ×, 아래 ‘닫기/취소’, 바깥 빈 곳 누르기, Esc(맨 위 창만)
+   - 바깥 누르기는 누르기 시작과 끝이 모두 바깥일 때만 (입력 칸에서 끌다가 바깥에서 놓아도 닫히지 않게)
+   - 고치는 창은 저장하지 않은 변경이 있으면 닫기 전에 묻기 */
+const GUARD_OV=["txOv","accOv","wsOv","pplOv","xfOv","setOv","bulkOv","balOv"];
+function ovSig(o){ return [...o.querySelectorAll("input,select,textarea")].filter(e=>!e.closest(".guardbar")&&e.type!=="file").map(e=>e.type==="checkbox"||e.type==="radio"?(e.checked?"1":"0"):e.value).join("\u0001")+"|"+o.querySelectorAll(".xf,.arow,.cat-l").length; }
+function ovDirty(o){ return GUARD_OV.includes(o.id) && o._sig!=null && ovSig(o)!==o._sig; }
+function ovGuard(o){ const bar=[...o.querySelectorAll(".form > .actions")].pop(); if(!bar) { o.hidden=true; return; }
+  let g=bar.querySelector(".guardbar"); if(!g){ g=document.createElement("div"); g.className="guardbar hint warn"; bar.prepend(g); }
+  const prim=bar.querySelector(".btn.primary");
+  g.innerHTML=`저장하지 않은 변경이 있습니다. ${prim?`<button type="button" class="btn small primary" data-g="save">저장하고 닫기</button> `:""}<button type="button" class="btn small" data-g="drop">저장 안 하고 닫기</button> <button type="button" class="btn small" data-g="back">계속 고치기</button>`;
+  g.querySelectorAll("[data-g]").forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); const k=b.dataset.g; g.remove(); if(k==="save") prim.click(); else if(k==="drop"){ o._sig=null; o.hidden=true; } });
+  g.scrollIntoView({block:"nearest"}); }
+function reqClose(o){ if(o.id==="budOv" && budDirty()){ budGuard(); return; } if(ovDirty(o)){ ovGuard(o); return; } o.hidden=true; }
 document.querySelectorAll(".overlay").forEach(ov=>{
-  ov.addEventListener("click",e=>{ if(e.target===ov||e.target.closest("[data-close]")){ if(ov.id==="budOv" && budDirty()){ budGuard(); return; } ov.hidden=true; } });
+  ov.addEventListener("pointerdown",e=>{ ov._downOut = e.target===ov; });
+  ov.addEventListener("click",e=>{
+    if(e.target.closest("[data-close]")){ reqClose(ov); return; }
+    if(e.target===ov && ov._downOut) reqClose(ov);
+    ov._downOut=false; });
 });
-document.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; const o=topOv(); if(!o) return; if(o.id==="budOv" && budDirty()){ budGuard(); return; } o.hidden=true; });
+document.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; const o=topOv(); if(!o) return; reqClose(o); });
 
 /* ---------- 기록 입력 ---------- */
 const catSide=(type,c)=> (type==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me";
