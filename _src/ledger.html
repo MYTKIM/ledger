@@ -1179,8 +1179,8 @@ function renderCheck(){
   h+= susL.length ? `<div class="ledger">${susL.map(l=>l.map(row).join("")+`<div style="height:6px;background:var(--line)"></div>`).join("")}</div>` : `<p class="hint">없습니다.</p>`;
   h+=`<h4 style="margin:14px 0 4px">③ 끊어진 정산 연결 ${broken.length}건</h4>`;
   h+= broken.length ? `<p class="hint" style="margin:0 0 6px">정산 이체와 원래 거래의 연결이 끊긴 기록입니다. 열어서 정산 상태를 확인하세요.</p><div class="ledger">${broken.map(row).join("")}</div>` : `<p class="hint">없습니다.</p>`;
-  $("ckBody").innerHTML=h;
-  $("ckBody").querySelectorAll(".row[data-id]").forEach(b=>b.onclick=()=>{ closeOv("ckOv"); openTx(b.dataset.ym, b.dataset.id); });
+  const sh=$("ckOv").querySelector(".sheet"), st=sh?sh.scrollTop:0; $("ckBody").innerHTML=h; if(sh) sh.scrollTop=st;
+  $("ckBody").querySelectorAll(".row[data-id]").forEach(b=>b.onclick=()=>openTx(b.dataset.ym, b.dataset.id)); /* 점검 화면은 그대로 두고 그 위에 기록 창을 엶 */
   const fx=$("ckFix"); if(fx) fx.onclick=async()=>{ fx.disabled=true; await fixDupIds(); renderCheck(); };
 }
 /* ---------- 렌더 ---------- */
@@ -1211,6 +1211,7 @@ function render(){
   if(dtl && !$("dtOv").hidden) renderDetail();
   if(!$("catOv").hidden) renderCats();
   if(!$("cbOv").hidden) renderCB(); /* 대사 화면에서 거래를 고치거나 지우면 바로 다시 그림 */
+  if(!$("ckOv").hidden) renderCheck(); /* 데이터 점검에서 거래를 고치거나 지워도 화면을 유지하고 목록만 다시 그림 */
 }
 
 function renderTrend(){
@@ -3026,12 +3027,15 @@ $("tBudBox").onclick=()=>{ location.hash="#budget"; }; $("tBudBox").onkeydown=e=
 $("tPendBox").onclick=pendGo; $("tPendBox").onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); pendGo(); } };
 
 /* ---------- 오버레이 공통 ---------- */
-function openOv(id){ $(id).hidden=false; }
+/* 창 위에 창을 열면 새 창이 늘 위로 오게 하고, Esc는 맨 위 창만 닫음 */
+let ovZ=0;
+function openOv(id){ const o=$(id); o.hidden=false; o.style.zIndex=String(30+(++ovZ)); }
+function topOv(){ return [...document.querySelectorAll(".overlay")].filter(o=>!o.hidden).sort((a,b)=>(+b.style.zIndex||30)-(+a.style.zIndex||30))[0]||null; }
 function closeOv(id){ $(id).hidden=true; }
 document.querySelectorAll(".overlay").forEach(ov=>{
   ov.addEventListener("click",e=>{ if(e.target===ov||e.target.closest("[data-close]")){ if(ov.id==="budOv" && budDirty()){ budGuard(); return; } ov.hidden=true; } });
 });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".overlay").forEach(o=>{ if(o.id==="budOv" && budDirty()){ budGuard(); return; } o.hidden=true; }); });
+document.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; const o=topOv(); if(!o) return; if(o.id==="budOv" && budDirty()){ budGuard(); return; } o.hidden=true; });
 
 /* ---------- 기록 입력 ---------- */
 const catSide=(type,c)=> (type==="in" ? /^지발연/.test(c) : isCorpCat(c)) ? "corp" : "me";
