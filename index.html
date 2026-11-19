@@ -315,6 +315,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
 .todo{display:grid;gap:6px}
+.seg.ro{pointer-events:none;opacity:.55}
 .todo-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-size:13.5px}
 .todo-row small{color:var(--muted);font-size:12px} .todo-row .r{display:flex;gap:6px}
 #todoSec .notice{margin:0}
@@ -2786,6 +2787,9 @@ function openBal(name){
    그래서 빠진 거래를 나중에 넣으면 맞춤 금액이 그만큼 줄고, 남는 차이(CMA 이자 등)만 남습니다.
    lock:true 인 기록은 직접 고친 것이라 자동으로 바꾸지 않습니다. */
 function isRecon(t){ return t.src==="recon"; }
+/* 맞춤 기록에 남길 칸. 직접 고치다 붙은 정산·귀속·프로젝트 같은 표시는 자동 맞춤으로 돌아갈 때 지웁니다 */
+const RC_KEYS=["id","d","t","amt","cat","desc","m","ac","ent","src","snapTs","ts","u"];
+function rcClean(x){ const o={}; RC_KEYS.forEach(k=>{ if(x[k]!==undefined) o[k]=x[k]; }); return o; }
 function reconOf(acct, s){ return allTx().find(t=>isRecon(t) && t.ac===acct && (t.snapTs ? t.snapTs===s.ts : t.d===s.d)) || null; }
 function snapGap(acct, prev, s){
   let net=0; allTx().forEach(t=>{ if(isRecon(t) && t.ac===acct) return; effects(t).forEach(e=>{ if(e.acct===acct && afterSnap(e,t,prev) && !afterSnap(e,t,s)) net+=e.v; }); });
@@ -2806,8 +2810,8 @@ async function reconcileAll(){
         const diff=snapGap(acct,prev,s), t=diff>0?"in":"out", amt=Math.abs(diff);
         if(amt<1){ if(ex){ const k=ex.d.slice(0,7); months[k]=monthTx(k).filter(x=>x.id!==ex.id); touched.add(k); } continue; }
         const cat = ex && ex.t===t ? ex.cat : (t==="in" ? (s.inCat||defaultInCat(acct)) : (s.outCat||"미확인 지출"));
-        const want={...(ex||{}), id: ex?ex.id:"rc-"+s.ts, d:s.d, t, amt, cat, desc:`${acct} 잔액 맞춤 (${t==="in"?"이자 등":"빠진 지출"})`, m:"", ac:acct, ent:"me", src:"recon", snapTs:s.ts, ts: ex&&ex.ts||Date.now()};
-        if(ex && ex.amt===want.amt && ex.t===want.t && ex.cat===want.cat && ex.desc===want.desc && ex.snapTs===want.snapTs && ex.d===want.d) continue;
+        const want={...(ex?rcClean(ex):{}), id: ex?ex.id:"rc-"+s.ts, d:s.d, t, amt, cat, desc:`${acct} 잔액 맞춤 (${t==="in"?"이자 등":"빠진 지출"})`, m:"", ac:acct, ent:"me", src:"recon", snapTs:s.ts, ts: ex&&ex.ts||Date.now()};
+        if(ex && ex.amt===want.amt && ex.t===want.t && ex.cat===want.cat && ex.desc===want.desc && ex.snapTs===want.snapTs && ex.d===want.d && Object.keys(ex).every(k=>RC_KEYS.includes(k))) continue;
         if(ex){ const k=ex.d.slice(0,7); months[k]=monthTx(k).filter(x=>x.id!==ex.id); touched.add(k); }
         const k=s.d.slice(0,7); months[k]=monthTx(k).concat([want]); touched.add(k);
       }
@@ -3817,13 +3821,31 @@ $("iFxGet").onclick=async()=>{ const b=$("iFxGet"); b.disabled=true; b.textConte
 $("iAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; updateHint(false); });
 
 function showReconBox(t){
-  const box=$("reconBox"); if(!t || !isRecon(t)){ box.hidden=true; return; }
+  const box=$("reconBox"); $("iAmt").readOnly=false; $("typeSeg").classList.remove("ro");
+  if(!t || !isRecon(t)){ box.hidden=true; return; }
   const ri=reconInfo(t); box.hidden=false;
   const now = ri ? ri.diff : null;
   box.innerHTML = `<b>잔액 맞춤 기록</b> · ${esc(t.ac)} ${ri?`${ri.prev.d.slice(5).replace("-","/")} 잔액 ${won(ri.prev.bal)} → ${ri.s.d.slice(5).replace("-","/")} 잔액 ${won(ri.s.bal)}`:""}<br>`
     + (now!=null ? `그 사이 기록으로 설명되지 않는 차이: <b class="num">${now>0?"+":now<0?"−":""}${won(Math.abs(now))}</b><br>` : "")
-    + (t.lock ? `직접 고친 금액이라 자동으로 바뀌지 않습니다. <button type="button" class="btn small" id="reconAuto">자동 맞춤으로 되돌리기</button>` : `빠진 거래를 장부에 넣으면 이 금액은 자동으로 다시 계산됩니다. 금액을 직접 고쳐 저장하면 그 금액으로 고정됩니다.`);
-  const b=$("reconAuto"); if(b) b.onclick=async()=>{ const k=t.d.slice(0,7); months[k]=monthTx(k).map(x=>x.id===t.id?{...x,lock:false}:x); closeOv("txOv"); render(); try{ await saveMonth(k); }catch(_){} reconcileAll(); };
+    + (t.lock ? `직접 고친 금액이라 자동으로 바뀌지 않습니다. <button type="button" class="btn small" id="reconAuto">자동 맞춤으로 되돌리기</button>`
+       : `이 금액은 실제 거래가 아니라 잔액 차이를 메우는 자리입니다. 차이의 원인(빠진 이체·결제)을 찾았으면 <b>원인 거래를 따로 기록</b>하세요. 그러면 이 금액이 그만큼 줄고 남는 차이(이자 등)만 남습니다.`)
+    + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn small primary" id="reconCause">원인 거래 기록하기</button>${t.lock?"":`<button type="button" class="btn small" id="reconEdit">금액 직접 고치기</button>`}</div>`;
+  if(!t.lock){ $("iAmt").readOnly=true; $("typeSeg").classList.add("ro"); }
+  const b=$("reconAuto"); if(b) b.onclick=async()=>{ const k=t.d.slice(0,7); months[k]=monthTx(k).map(x=>x.id===t.id?rcClean(x):x); closeOv("txOv"); render(); try{ await saveMonth(k); }catch(_){} reconcileAll(); };
+  $("reconCause").onclick=()=>recordCause(t);
+  const e=$("reconEdit"); if(e) e.onclick=()=>{ $("iAmt").readOnly=false; $("typeSeg").classList.remove("ro"); e.remove(); $("iAmt").focus(); $("iAmt").select(); };
+}
+/* 맞춤 기록에서 '원인 거래 기록하기': 그 계좌·차이 금액을 채운 새 기록 창. 날짜·계정·귀속만 맞게 고쳐 저장하면 됨 */
+function recordCause(t){ const ri=reconInfo(t), diff=ri?ri.diff:(t.t==="in"?+t.amt:-t.amt), typ=diff>0?"in":"out", ac=t.ac;
+  closeOv("txOv"); openTx(null,null);
+  const tb=document.querySelector(`#typeSeg [data-v="${typ}"]`); if(tb && form.t!==typ) tb.click();
+  if(typ==="out"){ const bm=bankMethodOf(ac); if(bm){ form.m=bm.code; fillMethods(); updateHint(true); } } else { form.ac=ac; fillAccts(); }
+  $("iDate").value = ri ? ri.s.d : t.d; $("iDate").dispatchEvent(new Event("change"));
+  $("iAmt").value=Math.abs(diff).toLocaleString("ko-KR");
+  const box=$("reconBox"); box.hidden=false;
+  box.innerHTML=`<b>원인 거래 기록</b> · ${esc(ac)}의 설명 안 되는 차이 <b class="num">${won(Math.abs(diff))}</b>${ri?` (${ri.prev.d.slice(5).replace("-","/")}~${ri.s.d.slice(5).replace("-","/")} 사이)`:""}<br>실제 날짜·금액·적요·계정·귀속으로 고쳐 저장하세요. 저장하면 잔액 맞춤 기록은 남는 차이만큼으로 자동으로 바뀝니다.${t.lock?"<br><b>주의:</b> 지금 맞춤 기록은 직접 고친 금액으로 고정되어 있어, 저장할 때 자동 맞춤으로 함께 되돌립니다.":""}`;
+  form.causeOf = t.lock ? {ym:t.d.slice(0,7), id:t.id} : null;
+  setTimeout(()=>$("iDesc").focus(),40);
 }
 function openTx(ym, id, force){
   const t = ym&&id ? monthTx(ym).find(x=>x.id===id) : null;
@@ -3866,6 +3888,7 @@ $("txForm").onsubmit=async e=>{
   const base = editing ? monthTx(editing.ym).find(x=>x.id===editing.id) : null;
   const tx = {...(base||{}), id: base?base.id:uid(), d, t:form.t, amt, desc:$("iDesc").value.trim(), cat:$("iCat").value, m: (form.t==="move"||form.t==="in")?"":form.m, ent: form.t==="move"?"me":form.ent, src: base?base.src:"manual", ts: base&&base.ts?base.ts:Date.now()};
   if(!base && form.schOf) tx.schOf=form.schOf;
+  if(!base && form.causeOf){ const c=form.causeOf; months[c.ym]=monthTx(c.ym).map(x=>x.id===c.id?rcClean(x):x); form.causeOf=null; setTimeout(()=>saveMonth(c.ym).catch(()=>{}),0); }
   if(form.t==="move"){ tx.from=$("iFrom").value; tx.to=$("iTo").value; delete tx.io; if((isPerson(tx.from)||isPerson(tx.to)) && $("iPk").value) tx.pk=$("iPk").value; else delete tx.pk; } else { delete tx.from; delete tx.to; delete tx.io; delete tx.pk; }
   if(form.t==="in"){ if(form.ac) tx.ac=form.ac; else delete tx.ac; delete tx.mx; delete tx.via; const fa=$("iFromAc").value; if(fa && fa!==form.ac && !isRecon(tx)) tx.fromAc=fa; else delete tx.fromAc; }
   else { delete tx.fromAc; if(base && base.t==="in" && !isRecon(base)) delete tx.ac; }
