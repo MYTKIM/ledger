@@ -7,8 +7,8 @@
 3. ChatGPT에 구글 드라이브를 연결한 뒤, 다음 질문을 그대로 붙여 넣기:
 
 > 내 구글 드라이브 'U JIN Ledger AI' 폴더의 ledger_ai_latest.json을 읽어 줘. 먼저 readme 항목의 규칙을 따르고, transactions만으로 계산해.
-> 1) Winner Summit 2026 Shanghai 프로젝트의 승인예산, 총지출, 남은 예산, 집행률
-> 2) 비용 대상(beneficiary)별 · 목적(purpose)별 · 세무 구분(taxTreatment)별 합계
+> 1) Winner Summit 2026 Shanghai 프로젝트의 참가자와 총 참석인원, 승인예산, 총지출, 남은 예산, 집행률
+> 2) 사람별 귀속(allocation이 있으면 몫으로 나누고, COMMON은 공동비용으로 따로) · 목적별 · 세무 구분별 합계 (몫별 allocationPurpose·allocationTax 반영)
 > 3) 외화 거래 목록(원래 통화·금액·적용 환율·원화 금액)
 > 4) 네 계산이 파일 안 projectSummary와 일치하는지
 

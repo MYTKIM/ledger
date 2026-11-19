@@ -5,6 +5,13 @@
 """
 import json, sys, collections
 
+def shares(t):
+    """거래를 사람 몫으로: allocation이 있으면 몫마다(목적·세무는 몫 값, 없으면 거래 값), 없으면 거래 하나."""
+    if t.get("allocation"):
+        ap, at = t.get("allocationPurpose") or {}, t.get("allocationTax") or {}
+        return [(p, a, ap.get(p) or t["purpose"], at.get(p) or t["taxTreatment"] or "REVIEW") for p, a in t["allocation"].items()]
+    return [(t["beneficiary"], t["amount"], t["purpose"], t["taxTreatment"] or "REVIEW")]
+
 def main(path, proj_q=None):
     d = json.load(open(path, encoding="utf-8"))
     T = d["transactions"]; ok = True
@@ -48,7 +55,15 @@ def main(path, proj_q=None):
         rate = t["effectiveRate"] or t["exchangeRate"] * (1 + (t["cardFeePct"] or 0) / 100)
         if abs(t["originalAmount"] * rate - t["amount"]) > max(2, t["amount"] * 0.001): bad(f"외화 환산 불일치: {t['id']} {t['originalAmount']} {t['originalCurrency']} → {t['amount']}")
 
-    print("6) 프로젝트 합계: 거래에서 다시 계산 = projectSummary")
+    print("6) 사람별 배분: 합계 = 거래 금액, 배분 거래는 beneficiary=SPLIT")
+    for t in T:
+        if t.get("allocation"):
+            if sum(t["allocation"].values()) != t["amount"]: bad(f"배분 합계 {sum(t['allocation'].values()):,} ≠ 금액 {t['amount']:,}: {t['id']}")
+            if t["beneficiary"] != "SPLIT": bad(f"배분 거래인데 beneficiary={t['beneficiary']}: {t['id']}")
+
+    print("7) 프로젝트: 참가자 수 = people + 기타, 거래에서 다시 계산 = projectSummary")
+    for pj in d.get("projects", []):
+        if pj.get("totalAttendees") != len(pj.get("people", [])) + (pj.get("otherPeopleCount") or 0): bad(f"{pj['name']} 총 참석인원 불일치")
     for ps in d.get("projectSummary", []):
         xs = [t for t in T if t["projectId"] == ps["projectId"] and t["type"] == "expense" and t["includeInTotals"]]
         inT = {t["id"] for t in xs}
@@ -57,10 +72,16 @@ def main(path, proj_q=None):
             continue
         s = sum(t["amount"] for t in xs)
         if s != ps["spent"]: bad(f"{ps['name']} 지출 {s:,} ≠ 요약 {ps['spent']:,}")
-        for f, key, dflt in [("beneficiary", "byBeneficiary", "UNSPECIFIED"), ("purpose", "byPurpose", "UNSPECIFIED"), ("taxTreatment", "byTaxTreatment", "REVIEW")]:
+        g = collections.Counter()
+        for t in xs: g[t["beneficiary"] or "UNSPECIFIED"] += t["amount"]
+        if dict(g) != {k: v for k, v in ps["byBeneficiary"].items() if v}: bad(f"{ps['name']} byBeneficiary 불일치: {dict(g)} vs {ps['byBeneficiary']}")
+        for i, key, dflt in [(0, "byPerson", "UNSPECIFIED"), (2, "byPurpose", "UNSPECIFIED"), (3, "byTaxTreatment", "REVIEW")]:
+            if key not in ps: continue
             g = collections.Counter()
-            for t in xs: g[t[f] or dflt] += t["amount"]
+            for t in xs:
+                for sh in shares(t): g[sh[i] or dflt] += sh[1]
             if dict(g) != {k: v for k, v in ps[key].items() if v}: bad(f"{ps['name']} {key} 불일치: {dict(g)} vs {ps[key]}")
+            if sum(g.values()) != s: bad(f"{ps['name']} {key} 합계가 지출과 다름 (이중 집계?)")
 
     if proj_q:
         print(f"\n[재구성] '{proj_q}' 프로젝트 비용")
@@ -68,14 +89,21 @@ def main(path, proj_q=None):
         for ps in P:
             xs = [t for t in T if t["projectId"] == ps["projectId"] and t["type"] == "expense"]
             s = sum(t["amount"] for t in xs)
-            print(f"  {ps['name']} · 승인예산 {ps['approvedBudget'] or 0:,} · 지출 {s:,} · 남은 예산 {(ps['approvedBudget'] or 0)-s:,}")
-            for f, nm in [("beneficiary", "비용 대상"), ("purpose", "목적"), ("taxTreatment", "세무 구분"), ("entity", "부담 주체")]:
+            pj = next((p for p in d.get("projects", []) if p["projectId"] == ps["projectId"]), {})
+            print(f"  {ps['name']} · 참가자 {', '.join(pj.get('people', [])) or '미지정'} + 기타 {pj.get('otherPeopleCount', 0)}명 = 총 {pj.get('totalAttendees', '?')}명")
+            print(f"  승인예산 {ps['approvedBudget'] or 0:,} · 지출 {s:,} · 남은 예산 {(ps['approvedBudget'] or 0)-s:,}")
+            for i, nm in [(0, "사람별 귀속(배분 반영)"), (2, "목적"), (3, "세무 구분")]:
                 g = collections.Counter()
-                for t in xs: g[t[f] or "미지정"] += t["amount"]
+                for t in xs:
+                    for sh in shares(t): g[sh[i] or "미지정"] += sh[1]
                 print(f"   - {nm}: " + ", ".join(f"{k} {v:,}" for k, v in g.most_common()))
+            g = collections.Counter()
+            for t in xs: g[t["entity"] or "미지정"] += t["amount"]
+            print("   - 부담 주체: " + ", ".join(f"{k} {v:,}" for k, v in g.most_common()))
             for t in sorted(xs, key=lambda t: t["date"]):
                 fx = f" ({t['originalAmount']:,} {t['originalCurrency']} @ {t['exchangeRate']})" if t["originalAmount"] else ""
-                print(f"     {t['date']} {t['description']} {t['amount']:,}원{fx} · {t['beneficiary'] or '-'} · {t['purpose'] or '-'} · {t['taxTreatment']}")
+                al = (" = " + " + ".join(f"{p} {a:,}" for p, a in t["allocation"].items())) if t.get("allocation") else ""
+                print(f"     {t['date']} {t['description']} {t['amount']:,}원{fx} · {t['beneficiary'] or '-'}{al} · {t['purpose'] or '-'} · {t['taxTreatment']}")
     print("\n결과:", "모두 맞습니다 ✓" if ok else "맞지 않는 항목이 있습니다 ✗")
     return 0 if ok else 1
 

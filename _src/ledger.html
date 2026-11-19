@@ -685,6 +685,11 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
           <label class="fld">목적<select id="iPur"></select></label>
           <label class="fld">세무 구분<select id="iTax"></select></label>
           <div class="hint" style="flex-basis:100%;margin:0;font-size:12px">프로젝트 비용을 누구 몫·무슨 목적·어떤 세무 처리인지 나눕니다. 세무 구분은 세무사 확인 전까지 ‘세무 검토 필요’로 두세요.</div>
+          <label class="check" style="flex-basis:100%;font-size:13px"><input type="checkbox" id="iAllocOn" style="width:auto"> 사람별로 나누기 <small style="color:var(--muted)">(예: 3인 항공권을 각자 몫으로. 몫마다 목적·세무 구분을 다르게 할 수 있음)</small></label>
+          <div id="allocBox" hidden style="flex-basis:100%">
+            <div id="allocRows"></div>
+            <div class="brow" style="gap:6px;margin-top:4px"><button type="button" class="btn small" id="allocEq">체크한 사람에게 균등 배분</button><span class="hint" id="allocSt" style="margin:0;padding:4px 8px"></span></div>
+          </div>
         </div>
         <div id="wsNew" hidden style="grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input id="iWsName" placeholder="이름 (예: Winner Summit 2026 Shanghai)" style="grid-column:1/-1"><input id="iWsStart" type="date" aria-label="시작일"><input id="iWsEnd" type="date" aria-label="끝나는 날"></div></div>
       <div class="hint" id="flowHint"></div>
@@ -816,6 +821,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <h3><span id="wsTitle">프로젝트·행사 관리</span><button class="x" data-close aria-label="닫기">×</button></h3>
     <div class="form">
       <p class="hint" style="margin:0">프로젝트·행사를 미리 만들어 두면, 기록을 넣을 때 ‘프로젝트·행사’에서 고를 수 있습니다. 기록 창에서 ‘새 프로젝트·행사 만들기’로 바로 만들 수도 있습니다. 프로젝트·행사를 지우면 그 표시만 없어지고 기록은 그대로 남습니다.</p>
+      <label class="fld" style="max-width:420px">전체 사람 후보 (쉼표로 구분)<input id="pjCandIn" placeholder="UJ, MH, YJ, TY"></label>
       <div id="wsList" class="xf-list"></div>
       <button type="button" class="btn small" id="wsAdd" style="justify-self:start">프로젝트·행사 추가</button>
       <div class="actions"><span></span><div class="r"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn primary" id="wsSave">저장</button></div></div>
@@ -1275,6 +1281,7 @@ function aiTx(t, o){
     entity:ent, paymentMethod:m?{code:m.code, name:m.name||"", kind:kindOf(m)}:(t.m?{code:t.m,name:"",kind:null}:null),
     payVia:t.via||null, account:t.t==="move"||NOT_ACCT(txAcct(t))?null:(txAcct(t)||null), from:t.t==="move"?(effects(t).find(e=>e.v<0)||{}).acct||null:null, to:t.t==="move"?(effects(t).find(e=>e.v>0)||{}).acct||null:null,
     projectId:t.ws||null, projectName:W?W.name:null, beneficiary:t.ws?(t.bf||null):null, purpose:t.ws?(t.pur||null):null, taxTreatment:t.ws?(t.tax||"REVIEW"):null,
+    allocation:t.ws&&t.alloc?Object.fromEntries(Object.entries(t.alloc).map(([p,x])=>[p,+x.a||0])):null,
     settlement:t.st?{status:t.st, settledOn:t.settledOn||null}:null, installments:+t.inst>1?+t.inst:null,
     includeInTotals:inTot,
     economicEffect:{amount:inTot?sign*(+t.amt||0):0, entity:ent, note:kind==="transfer"||kind==="settlement_transfer"?"계좌 간 이동이라 손익 없음":kind==="reconciliation"?"통장 잔액에 맞춘 보정(빠진 지출·이자 등)":kind==="card_unconfirmed"?"카드 청구액 중 내역 미확인분(지출로 셈)":null},
@@ -1282,6 +1289,7 @@ function aiTx(t, o){
     linkedIds:links,
     source:{month:t.d.slice(0,7), updatedAt:t.u||null, origin:t.src||"manual"}
   };
+  if(t.ws&&t.alloc){ const ap={}, at={}; Object.entries(t.alloc).forEach(([p,x])=>{ if(x.pur) ap[p]=x.pur; if(x.tax) at[p]=x.tax; }); if(Object.keys(ap).length) r.allocationPurpose=ap; if(Object.keys(at).length) r.allocationTax=at; }
   if(isCustody(t)) r.custody=true;
   if(o.person && t.pp) r.person=t.pp;
   return r; }
@@ -1303,15 +1311,19 @@ function buildAiExport(per, from, to, o){
       "settlement.status=pending은 법인 비용을 개인 돈으로 먼저 내고 아직 돌려받지 않은 것, settlement_transfer는 그 정산 이체입니다(손익 없음).",
       "외화 거래는 amount(원화)가 확정 금액입니다. exchangeRate는 기록 당시 적용 환율, effectiveRate는 원화를 카드 청구액으로 고친 경우의 실제 환율입니다.",
       "entity: SUSLAB=지속발전연구소(주) 법인, PERSONAL=개인·가계. 프로젝트 거래의 beneficiary(비용 대상)·purpose(목적)·taxTreatment(세무 구분)는 사용자가 입력한 값이고, taxTreatment=REVIEW는 세무 확인 전이라는 뜻입니다.",
-      "custody=true는 가족에게 맡거나 보낸 돈(예수금) 관련 기록이며 앱 기본 설정에서는 지출·수입에 포함됩니다."],
+      "custody=true는 가족에게 맡거나 보낸 돈(예수금) 관련 기록이며 앱 기본 설정에서는 지출·수입에 포함됩니다.",
+      "프로젝트 참가자: projects[].people이 실제 참가자이고 candidatePeople은 전체 후보입니다. totalAttendees = people 수 + otherPeopleCount. participantsSet=false면 참가자를 아직 정하지 않은 것입니다.",
+      "사람별 귀속: allocation이 있는 거래는 beneficiary=SPLIT이고, 각 사람 몫(원화, 합계=amount)으로 나눠 셉니다. 몫별 목적·세무 구분은 allocationPurpose·allocationTax에 있고 없으면 거래의 purpose·taxTreatment를 따릅니다. beneficiary=COMMON은 나누지 않은 공동비용입니다. projectSummary.byPerson·byPurpose·byTaxTreatment는 이 규칙으로 계산한 값입니다(배분 몫과 COMMON을 함께 더하면 이중 집계가 아닙니다 — 각 거래는 한 번만 셉니다)."],
     transactions:T, monthlyTotals:monthly};
   if(o.meta){ out.categories={expense:config.outCats.slice(), income:(config.inCats||[]).slice()}; out.paymentMethods=config.methods.map(m=>({code:m.code, name:m.name||"", kind:kindOf(m), account:m.acct||null, owner:(resolve(m.code)||{}).own||null, linkedTo:m.link||null})); }
   if(o.projects){ const W=wsList().filter(w=>allT.some(t=>t.ws===w.id) || (w.end||w.start)>=a+"-01");
-    out.projects=W.map(w=>({projectId:w.id, name:w.name, start:w.start, end:w.end||w.start, owner:w.owner==="me"?"PERSONAL":"SUSLAB", status:{plan:"planned",approved:"approved",done:"done"}[w.status||"approved"], approvedBudget:+w.budget||null, currency:"KRW", people:w.people||PJ_PEOPLE, note:w.note||""}));
+    out.candidatePeople=pjCands().slice();
+    out.projects=W.map(w=>({projectId:w.id, name:w.name, start:w.start, end:w.end||w.start, owner:w.owner==="me"?"PERSONAL":"SUSLAB", status:{plan:"planned",approved:"approved",done:"done"}[w.status||"approved"], approvedBudget:+w.budget||null, currency:"KRW", people:pjPeopleOf(w), participantsSet:pjPeopleOf(w).length>0, otherPeopleCount:pjOtherN(w), otherPeople:w.others||[], totalAttendees:pjTotal(w), note:w.note||""}));
     /* 프로젝트 요약은 기간과 상관없이 그 프로젝트의 모든 지출로 계산 */
     out.projectSummary=W.map(w=>{ const xs=allT.filter(t=>t.ws===w.id && t.t==="out"), spent=sumOf(xs), grp=f=>{ const g={}; xs.forEach(t=>{ const k=t[f]||(f==="tax"?"REVIEW":"UNSPECIFIED"); g[k]=(g[k]||0)+(+t.amt||0); }); return g; };
       const bf={}; xs.forEach(t=>{ const k=t.bf||"UNSPECIFIED"; bf[k]=(bf[k]||0)+(+t.amt||0); });
-      return {projectId:w.id, name:w.name, approvedBudget:+w.budget||null, spent, remaining:+w.budget?(+w.budget-spent):null, transactions:xs.length, transactionIds:xs.map(t=>t.id), byBeneficiary:bf, byPurpose:grp("pur"), byTaxTreatment:grp("tax"), byEntity:{SUSLAB:sumOf(xs.filter(t=>t.ent==="corp")), PERSONAL:sumOf(xs.filter(t=>t.ent!=="corp"))}}; }); }
+      const sg=f=>{ const g={}; xs.forEach(t=>txShares(t).forEach(sh=>{ const k=sh[f]||(f==="tax"?"REVIEW":"UNSPECIFIED"); g[k]=(g[k]||0)+sh.amt; })); return g; };
+      return {projectId:w.id, name:w.name, approvedBudget:+w.budget||null, spent, remaining:+w.budget?(+w.budget-spent):null, transactions:xs.length, transactionIds:xs.map(t=>t.id), people:pjPeopleOf(w), totalAttendees:pjTotal(w), byBeneficiary:bf, byPerson:sg("who"), byPurpose:sg("pur"), byTaxTreatment:sg("tax"), byEntity:{SUSLAB:sumOf(xs.filter(t=>t.ent==="corp")), PERSONAL:sumOf(xs.filter(t=>t.ent!=="corp"))}}; }); }
   if(o.budgets){ out.budgets=budgets.items.filter(x=>x.key&&(+x.amount||0)>0).map(x=>({category:x.key.slice(2), type:typeOfKey(x.key)==="in"?"income":"expense", frequency:freqOf(x), amount:+x.amount, currency:x.cur||"KRW", monthlyEquivalentKRW:Math.round(monthEq(x)), start:x.start||null, end:x.end||null, name:x.name||null})); }
   if(o.plans){ out.plans=Object.keys(plans||{}).filter(k=>k>=a&&k<=b).sort().map(k=>({month:k, expense:plans[k].out||{}, income:plans[k].inc||{}})); }
   if(o.people){ out.people=(accounts.people||[]).map(P=>{ const L=personLedger(P); return {name:P.name, heldForThem:L.hold, lentToThem:L.loan, paidTotal:L.paid}; }); }
@@ -1320,9 +1332,9 @@ function buildAiExport(per, from, to, o){
   const st=(window.LedgerSync&&LedgerSync.status())||{};
   out.metadata={syncState:st.pending?"pending":(st.state||"local"), lastSourceSync:st.last?new Date(st.last).toISOString():null, exportedFromDevice:true, included:Object.keys(o).filter(k=>o[k]), transactionCount:T.length, excludedByDefault:["people","balances","autoTransfers","person"].filter(k=>!o[k==="autoTransfers"?"xfers":k])};
   return out; }
-function aiCsv(T){ const cols=["date","type","kind","amount","currency","originalAmount","originalCurrency","exchangeRate","description","entity","person","project","beneficiary","expensePurpose","taxTreatment","paymentMethod","category","includeInTotals","economicAmount","id"];
+function aiCsv(T){ const cols=["date","type","kind","amount","currency","originalAmount","originalCurrency","exchangeRate","description","entity","person","project","beneficiary","allocation","expensePurpose","taxTreatment","paymentMethod","category","includeInTotals","economicAmount","id"];
   const q=v=>{ v=v==null?"":String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  return "\ufeff"+cols.join(",")+"\n"+T.map(t=>[t.date,t.type,t.kind,t.amount,t.currency,t.originalAmount,t.originalCurrency,t.exchangeRate,t.description,t.entity,t.person||"",t.projectName||"",t.beneficiary,t.purpose,t.taxTreatment,t.paymentMethod?t.paymentMethod.name||t.paymentMethod.code:"",t.category,t.includeInTotals,t.economicEffect.amount,t.id].map(q).join(",")).join("\n")+"\n"; }
+  return "\ufeff"+cols.join(",")+"\n"+T.map(t=>[t.date,t.type,t.kind,t.amount,t.currency,t.originalAmount,t.originalCurrency,t.exchangeRate,t.description,t.entity,t.person||"",t.projectName||"",t.beneficiary,t.allocation?Object.entries(t.allocation).map(([p,a])=>p+":"+a+((t.allocationPurpose||{})[p]?"/"+t.allocationPurpose[p]:"")+((t.allocationTax||{})[p]?"/"+t.allocationTax[p]:"")).join("; "):"",t.purpose,t.taxTreatment,t.paymentMethod?t.paymentMethod.name||t.paymentMethod.code:"",t.category,t.includeInTotals,t.economicEffect.amount,t.id].map(q).join(",")).join("\n")+"\n"; }
 /* 일반 드라이브 쓰기 (drive.file 권한) */
 const DRV="https://www.googleapis.com/drive/v3/files", UPL="https://www.googleapis.com/upload/drive/v3/files";
 async function drvJson(url,opts){ const r=await LedgerSync.driveFetch(url,opts); if(!r.ok){ const e=new Error("http "+r.status); e.status=r.status; throw e; } return r.status===204?null:r.json(); }
@@ -1549,26 +1561,36 @@ function shareTable(rows,total,label,dtf){
 }
 /* 프로젝트 거래의 세 가지 구분 (프로젝트에 묶인 거래에서만 입력). 세무 구분은 앱이 정하지 않고 기본 '세무 검토 필요' */
 const PJ_PEOPLE=["UJ","MH","YJ","TY"];
+let pjCandDraft=null;
+/* 전체 후보(설정)와 프로젝트별 실제 참가자는 따로. 참가자를 안 정한 프로젝트는 '미지정'(전체로 간주하지 않음) */
+const pjCands=()=>((pjCandDraft&&!$("wsOv").hidden)?pjCandDraft:(config.pjPeople&&config.pjPeople.length?config.pjPeople:PJ_PEOPLE));
+const pjPeopleOf=w=>Array.isArray(w&&w.people)?w.people:[];
+const pjOtherN=w=>Math.max(+(w&&w.otherCount)||0, ((w&&w.others)||[]).length);
+const pjTotal=w=>pjPeopleOf(w).length+pjOtherN(w);
 const PJ_PUR=[["BUSINESS","업무"],["EMPLOYEE_REWARD","임직원 포상"],["FAMILY_BENEFIT","가족동반 지원"],["PERSONAL","개인"]];
 const PJ_TAX=[["REVIEW","세무 검토 필요"],["CORPORATE","법인비용"],["PAYROLL_BENEFIT","급여·포상 귀속"],["NONDEDUCTIBLE","손금불산입 검토"],["PERSONAL","개인비용"]];
 const pjLbl=(L,v)=>(L.find(x=>x[0]===v)||[v,v||"미지정"])[1];
-const bfLbl=v=>v==="COMMON"?"공통":(v||"미지정");
+const bfLbl=v=>v==="COMMON"?"공통":v==="SPLIT"?"배분":v==="OTHER"?"기타 참석자":(v||"미지정");
+/* 거래를 사람 몫으로 펼침: 배분이 있으면 몫마다(목적·세무는 몫 값, 없으면 거래 값), 없으면 거래 하나 */
+function txShares(t){ if(t.alloc && Object.keys(t.alloc).length) return Object.entries(t.alloc).map(([p,x])=>({who:p, amt:+x.a||0, pur:x.pur||t.pur||"", tax:x.tax||t.tax||"REVIEW"}));
+  return [{who:t.bf||"", amt:+t.amt||0, pur:t.pur||"", tax:t.tax||"REVIEW"}]; }
 function renderWs(){
   const t=$("wsTbl"); if(!t) return; const L=wsList(), all=allTx().filter(x=>x.ws && x.t==="out");
   if(!L.length){ t.innerHTML=`<tbody><tr><td class="foot">아직 프로젝트·행사가 없습니다. 기록 창의 ‘프로젝트·행사’에서 새로 만들거나 ‘프로젝트·행사 관리’에서 추가하세요.</td></tr></tbody>`; return; }
   const rows=L.map(w=>{ const xs=all.filter(x=>x.ws===w.id), tot=sumOf(xs), corp=sumOf(xs.filter(x=>x.ent==="corp")), pre=sumOf(xs.filter(x=>x.d<w.start));
     const by={}; xs.forEach(x=>{ const c=(x.cat||"미분류").replace(/^지발연\s*-\s*/,""); by[c]=(by[c]||0)+(+x.amt||0); });
     const top=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([c,v])=>`${esc(c)} ${won(v)}`).join(" · ");
-    const grp=f=>{ const g={}; xs.forEach(x=>{ const k=x[f]||""; g[k]=(g[k]||0)+(+x.amt||0); }); return g; };
+    const grp=f=>{ const g={}; xs.forEach(x=>txShares(x).forEach(sh=>{ const k=sh[f]||""; g[k]=(g[k]||0)+sh.amt; })); return g; };
     const fxN=xs.filter(x=>x.fx).length;
-    return {w,n:xs.length,tot,corp,pre,top,bf:grp("bf"),tax:grp("tax"),pur:grp("pur"),fxN}; }).sort((a,b)=>b.w.start.localeCompare(a.w.start));
+    return {w,n:xs.length,tot,corp,pre,top,bf:grp("who"),tax:grp("tax"),pur:grp("pur"),fxN}; }).sort((a,b)=>b.w.start.localeCompare(a.w.start));
   const bud=w=>+w.budget||0, chips=(g,lbl)=>Object.entries(g).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(lbl(k))} ${won(v)}`).join(" · ");
   t.innerHTML=`<thead><tr><th>프로젝트·행사</th><th>기간</th><th class="r">건수</th><th class="r">합계</th><th class="r">승인예산</th><th class="r">남은 예산</th><th>집행률</th><th class="r">법인</th><th class="r">미리 낸 돈</th><th>많이 쓴 항목</th></tr></thead><tbody>`+
     rows.map(r=>`<tr ${r.n?`data-dt='${esc(JSON.stringify({k:"ws",v:r.w.id,t:"out",ym:allYms(),lbl:"프로젝트 · "+r.w.name}))}' style="cursor:pointer"`:""}><td><b>${esc(r.w.name)}</b>${r.w.status==="plan"?'<span class="tag">계획</span>':r.w.status==="done"?'<span class="tag">완료</span>':""}${(r.w.owner||"corp")==="corp"?'<span class="tag">법인 주관</span>':""}</td><td>${esc(wsPeriod(r.w))}</td><td class="r num">${r.n}</td><td class="r num"><b>${won(r.tot)}</b></td><td class="r num">${bud(r.w)?won(bud(r.w)):"—"}</td><td class="r num ${bud(r.w)&&r.tot>bud(r.w)?"bad":""}">${bud(r.w)?sgn(bud(r.w)-r.tot):"—"}</td><td>${bud(r.w)?bBar(r.tot,bud(r.w)):"—"}</td><td class="r num">${won(r.corp)}</td><td class="r num">${r.pre?won(r.pre):"—"}</td><td style="font-size:12.5px;color:var(--muted)">${r.top||"—"}</td></tr>`+
-      (r.n?`<tr class="pjsub"><td colspan="10" style="font-size:12px;color:var(--muted);padding-top:0">비용 대상: ${chips(r.bf,bfLbl)||"—"}<br>목적: ${chips(r.pur,v=>pjLbl(PJ_PUR,v))||"—"}<br>세무 구분: ${chips(r.tax,v=>pjLbl(PJ_TAX,v))||"—"}${r.fxN?` · 외화 기록 ${r.fxN}건`:""}</td></tr>`:"")).join("")+`</tbody>`;
+      (`<tr class="pjsub"><td colspan="10" style="font-size:12px;color:var(--muted);padding-top:0">참가자: ${pjPeopleOf(r.w).length?esc(pjPeopleOf(r.w).join(", ")):'<span class="bad">미지정</span>'}${pjOtherN(r.w)?` + 기타 ${pjOtherN(r.w)}명${(r.w.others||[]).length?` (${esc(r.w.others.join(", "))})`:""}`:""} · 총 ${pjTotal(r.w)}명${r.n?`<br>사람별 귀속(배분 반영): ${chips(r.bf,bfLbl)||"—"}`:""}${r.n?`<br>목적: ${chips(r.pur,v=>pjLbl(PJ_PUR,v))||"—"}<br>세무 구분: ${chips(r.tax,v=>pjLbl(PJ_TAX,v))||"—"}${r.fxN?` · 외화 기록 ${r.fxN}건`:""}`:""}</td></tr>`)).join("")+`</tbody>`;
 }
 let wDraft=null;
-$("wsEdit").onclick=()=>{ wDraft=JSON.parse(JSON.stringify(wsList())); renderWsEdit(); openOv("wsOv"); };
+$("wsEdit").onclick=()=>{ wDraft=JSON.parse(JSON.stringify(wsList())); pjCandDraft=pjCands().slice(); $("pjCandIn").value=pjCandDraft.join(", "); renderWsEdit(); openOv("wsOv"); };
+$("pjCandIn").addEventListener("change",()=>{ const L=$("pjCandIn").value.split(/[,，]/).map(x=>x.trim()).filter(Boolean); pjCandDraft=[...new Set(L)]; renderWsEdit(); });
 function renderWsEdit(){
   $("wsList").innerHTML = wDraft.length ? wDraft.map((w,i)=>{ const n=allTx().filter(x=>x.ws===w.id).length; return `<div class="xf"><div class="g">
       <label>이름<input data-i="${i}" data-k="name" value="${esc(w.name||"")}"></label>
@@ -1578,19 +1600,26 @@ function renderWsEdit(){
       <label>승인예산 (원, 선택)<input data-i="${i}" data-k="budget" inputmode="numeric" value="${+w.budget?(+w.budget).toLocaleString("ko-KR"):""}" placeholder="예: 7,000,000"></label>
       <label>주관<select data-i="${i}" data-k="owner"><option value="corp"${(w.owner||"corp")==="corp"?" selected":""}>법인 (지속발전연구소)</option><option value="me"${w.owner==="me"?" selected":""}>개인</option></select></label>
       <label>상태<select data-i="${i}" data-k="status">${[["plan","계획"],["approved","승인"],["done","완료"]].map(([v,t])=>`<option value="${v}"${(w.status||"approved")===v?" selected":""}>${t}</option>`).join("")}</select></label>
-      <label>비용 대상 (쉼표로 구분)<input data-i="${i}" data-k="people" value="${esc((w.people||PJ_PEOPLE).join(", "))}" placeholder="UJ, MH, YJ"></label>
+      <div style="grid-column:1/-1"><span style="font-size:12.5px;font-weight:600">실제 참가자</span> <small style="color:var(--muted)">전체 후보 중 이 프로젝트에 참가하는 사람만 체크</small><br>${[...new Set(pjCands().concat(pjPeopleOf(w)))].map(p=>`<label class="check" style="font-size:13px;margin-right:12px"><input type="checkbox" data-i="${i}" data-pp="${esc(p)}"${pjPeopleOf(w).includes(p)?" checked":""} style="width:auto"> ${esc(p)}</label>`).join("")}${pjPeopleOf(w).length?"":`<span class="hint warn" style="display:inline;padding:2px 6px">참가자 미지정</span>`}</div>
+      <label>기타 참석자 수<input data-i="${i}" data-k="otherCount" inputmode="numeric" value="${+w.otherCount||""}" placeholder="0"></label>
+      <label>기타 참석자 (선택, 쉼표로)<input data-i="${i}" data-k="others" value="${esc((w.others||[]).join(", "))}" placeholder="예: 외부강사, 가이드"></label>
+      <div style="grid-column:1/-1;font-size:12.5px;color:var(--muted)" data-tot="${i}">총 참석인원 ${pjTotal(w)}명</div>
     </div><div class="ft"><span>표시한 기록 ${n}건</span><button type="button" class="btn small" data-wdel="${i}">삭제</button></div></div>`; }).join("") : `<div class="foot">아직 프로젝트·행사가 없습니다.</div>`;
   $("wsList").querySelectorAll("[data-k]").forEach(el=>el.oninput=el.onchange=()=>{ const w=wDraft[+el.dataset.i], k=el.dataset.k;
     if(k==="budget"){ const n=el.value.replace(/[^\d]/g,""); w.budget=+n||0; if(el.type!=="number") el.value=n?(+n).toLocaleString("ko-KR"):""; }
-    else if(k==="people") w.people=el.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean);
+    else if(k==="others") w.others=el.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean);
+    else if(k==="otherCount") w.otherCount=+el.value.replace(/[^\d]/g,"")||0;
     else w[k]=el.value.trim(); });
+  $("wsList").querySelectorAll("[data-pp]").forEach(c=>c.onchange=()=>{ const w=wDraft[+c.dataset.i], p=c.dataset.pp, L=pjPeopleOf(w).filter(x=>x!==p); if(c.checked) L.push(p);
+    const ord=[...new Set(pjCands().concat(L))]; w.people=ord.filter(x=>L.includes(x)); renderWsEdit(); });
+  $("wsList").querySelectorAll("[data-k=otherCount],[data-k=others]").forEach(el=>el.addEventListener("change",()=>{ const t=$("wsList").querySelector(`[data-tot="${el.dataset.i}"]`); if(t) t.textContent=`총 참석인원 ${pjTotal(wDraft[+el.dataset.i])}명`; }));
   $("wsList").querySelectorAll("[data-wdel]").forEach(b=>b.onclick=()=>{ wDraft.splice(+b.dataset.wdel,1); renderWsEdit(); });
 }
-$("wsAdd").onclick=()=>{ const d=todayISO(); wDraft.push({id:uid(), name:"", start:d, end:d, note:"", owner:"corp", status:"approved", people:PJ_PEOPLE.slice()}); renderWsEdit(); };
+$("wsAdd").onclick=()=>{ const d=todayISO(); wDraft.push({id:uid(), name:"", start:d, end:d, note:"", owner:"corp", status:"approved", people:[], otherCount:0, others:[]}); renderWsEdit(); };
 $("wsSave").onclick=async()=>{
   if(wDraft.some(w=>!w.name||!w.start)){ showNotice("프로젝트·행사마다 이름과 시작일을 넣어 주세요."); return; } showNotice("");
   wDraft.forEach(w=>{ if(!w.end||w.end<w.start) w.end=w.start; });
-  config.workshops=wDraft; closeOv("wsOv"); render(); await saveConfig();
+  config.workshops=wDraft; if(pjCandDraft&&pjCandDraft.length) config.pjPeople=pjCandDraft; closeOv("wsOv"); render(); await saveConfig();
 };
 function renderDash(){
   renderWs(); renderAvg();
@@ -3274,12 +3303,43 @@ function wsList(){ return config.workshops||[]; }
 function wsOf(id){ return wsList().find(w=>w.id===id); }
 function wsPeriod(w){ if(!w) return ""; const f=d=>d?`${+d.slice(5,7)}/${+d.slice(8)}`:""; const n=w.start&&w.end?Math.round((Date.parse(w.end)-Date.parse(w.start))/864e5):0; return `${w.start.slice(0,4)} ${f(w.start)}${w.end&&w.end!==w.start?"~"+f(w.end):""} · ${n?`${n}박 ${n+1}일`:"당일"}`; }
 /* 프로젝트를 고르면 비용 대상·목적·세무 구분 칸을 보여 줌 */
-function pjFields(t){ const w=$("iWs").value, on=!!w && form.t!=="move"; $("pjBox").hidden=!on; if(!on) return;
-  const W=wsOf(w)||{}, ppl=(W.people&&W.people.length?W.people:PJ_PEOPLE), cur=t||{bf:$("iBf").value, pur:$("iPur").value, tax:$("iTax").value};
-  $("iBf").innerHTML=`<option value="">미지정</option><option value="COMMON">공통 (여럿이 함께 씀)</option>`+ppl.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("")+(cur.bf&&cur.bf!=="COMMON"&&!ppl.includes(cur.bf)?`<option value="${esc(cur.bf)}">${esc(cur.bf)}</option>`:"");
+function pjFields(t){ const w=$("iWs").value, on=!!w && form.t!=="move"; $("pjBox").hidden=!on;
+  if(!on){ $("iAllocOn").checked=false; $("allocBox").hidden=true; $("allocRows").innerHTML=""; $("iBf").disabled=false; if(t){ $("iBf").innerHTML=$("iPur").innerHTML=$("iTax").innerHTML=""; } return; } /* 새 기록을 열 때 이전 기록의 값이 남지 않게 */
+  const W=wsOf(w)||{}, ppl=pjPeopleOf(W).length?pjPeopleOf(W):pjCands(), cur=t||{bf:$("iBf").value, pur:$("iPur").value, tax:$("iTax").value, alloc:allocRead(true)};
+  $("iBf").innerHTML=`<option value="">미지정</option><option value="COMMON">공통 (나누지 않은 공동비용)</option><option value="SPLIT">배분 (아래에서 사람별로)</option>`+ppl.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("")+(cur.bf&&!["COMMON","SPLIT"].includes(cur.bf)&&!ppl.includes(cur.bf)?`<option value="${esc(cur.bf)}">${esc(cur.bf)}</option>`:"");
   $("iPur").innerHTML=`<option value="">미지정</option>`+PJ_PUR.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
   $("iTax").innerHTML=PJ_TAX.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
-  $("iBf").value=cur.bf||""; $("iPur").value=cur.pur||""; $("iTax").value=cur.tax||"REVIEW"; }
+  $("iBf").value=cur.bf||""; $("iPur").value=cur.pur||""; $("iTax").value=cur.tax||"REVIEW";
+  const al=cur.alloc&&Object.keys(cur.alloc).length?cur.alloc:null; $("iAllocOn").checked=!!al; allocRender(al, ppl, pjOtherN(W)); }
+/* ---------- 사람별 배분 ----------
+   tx.alloc = {UJ:{a:금액, pur?, tax?}, ...} (원화, 합계 = 거래 금액). 몫의 목적·세무 구분을 비우면 거래 값을 따름.
+   배분이 있으면 비용 대상은 SPLIT('배분'). COMMON은 나누지 않은 공동비용으로만 씀(이중 집계 방지). */
+const amtNow=()=>+($("iAmt").value.replace(/[^\d]/g,""))||0;
+function allocRender(al, ppl, otherN){ const box=$("allocBox"), on=$("iAllocOn").checked; box.hidden=!on;
+  const who=[...new Set(ppl.concat(otherN?["OTHER"]:[]).concat(al?Object.keys(al):[]))];
+  const sel=(k,p,v,L,lbl)=>`<select data-${k}="${esc(p)}" style="flex:1 1 120px"><option value="">${lbl}</option>${L.map(([x,l])=>`<option value="${x}"${v===x?" selected":""}>${l}</option>`).join("")}</select>`;
+  $("allocRows").innerHTML=who.map(p=>{ const x=al&&al[p]; return `<div class="brow arow" style="gap:6px;margin:3px 0;align-items:center"><label class="check" style="flex:0 0 92px;font-size:13px"><input type="checkbox" data-ap="${esc(p)}"${(!al&&p!=="OTHER")||x?" checked":""} style="width:auto"> ${p==="OTHER"?"기타 참석자":esc(p)}</label><input data-aa="${esc(p)}" inputmode="numeric" value="${x&&x.a?(+x.a).toLocaleString("ko-KR"):""}" placeholder="0" style="flex:0 1 130px;text-align:right">${sel("apur",p,x&&x.pur||"",PJ_PUR,"목적: 거래와 같음")}${sel("atax",p,x&&x.tax||"",PJ_TAX,"세무: 거래와 같음")}</div>`; }).join("");
+  $("allocRows").querySelectorAll("[data-aa]").forEach(i=>i.addEventListener("input",()=>{ const n=i.value.replace(/[^\d]/g,""); i.value=n?(+n).toLocaleString("ko-KR"):""; allocStatus(); }));
+  $("allocRows").querySelectorAll("[data-ap]").forEach(c=>c.addEventListener("change",allocStatus));
+  if(on){ $("iBf").value="SPLIT"; $("iBf").disabled=true; if(!al) allocEq(); } else { $("iBf").disabled=false; if($("iBf").value==="SPLIT") $("iBf").value=""; }
+  allocStatus(); }
+function allocRead(raw){ const o={}; $("allocRows").querySelectorAll("[data-aa]").forEach(i=>{ const p=i.dataset.aa, a=+i.value.replace(/[^\d]/g,"")||0, inc=$("allocRows").querySelector(`[data-ap="${CSS.escape(p)}"]`).checked;
+    if(!inc || !a) return; const pur=$("allocRows").querySelector(`[data-apur="${CSS.escape(p)}"]`).value, tax=$("allocRows").querySelector(`[data-atax="${CSS.escape(p)}"]`).value; o[p]={a}; if(pur) o[p].pur=pur; if(tax) o[p].tax=tax; });
+  return raw&&!$("iAllocOn").checked?null:o; }
+/* 균등 배분: 나누고 남은 1원 단위는 앞사람부터 1원씩 (예: 1,438,196 → 479,399 / 479,399 / 479,398) */
+function splitEven(total, n){ const base=Math.floor(total/n), rem=total-base*n; return Array.from({length:n},(_,i)=>base+(i<rem?1:0)); }
+function allocEq(){ const ps=[...$("allocRows").querySelectorAll("[data-ap]")].filter(c=>c.checked).map(c=>c.dataset.ap); if(!ps.length) return;
+  const sh=splitEven(amtNow(), ps.length); $("allocRows").querySelectorAll("[data-aa]").forEach(i=>{ const k=ps.indexOf(i.dataset.aa); i.value=k>=0&&sh[k]?sh[k].toLocaleString("ko-KR"):""; }); allocStatus(); }
+function allocStatus(){ if(!$("iAllocOn").checked){ $("allocSt").textContent=""; return; } const o=allocRead(), sum=Object.values(o).reduce((a,x)=>a+x.a,0), amt=amtNow(), d=amt-sum;
+  $("allocSt").className="hint"+(d?" warn":""); $("allocSt").style.margin="0"; $("allocSt").innerHTML=`배분 합계 <b>${won(sum)}</b> / 거래 ${won(amt)}${d?` · <b>${d>0?"남음 "+won(d):"넘침 "+won(-d)}</b>`:" · 맞음 ✓"}`; }
+/* 금액을 고치면 배분을 같은 비율로 다시 나눔 */
+function allocRescale(){ if(!$("iAllocOn").checked) return; const inputs=[...$("allocRows").querySelectorAll("[data-aa]")].filter(i=>+i.value.replace(/[^\d]/g,"")>0 && $("allocRows").querySelector(`[data-ap="${CSS.escape(i.dataset.aa)}"]`).checked);
+  const old=inputs.map(i=>+i.value.replace(/[^\d]/g,"")), os=old.reduce((a,b)=>a+b,0), amt=amtNow(); if(!os||!amt||os===amt){ allocStatus(); return; }
+  const nw=old.map(v=>Math.floor(v*amt/os)); let rem=amt-nw.reduce((a,b)=>a+b,0); for(let k=0;rem>0;k=(k+1)%nw.length,rem--) nw[k]++;
+  inputs.forEach((i,k)=>{ i.value=nw[k].toLocaleString("ko-KR"); }); allocStatus(); }
+$("iAllocOn").addEventListener("change",()=>{ const w=$("iWs").value, W=wsOf(w)||{}; allocRender(null, pjPeopleOf(W).length?pjPeopleOf(W):pjCands(), pjOtherN(W)); });
+$("allocEq").onclick=allocEq;
+$("iAmt").addEventListener("input",()=>setTimeout(allocRescale,0));
 function wsOptions(d, val){
   const sel=$("iWs"), L=wsList().slice(), cur=w=>w.start<=d&&d<=(w.end||w.start);
   const inP=L.filter(cur), up=L.filter(w=>!cur(w)&&w.start>d).sort((a,b)=>a.start.localeCompare(b.start)), past=L.filter(w=>!cur(w)&&w.start<=d).sort((a,b)=>b.start.localeCompare(a.start));
@@ -3479,8 +3539,12 @@ $("txForm").onsubmit=async e=>{
   /* 워크샵 */
   if(form.t!=="move"){ let w=$("iWs").value;
     if(w==="__new"){ const nm=$("iWsName").value.trim(); if(!nm){ $("iWsName").focus(); return; } const W={id:uid(), name:nm, start:$("iWsStart").value||d, end:$("iWsEnd").value||$("iWsStart").value||d}; config.workshops=(config.workshops||[]).concat([W]); saveConfig(); w=W.id; }
-    if(w){ tx.ws=w; const bf=$("iBf").value, pur=$("iPur").value, tax=$("iTax").value||"REVIEW"; if(bf) tx.bf=bf; else delete tx.bf; if(pur) tx.pur=pur; else delete tx.pur; tx.tax=tax; }
-    else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; } } else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; }
+    if(w){ tx.ws=w; let bf=$("iBf").value; const pur=$("iPur").value, tax=$("iTax").value||"REVIEW";
+      if($("iAllocOn").checked && !$("pjBox").hidden){ const al=allocRead(), sum=Object.values(al).reduce((a,x)=>a+x.a,0);
+        if(!Object.keys(al).length || sum!==amt){ allocStatus(); $("allocSt").scrollIntoView({block:"center"}); showNotice(`사람별 배분 합계(${won(sum)})가 거래 금액(${won(amt)})과 같아야 저장할 수 있습니다. ‘균등 배분’을 누르거나 금액을 맞춰 주세요.`); return; }
+        tx.alloc=al; bf="SPLIT"; } else { delete tx.alloc; if(bf==="SPLIT") bf=""; }
+      if(bf) tx.bf=bf; else delete tx.bf; if(pur) tx.pur=pur; else delete tx.pur; tx.tax=tax; }
+    else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; delete tx.alloc; } } else { delete tx.ws; delete tx.bf; delete tx.pur; delete tx.tax; delete tx.alloc; }
   if(base && isRecon(base) && (tx.amt!==base.amt || tx.t!==base.t)) tx.lock=true;
   const eligible = needsSettle(tx);
   tx.st = eligible ? ($("iSettle").checked ? "pending" : "done") : null;
