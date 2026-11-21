@@ -279,6 +279,8 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
 .todo{display:grid;gap:6px}
+.bedit{margin-left:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;font:inherit;font-size:11px;padding:1px 8px;cursor:pointer;white-space:nowrap;vertical-align:1px}
+.bedit:hover,.bedit:focus-visible{color:var(--ink);border-color:var(--ink)}
 .seg.ro{pointer-events:none;opacity:.55}
 .todo-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-size:13.5px}
 .todo-row small{color:var(--muted);font-size:12px} .todo-row .r{display:flex;gap:6px}
@@ -548,7 +550,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <div class="dash-bar">
       <span class="seg" id="budTSeg"><button type="button" data-v="out" aria-pressed="true">지출</button><button type="button" data-v="in" aria-pressed="false">수입</button></span>
       <p id="budNote" style="flex:1 1 200px"></p>
-      <div class="tools"><button class="btn primary" id="budEdit">예산 설정</button></div>
+      <div class="tools"><button class="btn primary" id="budEdit" title="모든 계정의 예산 보기·고치기. 표의 ✎ 예산을 누르면 그 계정만 엽니다">예산 설정</button></div>
     </div>
     <div class="kpis" id="bKpis"></div>
     <div class="panel">
@@ -2156,7 +2158,7 @@ function renderBud(){
   const IT=c=>{ const l=itemsForT(T,c); return hasPlan(ym)||!l.length ? "" : l.length===1 ? `<span class="tag">${esc(schedTxt(l[0]))}</span>` : `<span class="tag">예산 ${l.length}개: ${l.map(b=>esc(b.name||(execOf(b)==="manual"?"한도":schedTxt(b)))).join(" · ")}</span>`; };
   const pCell=r=>`<td class="r num">${r.p.a?won(r.p.a)+` <span class="tag">${r.p.n}건</span>`:"—"}</td>`, fCell=(v,cls)=>`<td class="r num ${v<0?"bad":""}"${cls?` style="font-weight:600"`:""}>${sgn(v)}</td>`;
   $("bMonTbl").innerHTML = mRows.length ? `<thead><tr><th>항목</th><th class="r">${W("예산","계획")}</th><th class="r">${W("사용","입금")}</th><th class="r">${W("남은 예산","남은 계획")}</th>${T==="in"?"":`<th class="r">나갈 예정</th><th class="r">더 쓸 수 있는 돈</th>`}<th>${W("사용률","달성률")}</th></tr></thead><tbody>`+
-    mRows.map(r=>`<tr class="bud-row"${dtAttr({k:"cat",v:r.c,t:T,ym:[ym]})}><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}${IT(r.c)}</td><td class="r num">${won(r.al)}</td><td class="r num">${won(r.u)}</td><td class="r num ${T!=="in"&&r.al-r.u<0?"bad":""}">${sgn(r.al-r.u)}</td>${T==="in"?"":pCell(r)+fCell(r.al-r.u-r.p.a,1)}<td>${bBarT(r.u,r.al)}</td></tr>`).join("")+
+    mRows.map(r=>`<tr class="bud-row"${dtAttr({k:"cat",v:r.c,t:T,ym:[ym]})}><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}${IT(r.c)}${bEditBtn(T,r.c)}</td><td class="r num">${won(r.al)}</td><td class="r num">${won(r.u)}</td><td class="r num ${T!=="in"&&r.al-r.u<0?"bad":""}">${sgn(r.al-r.u)}</td>${T==="in"?"":pCell(r)+fCell(r.al-r.u-r.p.a,1)}<td>${bBarT(r.u,r.al)}</td></tr>`).join("")+
     `</tbody><tfoot><tr><td>합계</td><td class="r num">${won(mA)}</td><td class="r num">${won(mU)}</td><td class="r num ${T!=="in"&&mA-mU<0?"bad":""}">${sgn(mA-mU)}</td>${T==="in"?"":`<td class="r num">${mP?won(mP):"—"}</td>`+fCell(mA-mU-mP,1)}<td>${bBarT(mU,mA)}</td></tr></tfoot>`
     : `<tbody><tr><td style="color:var(--muted)">이 달에 잡힌 예산이 없습니다. 가계부를 다시 불러오면 시트 계획이 들어오고, ‘예산 설정’에서 앞으로의 예산을 정할 수 있습니다.</td></tr></tbody>`;
 
@@ -2166,7 +2168,7 @@ function renderBud(){
   const yA=yRows.reduce((a,r)=>a+r.ann,0), yU=yRows.reduce((a,r)=>a+r.used,0), yP=yRows.reduce((a,r)=>a+r.plan,0);
   $("bYearSub").textContent=`연 예산 = 1~12월 각 달 예산의 합 (시트 계획이 있는 달은 계획, 없는 달은 앱 예산). ‘지금까지 계획’은 1~${mo}월 예산의 합입니다.`;
   $("bYearTbl").innerHTML = yRows.length ? `<thead><tr><th>항목</th><th class="r">${W("연 예산","연 계획")}</th><th class="r">지금까지 계획</th><th class="r">${W("누적 사용","누적 입금")}</th><th class="r">연 잔액</th><th>${W("연 집행률","연 달성률")}</th><th class="r">계획 대비</th></tr></thead><tbody>`+
-    yRows.map(r=>{ const gap=r.used-r.plan; return `<tr class="bud-row"${dtAttr({k:"cat",v:r.c,t:T,ym:ytdK})}><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}</td><td class="r num">${won(r.ann)}</td><td class="r num">${won(r.plan)}</td><td class="r num">${won(r.used)}</td><td class="r num ${T!=="in"&&r.ann-r.used<0?"bad":""}">${sgn(r.ann-r.used)}</td><td>${bBarT(r.used,r.ann)}</td><td class="r num ${(gap>0)!==(T==="in")?"bad":"good"}">${gap>0?"+":""}${sgn(gap)}</td></tr>`; }).join("")+
+    yRows.map(r=>{ const gap=r.used-r.plan; return `<tr class="bud-row"${dtAttr({k:"cat",v:r.c,t:T,ym:ytdK})}><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}${bEditBtn(T,r.c)}</td><td class="r num">${won(r.ann)}</td><td class="r num">${won(r.plan)}</td><td class="r num">${won(r.used)}</td><td class="r num ${T!=="in"&&r.ann-r.used<0?"bad":""}">${sgn(r.ann-r.used)}</td><td>${bBarT(r.used,r.ann)}</td><td class="r num ${(gap>0)!==(T==="in")?"bad":"good"}">${gap>0?"+":""}${sgn(gap)}</td></tr>`; }).join("")+
     `</tbody><tfoot><tr><td>합계</td><td class="r num">${won(yA)}</td><td class="r num">${won(yP)}</td><td class="r num">${won(yU)}</td><td class="r num ${T!=="in"&&yA-yU<0?"bad":""}">${sgn(yA-yU)}</td><td>${bBarT(yU,yA)}</td><td class="r num ${(yU-yP>0)!==(T==="in")?"bad":"good"}">${yU-yP>0?"+":""}${sgn(yU-yP)}</td></tr></tfoot>`
     : `<tbody><tr><td style="color:var(--muted)">올해 예산이 없습니다.</td></tr></tbody>`;
 
@@ -2179,7 +2181,7 @@ function renderBud(){
   $("adjSub").textContent=`최근 3개월(${Math.max(1,mo-3)}~${mo-1}월) ${W("실제 사용 평균을 그 기간 예산과 비교했습니다. 15% 넘게 많이 쓰면 상향, 40% 넘게 적게 쓰면 하향을 제안합니다.","실제 입금 평균을 그 기간 계획과 비교했습니다. 15% 넘게 더 들어오면 상향, 40% 넘게 덜 들어오면 하향을 제안합니다.")} 제안 금액은 평균을 만 원 단위로 올린 값입니다.`;
   $("adjTbl").innerHTML = adj.length ? `<thead><tr><th>항목</th><th>판단</th><th class="r">${W("3개월 평균 사용","3개월 평균 입금")}</th><th class="r">${W("3개월 평균 예산","3개월 평균 계획")}</th><th class="r">${W("올해 누적 사용","올해 누적 입금")}</th></tr></thead><tbody>`+
     adj.map(r=>{ const ks=[]; for(let m=Math.max(1,mo-3);m<mo;m++) ks.push(y+"-"+pad(m)); const u=ks.length?ks.reduce((a,k)=>a+U(r.c,k),0)/ks.length:0, al=ks.length?ks.reduce((a,k)=>a+A(r.c,k),0)/ks.length:0;
-      return `<tr><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}</td><td><span class="verdict ${r.v.cls}">${esc(r.v.txt)}</span></td><td class="r num">${won(u)}</td><td class="r num">${won(al)}</td><td class="r num">${won(ytdK.reduce((a,k)=>a+U(r.c,k),0))}</td></tr>`; }).join("")+`</tbody>`
+      return `<tr><td>${esc(r.c)}${isCorpCat(r.c)?'<span class="tag">법인</span>':""}${bEditBtn(T,r.c)}</td><td><span class="verdict ${r.v.cls}">${esc(r.v.txt)}</span></td><td class="r num">${won(u)}</td><td class="r num">${won(al)}</td><td class="r num">${won(ytdK.reduce((a,k)=>a+U(r.c,k),0))}</td></tr>`; }).join("")+`</tbody>`
     : `<tbody><tr><td style="color:var(--muted)">조정이 필요한 항목이 없습니다.</td></tr></tbody>`;
   $("applyAdj").hidden = !adj.some(r=>r.v.sug!=null);
 
@@ -2372,7 +2374,7 @@ function renderSchedule(){
     let st; if(rec) st=`<span class="st-done" role="button" tabindex="0" data-open="${lt.d.slice(0,7)}|${esc(lt.id)}" style="cursor:pointer;text-decoration:underline dotted">기록됨${lt.d!==o.d?` · ${+lt.d.slice(5,7)}/${+lt.d.slice(8)} 집행`:""}</span>`; else if(o.d>today) st= b.auto?`<span class="st-wait">자동 기록 예정</span>`:`<span class="st-manual">직접 기록</span>`; else if(b.auto && posted) st=`<span class="st-manual">기록 후 삭제됨</span>`; else if(b.auto && o.d<(b.autoFrom||today)) st=`<span class="st-manual">자동 기록 전 일정</span>`; else st= b.auto?`<span class="st-wait">다음 열 때 기록</span>`:`<span class="st-miss">직접 기록 필요</span> <button type="button" class="btn small" data-rec="${esc(b.id)}|${o.d}">기록하기</button>`;
     if(!rec && !b.auto && o.d>today) st+=` <button type="button" class="btn small" data-rec="${esc(b.id)}|${o.d}">미리 기록</button>`;
     const m=methodOf(b.m);
-    return `<tr class="${o.d===today?"today":""}"><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(b.key.slice(2))}${b.name?` · <b>${esc(b.name)}</b>`:""}<span class="tag">${esc(schedTxt(b))}</span></td><td>${esc(b.desc||"")}</td><td class="r num ${typeOfKey(b.key)==="in"?"good":""}">${typeOfKey(b.key)==="in"?"+":""}${won(o.amt)}</td><td>${typeOfKey(b.key)==="in" ? `입금 → ${esc(b.acct||mainAcct())}` : budgetAcct(b)!=="미지정"?`${b.m?esc(b.m)+" → ":""}${esc(budgetAcct(b))}`:'<span style="color:var(--muted)">미지정</span>'}</td><td>${st}</td></tr>`;
+    return `<tr class="${o.d===today?"today":""}"><td class="num">${o.d.slice(5).replace("-","/")}${o.d===today?' <span class="tag">오늘</span>':""}</td><td>${esc(b.key.slice(2))}${b.name?` · <b>${esc(b.name)}</b>`:""}<span class="tag">${esc(schedTxt(b))}</span>${bEditBtn(typeOfKey(b.key),b.key.slice(2))}</td><td>${esc(b.desc||"")}</td><td class="r num ${typeOfKey(b.key)==="in"?"good":""}">${typeOfKey(b.key)==="in"?"+":""}${won(o.amt)}</td><td>${typeOfKey(b.key)==="in" ? `입금 → ${esc(b.acct||mainAcct())}` : budgetAcct(b)!=="미지정"?`${b.m?esc(b.m)+" → ":""}${esc(budgetAcct(b))}`:'<span style="color:var(--muted)">미지정</span>'}</td><td>${st}</td></tr>`;
   }).join("")+`</tbody>`;
   $("schTbl").querySelectorAll("[data-rec]").forEach(btn=>btn.onclick=()=>{ const [bid,d]=btn.dataset.rec.split("|"); const b=budgets.items.find(x=>x.id===bid); if(b) recordOcc(b,{d,amt:occAmt(b)}); });
   $("schTbl").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>{ const [ym,id]=el.dataset.open.split("|"); openTx(ym,id); });
@@ -2402,8 +2404,13 @@ function budGuard(){ const g=$("bGuard"); g.hidden=false;
   g.scrollIntoView({block:"nearest"}); }
 function openBudEdit(focus){ bDraft=JSON.parse(JSON.stringify(budgets)); bDraft.items=bDraft.items.filter(b=>b.key&&(b.key.startsWith("c:")||b.key.startsWith("i:"))); bT=budT; bBase=bNorm(bDraft.items); $("bGuard").hidden=true;
   /* 계정과목 화면에서 왔으면 그 계정만 찾아서 펼쳐 둠 */
-  if(focus&&focus.cat){ bT=focus.type||"out"; bFindQ=focus.cat; $("bFind").value=focus.cat; bOnlyHas=false; $("bOnly").checked=false; bOpen.add(focus.cat); }
-  segSet("bTSeg",bT); renderBudEdit(); openOv("budOv"); }
+  if(focus&&focus.cat){ bT=focus.type||"out"; bFindQ=focus.cat; $("bFind").value=focus.cat; bOnlyHas=false; $("bOnly").checked=false; bOpen.clear(); bOpen.add(focus.cat); }
+  /* '예산 설정' 단추로 열면 지난번 검색·펼침을 지우고 예산 있는 계정 전체를 접어서 보여 줌 */
+  else if(focus&&focus.fresh){ bFindQ=""; $("bFind").value=""; bOpen.clear(); bOnlyHas=bDraft.items.some(b=>b.key.startsWith(bT==="in"?"i:":"c:")); $("bOnly").checked=bOnlyHas; }
+  segSet("bTSeg",bT); renderBudEdit(); openOv("budOv"); if(focus&&focus.fresh) setTimeout(()=>$("bFind").focus(),60); }
+/* 예산 탭 표의 '✎ 예산' 단추 → 그 계정만 펼친 예산 설정 */
+const bEditBtn=(T,c)=>`<button type="button" class="bedit" data-bedit="${esc(T+"|"+c)}" title="이 계정 예산 고치기">✎ 예산</button>`;
+document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("[data-bedit]"); if(!b) return; e.stopPropagation(); e.preventDefault(); const i=b.dataset.bedit.indexOf("|"); openBudEdit({type:b.dataset.bedit.slice(0,i), cat:b.dataset.bedit.slice(i+1)}); },true);
 function bTargets(){ return [...new Set(config.outCats.concat(allTx().filter(t=>t.t==="out"&&t.cat).map(t=>t.cat)).concat(...Object.values(plans).map(p=>Object.keys(p.out))))].sort(); }
 function bSummary(b){
   const n=occurrences(b, todayISO(), "9999-12-31").slice(0,3).map(o=>o.d.slice(2).replace(/-/g,"."));
@@ -2560,7 +2567,7 @@ function renderBudEdit(){
 }
 $("bFind").addEventListener("input",e=>{ bFindQ=e.target.value.trim(); renderBudEdit(); });
 $("bOnly").onchange=e=>{ bOnlyHas=e.target.checked; renderBudEdit(); };
-$("budEdit").onclick=openBudEdit;
+$("budEdit").onclick=()=>openBudEdit({fresh:true});
 $("fromPlanB").onclick=()=>{
   const pk=Object.keys(plans).sort(); if(!pk.length) return; const P=bT==="in"?"inc":"out";
   const latest=pk[pk.length-1]; const cats=new Set(); pk.forEach(k=>Object.keys(plans[k][P]).forEach(c=>cats.add(c)));
