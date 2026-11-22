@@ -279,6 +279,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
 .todo{display:grid;gap:6px}
+.linkish{border:0;background:none;padding:0;color:var(--ink);text-decoration:underline;font:inherit;cursor:pointer}
 .split{border:1px solid var(--line);border-radius:10px;padding:8px 12px} .split summary{cursor:pointer;font-weight:600;font-size:13.5px}
 .parts{display:grid;gap:6px;margin-bottom:6px} .part{display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:6px;align-items:center}
 .bedit{margin-left:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;font:inherit;font-size:11px;padding:1px 8px;cursor:pointer;white-space:nowrap;vertical-align:1px}
@@ -718,6 +719,8 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
           <div class="hint" id="fxHint" style="flex-basis:100%;margin:0"></div>
         </div></div>
       <div class="f"><label for="iDesc">적요</label><input id="iDesc" placeholder="예: 코스트코, SALT 점심, 오태호회계사"></div>
+      <div class="f" id="spRow" hidden><label class="chk" style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="iXavg" style="width:auto"> <span><b>평균에서 빼기</b> (특별 지출) <small style="color:var(--muted)">합계·계정·예산에는 그대로 잡히고, 생활비 평균·예상 지출·순흐름에서만 빠집니다</small></span></label>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:4px" id="spCatTxt"></div></div>
       <div class="f" id="entRow"><span class="lbl">귀속 <small style="font-weight:400;color:var(--muted)">고른 쪽 계정이 목록 위에 옵니다</small></span><span class="seg" id="entInSeg"><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="true">개인</button></span></div>
       <div class="f"><label for="iCat">계정 (지출 항목)</label><select id="iCat"></select><div class="hint" id="budHint" hidden style="margin-top:6px;font-size:12.5px"></div></div>
       <div class="two" id="moveRow" hidden>
@@ -1156,7 +1159,11 @@ function instShares(t){
 /* 결제 나누기: 상품 가격(amt) 중 parts[{m,a}]는 상품권·포인트·현금·계좌로 내고, 나머지(mainAmt)를 주 결제수단(m)으로 냄 */
 const partsOf = t => t.t==="out" && Array.isArray(t.parts) ? t.parts.filter(p=>p&&p.m&&+p.a>0) : [];
 const mainAmt = t => (+t.amt||0) - partsOf(t).reduce((s,p)=>s+(+p.a),0);
-const rebOf = t => t.reb && +t.reb.a>0 ? +t.reb.a : 0;   /* 이번 구매로 받은 적립(혜택). 실질 가격 = 상품 가격 − 적립 */
+const rebOf = t => t.reb && +t.reb.a>0 ? +t.reb.a : 0;
+/* 특별 지출: 합계·계정·예산 집행에는 그대로 넣고, 평균(생활비 평균·예상 지출·순흐름·전망)에서만 뺌.
+   거래마다(xavg) 또는 계정 규칙(config.catNoAvg, 하위 계정 포함)으로 정함. 계정 규칙 지출은 예산 집행 일정으로 전망에 따로 더함 */
+const noAvgCat = c => (config.catNoAvg||[]).some(P=>under(c||"",catSegs(P)));
+const isSpecial = t => t.t==="out" && (!!t.xavg || noAvgCat(t.cat));   /* 이번 구매로 받은 적립(혜택). 실질 가격 = 상품 가격 − 적립 */
 function effects(t){
   const a=t.t==="out" ? mainAmt(t) : (+t.amt||0);
   if(t.t==="out" && partsOf(t).length){ const r=effectsMain(t,a); partsOf(t).forEach(p=>r.push({acct:acctOf(p.m), d:t.d, v:-(+p.a)})); return r.filter(e=>!NOT_ACCT(e.acct)||e===r[0]); }
@@ -1404,7 +1411,7 @@ function aiTx(t, o){
     entity:ent, paymentMethod:m?{code:m.code, name:m.name||"", kind:kindOf(m)}:(t.m?{code:t.m,name:"",kind:null}:null),
     ...(partsOf(t).length?{paymentSplit:[...partsOf(t).map(p=>({method:p.m, kind:kindOf(methodOf(p.m)), amount:+p.a})),{method:t.m, kind:m?kindOf(m):null, amount:mainAmt(t), main:true}]}:{}),
     ...(rebOf(t)?{rewardEarned:{amount:rebOf(t), to:t.reb.to, effectivePrice:(+t.amt||0)-rebOf(t), note:"설명용. 적립 금액은 별도 수입 거래(rebateOf)로 이미 기록되어 있으니 합계에는 그 거래만 셀 것"}}:{}),
-    ...(t.rebOf?{rebateOf:t.rebOf}:{}),
+    ...(t.rebOf?{rebateOf:t.rebOf}:{}), ...(isSpecial(t)?{excludeFromAverage:true}:{}),
     ...(t.cardFrom?{cardFrom:t.cardFrom}:{}), ...(+t.chg?{cashChange:{amount:+t.chg, to:t.chgTo}}:{}),
     payVia:t.via||null, account:t.t==="move"||NOT_ACCT(txAcct(t))?null:(txAcct(t)||null), from:t.t==="move"?(effects(t).find(e=>e.v<0)||{}).acct||null:null, to:t.t==="move"?(effects(t).find(e=>e.v>0)||{}).acct||null:null,
     projectId:t.ws||null, projectName:W?W.name:null, beneficiary:t.ws?(t.bf||null):null, purpose:t.ws?(t.pur||null):null, taxTreatment:t.ws?(t.tax||"REVIEW"):null,
@@ -1782,7 +1789,8 @@ function renderLedger(tx){
     const m=methodOf(t.m), acct=txAcct(t);
     const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : isRecon(t) ? `<span class="chip plain">잔액 맞춤 · ${t.lock?"수동":"자동"}</span>` : "";
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
-    const splitChip = (partsOf(t).length||rebOf(t)) ? `<span class="chip plain" title="${esc([...partsOf(t).map(p=>`${p.m} ${won(+p.a)}`), `${t.m} ${won(mainAmt(t))}`].join(" · "))}">${partsOf(t).length?`${partsOf(t).length+1}가지로 나눠 냄`:""}${partsOf(t).length&&rebOf(t)?" · ":""}${rebOf(t)?`실질 ${won(+t.amt-rebOf(t))}`:""}</span>` : t.rebOf ? `<span class="chip plain">구매 적립 · 그 거래에서 고침</span>` : "";
+    const spChip = isSpecial(t) ? `<span class="chip plain" title="합계에는 들어가고 평균에서만 빠짐">평균 제외</span>` : "";
+    const splitChip = spChip + ((partsOf(t).length||rebOf(t)) ? `<span class="chip plain" title="${esc([...partsOf(t).map(p=>`${p.m} ${won(+p.a)}`), `${t.m} ${won(mainAmt(t))}`].join(" · "))}">${partsOf(t).length?`${partsOf(t).length+1}가지로 나눠 냄`:""}${partsOf(t).length&&rebOf(t)?" · ":""}${rebOf(t)?`실질 ${won(+t.amt-rebOf(t))}`:""}</span>` : t.rebOf ? `<span class="chip plain">구매 적립 · 그 거래에서 고침</span>` : "");
     const instChip = splitChip + (+t.inst>1 ? (()=>{ const sh=instShares(t); if(sh.length<2) return `<span class="chip plain">${t.inst}개월 할부</span>`; const f=x=>`${+x.d.slice(5,7)}/${+x.d.slice(8)}`;
       return `<span class="chip plain" title="${esc(sh.map(x=>`${x.i}회 ${f(x)} ${won(x.amt)}`).join(" · "))}">${t.inst}개월 할부 · ${f(sh[0])}~${f(sh[sh.length-1])} 매달 ${won(sh[sh.length-1].amt)}</span>`; })() : "");
     const st = instChip + (t.st==="pending" ? `<span class="chip warn">정산 대기</span>` : t.st==="done" ? `<span class="chip plain">정산 완료</span>` : "") + (t.ws&&wsOf(t.ws) ? `<span class="chip ws">프로젝트 · ${esc(wsOf(t.ws).name)}</span>` : "");
@@ -1808,7 +1816,7 @@ function prevKeys(keys){ const n=keys.length; return keys.map(k=>ymAdd(k,-n)); }
 function dataMonths(keys){ return keys.filter(k=>monthTx(k).length); }
 function agg(keys){
   const tx=vis([].concat(...keys.map(monthTx))); const outs=tx.filter(t=>t.t==="out"), ins=tx.filter(t=>t.t==="in");
-  return {tx,outs,ins,out:sumOf(outs),inc:sumOf(ins),corp:sumOf(outs.filter(t=>t.ent==="corp")),me:sumOf(outs.filter(t=>t.ent!=="corp"))};
+  return {tx,outs,ins,out:sumOf(outs),inc:sumOf(ins),corp:sumOf(outs.filter(t=>t.ent==="corp")),me:sumOf(outs.filter(t=>t.ent!=="corp")),sp:sumOf(outs.filter(isSpecial))};
 }
 const pct=(a,b)=> b ? a/b*100 : 0;
 const pctTxt=v=> (Math.round(v*10)/10).toFixed(1)+"%";
@@ -1917,8 +1925,8 @@ function renderDash(){
   const base=[1,2,3].map(i=>ymAdd(keys[0],-i)).filter(k=>monthTx(k).length);
   const notes=[];
   if(base.length){
-    const B=agg(base); const bCat={}; sumBy(B.outs,t=>t.cat||"미분류").forEach(([k,v])=>bCat[k]=v/base.length);
-    const cur=sumBy(A.outs,t=>t.cat||"미분류").map(([k,v])=>[k,v/nMon,bCat[k]||0]).filter(r=>r[1]-r[2]>50000 && (!r[2]||r[1]/r[2]>1.3)).sort((a,b)=>(b[1]-b[2])-(a[1]-a[2])).slice(0,3);
+    const B=agg(base); const bCat={}; sumBy(B.outs.filter(t=>!t.xavg),t=>t.cat||"미분류").forEach(([k,v])=>bCat[k]=v/base.length);
+    const cur=sumBy(A.outs.filter(t=>!t.xavg),t=>t.cat||"미분류").map(([k,v])=>[k,v/nMon,bCat[k]||0]).filter(r=>r[1]-r[2]>50000 && (!r[2]||r[1]/r[2]>1.3)).sort((a,b)=>(b[1]-b[2])-(a[1]-a[2])).slice(0,3);
     cur.forEach(r=>notes.push(`<b>${esc(r[0])}</b> 월 ${won(r[1])} — 직전 ${base.length}개월 평균 ${won(r[2])}보다 <b class="bad">${won(r[1]-r[2])}</b> 많습니다.`));
   }
   const pend=allPending(); if(pend.length) notes.push(`법인에서 정산받을 돈 <b>${won(sumOf(pend))}</b> (${pend.length}건)이 남아 있습니다.`);
@@ -1932,7 +1940,7 @@ function renderDash(){
   const W=900,H=260,top=18,base0=210,L=8; const bw=(W-L*2)/Math.max(1,rows.length);
   const mx=Math.max(1,...rows.map(r=>Math.max(r.inc,r.out)));
   const sc=v=>v/mx*(base0-top);
-  const avgOut=rows.filter(r=>r.tx.length).reduce((a,r)=>a+r.out,0)/Math.max(1,rows.filter(r=>r.tx.length).length);
+  const avgOut=rows.filter(r=>r.tx.length).reduce((a,r)=>a+r.out-r.sp,0)/Math.max(1,rows.filter(r=>r.tx.length).length);
   let sv=`<line x1="0" y1="${base0}" x2="${W}" y2="${base0}" style="stroke:var(--line)"/>`;
   [0.25,0.5,0.75,1].forEach(f=>{ const y=base0-(base0-top)*f; sv+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" style="stroke:var(--line)" stroke-width=".6" stroke-dasharray="2 4"/><text x="4" y="${y-4}" font-size="11" style="fill:var(--muted)">${Math.round(mx*f/10000).toLocaleString("ko-KR")}만</text>`; });
   rows.forEach((r,i)=>{
@@ -1944,12 +1952,12 @@ function renderDash(){
     sv+=`<text x="${cx}" y="${base0+16}" text-anchor="middle" font-size="12" font-weight="${sel?700:400}" style="fill:${sel?"var(--ink)":"var(--muted)"}">${+r.k.slice(5)}월</text>`;
     if(r.tx.length){ const n=r.inc-r.out; sv+=`<text x="${cx}" y="${base0+32}" text-anchor="middle" font-size="11" style="fill:${n>=0?"var(--in)":"var(--warn)"}">${n>=0?"+":"−"}${Math.round(Math.abs(n)/10000).toLocaleString("ko-KR")}만</text>`; }
   });
-  if(avgOut){ const y=base0-sc(avgOut); sv+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" style="stroke:var(--ink)" stroke-dasharray="6 4" stroke-width="1"/><text x="${W-4}" y="${y-5}" text-anchor="end" font-size="11" style="fill:var(--ink)">월평균 지출 ${Math.round(avgOut/10000).toLocaleString("ko-KR")}만</text>`; }
+  if(avgOut){ const y=base0-sc(avgOut); sv+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" style="stroke:var(--ink)" stroke-dasharray="6 4" stroke-width="1"/><text x="${W-4}" y="${y-5}" text-anchor="end" font-size="11" style="fill:var(--ink)">월평균 지출${rows.some(r=>r.sp)?"(특별 제외)":""} ${Math.round(avgOut/10000).toLocaleString("ko-KR")}만</text>`; }
   $("dTrend").innerHTML=sv;
   const dr=rows.filter(r=>r.tx.length); const avg=f=>dr.length?dr.reduce((a,r)=>a+f(r),0)/dr.length:0;
   $("dMonthTbl").innerHTML=`<thead><tr><th>월</th><th class="r">수입</th><th class="r">법인 지출</th><th class="r">개인 지출</th><th class="r">지출 합계</th><th class="r">순현금흐름</th><th class="r">저축률</th></tr></thead><tbody>`+
     rows.map(r=>{ const n=r.inc-r.out; return `<tr><td>${r.k.slice(0,4)}. ${+r.k.slice(5)}월</td><td class="r num">${won(r.inc)}</td><td class="r num">${won(r.corp)}</td><td class="r num">${won(r.me)}</td><td class="r num">${won(r.out)}</td><td class="r num ${n>=0?"good":"bad"}">${n<0?"−":""}${won(Math.abs(n))}</td><td class="r num">${r.inc?pctTxt(pct(n,r.inc)):"—"}</td></tr>`; }).join("")+
-    `</tbody><tfoot><tr><td>월평균 (${dr.length}개월)</td><td class="r num">${won(avg(r=>r.inc))}</td><td class="r num">${won(avg(r=>r.corp))}</td><td class="r num">${won(avg(r=>r.me))}</td><td class="r num">${won(avg(r=>r.out))}</td><td class="r num">${won(avg(r=>r.inc-r.out))}</td><td class="r num">${avg(r=>r.inc)?pctTxt(pct(avg(r=>r.inc-r.out),avg(r=>r.inc))):"—"}</td></tr></tfoot>`;
+    `</tbody><tfoot>${dr.some(r=>r.sp)?`<tr><td>특별 지출 제외 월평균</td><td></td><td></td><td></td><td class="r num">${won(avg(r=>r.out-r.sp))}</td><td class="r num">${won(avg(r=>r.inc-r.out+r.sp))}</td><td></td></tr>`:""}<tr><td>월평균 (${dr.length}개월)</td><td class="r num">${won(avg(r=>r.inc))}</td><td class="r num">${won(avg(r=>r.corp))}</td><td class="r num">${won(avg(r=>r.me))}</td><td class="r num">${won(avg(r=>r.out))}</td><td class="r num">${won(avg(r=>r.inc-r.out))}</td><td class="r num">${avg(r=>r.inc)?pctTxt(pct(avg(r=>r.inc-r.out),avg(r=>r.inc))):"—"}</td></tr></tfoot>`;
 
   // groups
   const g=sumBy(A.outs,t=>groupKey(t.cat)); $("grpSub").textContent=`지출 ${won(A.out)} 중 비율`;
@@ -1979,7 +1987,7 @@ function renderAvg(){
   const h3=dataMonths(p12.slice(-3)), yk=yearKeys(y), ytd=yk.slice(0,mo);
   const cats=new Set(); h12.concat([cur]).forEach(k=>monthTx(k).forEach(t=>{ if(t.t==="out" && !isRecon(t)) cats.add(t.cat||"미분류"); })); budgets.items.forEach(b=>{ if(typeOfKey(b.key)==="out") cats.add(b.key.slice(2)); });
   let rows=[...cats].filter(c=>avgEnt==="all"||(avgEnt==="corp"?isCorpCat(c):!isCorpCat(c))).map(c=>{
-    const U=k=>usedT("out",c,k), cu=U(cur), ca=allocT("out",c,cur), t12=h12.reduce((a,k)=>a+U(k),0), m12=n?t12/n:0, a3=h3.length?h3.reduce((a,k)=>a+U(k),0)/h3.length:0;
+    const U=k=>usedT("out",c,k), U2=k=>usedT("out",c,k,true), cu=U(cur), ca=allocT("out",c,cur), t12=h12.reduce((a,k)=>a+U2(k),0), m12=n?t12/n:0, a3=h3.length?h3.reduce((a,k)=>a+U2(k),0)/h3.length:0;
     const yu=ytd.reduce((a,k)=>a+U(k),0), ann=yk.reduce((a,k)=>a+allocT("out",c,k),0);
     return {c,cu,ca,a3,m12,yu,ann};
   }).filter(r=>r.cu||r.m12||r.ann||r.yu);
@@ -2061,7 +2069,7 @@ function computeSchLinks(){
   });
   return {occ, tx:txm, into};
 }
-function usedT(type,cat,ym){ let a=0; const hit=t=>(t.t===type || (type==="out" && toPerson(t)))&&(t.cat||"미분류")===cat;
+function usedT(type,cat,ym,noSp){ let a=0; const hit=t=>(t.t===type || (type==="out" && toPerson(t)))&&(t.cat||"미분류")===cat&&!(noSp&&t.xavg);
   monthTx(ym).forEach(t=>{ if(hit(t) && (SL.tx.get(t.id)||ym)===ym) a+=+t.amt||0; });
   (SL.into[ym]||[]).forEach(t=>{ if(hit(t)) a+=+t.amt||0; }); return a; }
 function budgetCatsT(type,ym){
@@ -2158,7 +2166,7 @@ function spark(vals, allocs){
   return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${bl}<path d="${line}" style="stroke:var(--ink);fill:none" stroke-width="1.4"/><circle cx="${x(n-1)}" cy="${y(vals[n-1])}" r="2" style="fill:var(--ink)"/></svg>`;
 }
 const r10k = v => Math.ceil(v/10000)*10000;
-function verdictForT(T, cat, y, curMo){ const A=(c,k)=>allocT(T,c,k), U=(c,k)=>usedT(T,c,k);
+function verdictForT(T, cat, y, curMo){ const A=(c,k)=>allocT(T,c,k), U=(c,k)=>usedT(T,c,k,true);
   // 최근 3개월(이번 달 제외) 실사용 평균과 그 기간 예산 평균을 비교
   const ks=[]; for(let m=Math.max(1,curMo-3); m<curMo; m++) ks.push(y+"-"+pad(m));
   if(!ks.length) return {cls:"na",txt:"판단 보류",sug:null};
@@ -2624,7 +2632,7 @@ $("fromPlanB").onclick=()=>{
 $("suggestB").onclick=()=>{
   const full=Object.keys(months).filter(k=>k<CUR_YM&&monthTx(k).length).sort().slice(-6); if(!full.length) return;
   const has=new Set(bDraft.items.map(b=>b.key));
-  const tot={}; full.forEach(k=>monthTx(k).forEach(t=>{ if(t.t===bT&&t.cat&&!isRecon(t)) tot[t.cat]=(tot[t.cat]||0)+(+t.amt||0); }));
+  const tot={}; full.forEach(k=>monthTx(k).forEach(t=>{ if(t.t===bT&&t.cat&&!isRecon(t)&&!t.xavg) tot[t.cat]=(tot[t.cat]||0)+(+t.amt||0); }));
   Object.entries(tot).map(([c,v])=>[c,v/full.length]).filter(([c,v])=>v>=50000&&!has.has(bKey(bT,c))).sort((a,b)=>b[1]-a[1]).forEach(([c,v])=>bDraft.items.push({id:uid(),key:bKey(bT,c),period:"month",amount:r10k(v),mode:"spread",month:1,exec:"manual",acct:bT==="in"?(lastInAcct(c)||mainAcct()):mainAcct()}));
   renderBudEdit();
 };
@@ -2647,11 +2655,11 @@ function tracked(name, upto){ const s=lastSnap(name, upto); if(!s) return null; 
 function cardUpcoming(name){ const today=todayISO(); let v=0; allTx().forEach(t=>effects(t).forEach(e=>{ if(e.acct===name&&e.card&&e.d>today) v-=e.v; })); return v; }
 function personalStats(){
   const full=Object.keys(months).filter(k=>k<CUR_YM&&monthTx(k).length).sort();
-  const pm=k=>{ const tx=monthTx(k).filter(t=>!isCustody(t)); return {out:sumOf(tx.filter(t=>t.t==="out"&&t.ent!=="corp")), inc:sumOf(tx.filter(t=>t.t==="in"&&t.ent!=="corp"))}; };
-  const av=ks=>{ if(!ks.length) return {out:0,inc:0,n:0}; const r=ks.map(pm); return {out:r.reduce((a,x)=>a+x.out,0)/ks.length, inc:r.reduce((a,x)=>a+x.inc,0)/ks.length, n:ks.length}; };
+  const pm=k=>{ const tx=monthTx(k).filter(t=>!isCustody(t)), o=tx.filter(t=>t.t==="out"&&t.ent!=="corp"); return {out:sumOf(o.filter(t=>!isSpecial(t))), sp:sumOf(o.filter(isSpecial)), inc:sumOf(tx.filter(t=>t.t==="in"&&t.ent!=="corp"))}; };
+  const av=ks=>{ if(!ks.length) return {out:0,inc:0,sp:0,n:0}; const r=ks.map(pm); return {out:r.reduce((a,x)=>a+x.out,0)/ks.length, sp:r.reduce((a,x)=>a+x.sp,0)/ks.length, inc:r.reduce((a,x)=>a+x.inc,0)/ks.length, n:ks.length}; };
   const now=new Date(); const day=now.getDate(), dim=lastDay(now.getFullYear(),now.getMonth()+1);
   const cur=pm(CUR_YM);
-  return {a3:av(full.slice(-3)), a6:av(full.slice(-6)), cur, run: day ? cur.out/day*dim : 0, day, dim};
+  return {a3:av(full.slice(-3)), a6:av(full.slice(-6)), cur, run: day ? cur.out/day*dim + cur.sp : 0, day, dim};
 }
 /* 통장 내역: 직전 잔액 입력부터 오늘까지, 잔액 입력·입출금·잔액 맞춤을 시간 순으로 늘어놓고 줄마다 잔액을 보여 줍니다 */
 const accOpen=new Set();
@@ -2779,7 +2787,7 @@ function renderAcc(){
     ["정산 받을 돈",won(recv),`<span style="color:var(--muted)">법인에서 들어올 돈</span>`],
     ...(accounts.list.some(a=>isGiftK(a.kind))?[["상품권·포인트",won(giftSum),`<span style="color:var(--muted)">현금 아님 · 가용 잔액에 안 넣음</span>`]]:[]),
     ...((accounts.people||[]).length?[["맡아 둔 돈",won(PT.hold),`<span style="color:var(--muted)">남의 돈 · 여유자금에서 뺌${PT.loan?` · 빌려 준 돈 ${won(PT.loan)}`:""}</span>`]]:[]),
-    ["이번 달 예상 지출",won(st.run),`<span style="color:var(--muted)">${st.day}일까지 ${won(st.cur.out)} 기준 · 평균 ${won(base.out)}</span>`],
+    ["이번 달 예상 지출",won(st.run),`<span style="color:var(--muted)">${st.day}일까지 ${won(st.cur.out+st.cur.sp)} 기준 · 평균 ${won(base.out)}${st.cur.sp?` · 특별 지출 ${won(st.cur.sp)} 포함`:""}${base.sp?` · 평균은 특별 지출 제외`:""}</span>`],
     ["월 순흐름(개인)",(net<0?"−":"")+won(Math.abs(net)),`<span style="color:var(--muted)">최근 ${base.n}개월 평균 수입 − 지출</span>`]
   ].map(k=>`<div class="kpi"><div class="k">${k[0]}</div><div class="v num">${k[1]}</div><div class="s">${k[2]}</div></div>`).join("");
 
@@ -2787,15 +2795,18 @@ function renderAcc(){
   const rows=[3,6,12].map(h=>{
     const end=new Date(); end.setMonth(end.getMonth()+h); const endISO=end.getFullYear()+"-"+pad(end.getMonth()+1)+"-"+pad(end.getDate());
     let mat=0; accounts.list.filter(a=>!a.liquid&&a.kind==="saving"&&a.maturity&&a.maturity<=endISO).forEach(a=>{ const tr=tracked(a.name,today); if(tr) mat+=tr.bal; });
-    const proj=avail+mat+h*net; return {h,mat,proj,free:proj-buf};
+    /* 평균에서 뺀 계정(특별 지출 규칙)의 예산 집행 일정은 전망에 날짜대로 따로 뺌 */
+    const big=budgets.items.filter(b=>typeOfKey(b.key)==="out" && noAvgCat(b.key.slice(2)) && !isCorpCat(b.key.slice(2))).reduce((a,b)=>a+occurrences(b, ymdAdd(today,1), endISO).reduce((x,o)=>x+o.amt,0),0);
+    const proj=avail+mat+h*net-big; return {h,mat,big,proj,free:proj-buf};
   });
   $("fSub").textContent=`지금 쓸 수 있는 돈 ${won(avail)} (가용 잔액 − 카드 결제 예정 + 정산 받을 돈${(accounts.people||[]).length?" − 맡아 둔 돈":""})에서 출발해, 최근 ${base.n}개월 개인 수입·지출 평균으로 계산합니다. 법인 매출·법인 지출은 넣지 않습니다.`;
-  $("fTbl").innerHTML=`<thead><tr><th>기간</th><th class="r">월 순흐름 누적</th><th class="r">만기 적금</th><th class="r">예상 잔액</th><th class="r">비상금 (${accounts.buffer}개월치)</th><th class="r">여유자금</th></tr></thead><tbody>`+
-    rows.map(r=>`<tr><td>${r.h}개월 뒤</td><td class="r num ${net>=0?"good":"bad"}">${net<0?"−":"+"}${won(Math.abs(r.h*net))}</td><td class="r num">${r.mat?won(r.mat):"—"}</td><td class="r num">${won(r.proj)}</td><td class="r num">${won(buf)}</td><td class="r num ${r.free>=0?"good":"bad"}"><b>${r.free<0?"−":""}${won(Math.abs(r.free))}</b></td></tr>`).join("")+`</tbody>`;
+  $("fTbl").innerHTML=`<thead><tr><th>기간</th><th class="r">월 순흐름 누적</th><th class="r">만기 적금</th>${rows.some(r=>r.big)?`<th class="r">예정 큰 지출</th>`:""}<th class="r">예상 잔액</th><th class="r">비상금 (${accounts.buffer}개월치)</th><th class="r">여유자금</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr><td>${r.h}개월 뒤</td><td class="r num ${net>=0?"good":"bad"}">${net<0?"−":"+"}${won(Math.abs(r.h*net))}</td><td class="r num">${r.mat?won(r.mat):"—"}</td>${rows.some(x=>x.big)?`<td class="r num">${r.big?"−"+won(r.big):"—"}</td>`:""}<td class="r num">${won(r.proj)}</td><td class="r num">${won(buf)}</td><td class="r num ${r.free>=0?"good":"bad"}"><b>${r.free<0?"−":""}${won(Math.abs(r.free))}</b></td></tr>`).join("")+`</tbody>`;
   const notes=[];
   if(base.out) notes.push(`수입이 끊겨도 지금 쓸 수 있는 돈으로 약 <b>${(avail/base.out).toFixed(1)}개월</b> 생활비를 감당할 수 있습니다.`);
   if(st.run>base.out*1.15&&st.day>=7) notes.push(`이번 달은 평소보다 지출 속도가 빠릅니다. 이대로면 평균보다 <b class="bad">${won(st.run-base.out)}</b> 더 씁니다.`);
   if(st.a3.n&&st.a6.n&&Math.abs(st.a3.out-st.a6.out)>st.a6.out*0.15) notes.push(`최근 3개월 평균 지출 ${won(st.a3.out)}은 6개월 평균 ${won(st.a6.out)}과 차이가 큽니다. 전망은 6개월 평균 기준입니다.`);
+  if(base.sp) notes.push(`최근 ${base.n}개월 특별 지출(평균에서 뺀 지출) 월 ${won(base.sp)}은 순흐름 평균에 넣지 않았습니다. 평균에서 뺀 계정의 예산 집행 일정은 ‘예정 큰 지출’로 날짜대로 뺍니다.`);
   if(missing.length) notes.push(`가용 계좌 중 <b>${missing.map(esc).join(", ")}</b>은 잔액을 입력하지 않아 계산에서 빠졌습니다.`);
   $("fNotes").innerHTML=notes.map(n=>`<div class="callout">${n}</div>`).join("");
 }
@@ -3783,8 +3794,15 @@ function splitInfo(){ const amt=+($("iAmt").value.replace(/[^\d]/g,""))||0, P=pa
   $("splitSum").textContent=[P.length?`${P.length+1}가지로 나눠 냄`:"", reb?`적립 ${won(reb)}`:""].filter(Boolean).join(" · "); }
 $("partAdd").onclick=()=>{ partsDraft.push({m:(partMethods().find(m=>kindOf(m)==="gift")||{}).code||"", a:0}); renderParts(); };
 $("iReb").addEventListener("input",splitInfo); $("iAmt").addEventListener("input",()=>{ if(!$("splitBox").hidden) splitInfo(); });
+function spUpd(){ const c=$("iCat").value, on=noAvgCat(c), box=$("spCatTxt"), x=$("iXavg");
+  x.disabled=on; if(on) x.checked=true; else if(x.dataset.auto==="1"){ x.checked=!!form.xavg0; } x.dataset.auto=on?"1":"";
+  box.innerHTML = !c ? "" : on ? `‘${esc(c)}’ 계정은 늘 평균에서 뺍니다. <button type="button" class="linkish" id="spCatOff">규칙 끄기</button>`
+    : `<button type="button" class="linkish" id="spCatOn">‘${esc(c)}’ 계정은 늘 평균에서 빼기</button> <small>(정기적인 큰 지출이면 예산 설정에서 집행 일정으로 등록해 두면 전망에 날짜대로 잡힙니다)</small>`;
+  const f=async on=>{ const L=new Set(config.catNoAvg||[]); on?L.add(c):L.delete(c); config.catNoAvg=[...L]; spUpd(); render(); await saveConfig(); showNotice(on?`‘${c}’ 계정은 이제 평균에서 뺍니다(하위 계정 포함).`:`‘${c}’ 계정을 다시 평균에 넣습니다.`); };
+  const a=$("spCatOn"), b=$("spCatOff"); if(a) a.onclick=()=>f(true); if(b) b.onclick=()=>f(false); }
+$("iCat").addEventListener("change",spUpd);
 function updateHint(autoSettle){
-  budHintUpd();
+  budHintUpd(); $("spRow").hidden = form.t!=="out"; if(form.t==="out") spUpd();
   $("splitBox").hidden = form.t!=="out"; if(form.t==="out") splitInfo();
   const t=form.t, m=methodOf(form.m);
   { const show = t==="out" && !!form.m && isGiftAcct(acctOf(form.m)); const was=!$("chgRow").hidden; $("chgRow").hidden=!show;
@@ -3927,7 +3945,8 @@ function openTx(ym, id, force){
   $("iDesc").value = t ? (t.desc||"") : "";
   fxFormSet(t&&t.fx?t.fx:null, !!(t&&t.fx));
   segSet("typeSeg", form.t); fillCatSelect(form.t, t ? t.cat : ""); segSet("entInSeg", form.ent);
-  { const ef = t && t.t==="move" ? effects(t) : []; partsDraft=t&&Array.isArray(t.parts)?t.parts.map(p=>({...p})):[]; $("iReb").value=t&&t.reb&&+t.reb.a?(+t.reb.a).toLocaleString("ko-KR"):"";
+  { const ef = t && t.t==="move" ? effects(t) : []; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iXavg").dataset.auto="";
+    partsDraft=t&&Array.isArray(t.parts)?t.parts.map(p=>({...p})):[]; $("iReb").value=t&&t.reb&&+t.reb.a?(+t.reb.a).toLocaleString("ko-KR"):"";
     acctOptions($("iRebTo"), (t&&t.reb&&t.reb.to) || (accounts.list.find(a=>a.kind==="point")||{}).name || "", true); renderParts(); $("splitBox").open=!!(partsDraft.length||(t&&t.reb));
     $("iChg").value=t&&+t.chg?(+t.chg).toLocaleString("ko-KR"):""; acctOptions($("iChgTo"), (t&&t.chgTo) || (accounts.list.find(a=>a.kind==="cash")||{}).name || "", true); $("chgRow").hidden=true;
     acctOptions($("iFrom"), t&&t.t==="move"&&t.cardFrom ? "card:"+t.cardFrom : t&&t.t==="move"&&isPerson(t.from) ? t.from : (ef.find(e=>e.v<0)||{}).acct || "", false, true); acctOptions($("iTo"), t&&t.t==="move"&&isPerson(t.to) ? t.to : (ef.find(e=>e.v>0)||{}).acct || "");
@@ -3974,6 +3993,7 @@ $("txForm").onsubmit=async e=>{
     if(ps>amt){ $("splitBox").open=true; splitInfo(); showNotice(`나눠 낸 몫 합계(${won(ps)})가 상품 가격(${won(amt)})보다 큽니다.`); return; }
     if(P.length) tx.parts=P; else delete tx.parts;
     const rb=form.t==="out"?(+($("iReb").value.replace(/[^\d]/g,""))||0):0; if(rb>0 && $("iRebTo").value) tx.reb={a:rb, to:$("iRebTo").value}; else delete tx.reb; }
+  if(form.t==="out" && $("iXavg").checked && !noAvgCat(tx.cat)) tx.xavg=true; else delete tx.xavg;
   { const c=+($("iChg").value.replace(/[^\d]/g,""))||0; if(form.t==="out" && !$("chgRow").hidden && c>0 && $("iChgTo").value){ tx.chg=c; tx.chgTo=$("iChgTo").value; } else { delete tx.chg; delete tx.chgTo; } }
   if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; }
   else if(form.t==="out" && isPayM(form.m) && $("iPayVia").value){ delete tx.mx; tx.via=$("iPayVia").value; }
