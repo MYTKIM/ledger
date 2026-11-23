@@ -716,6 +716,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
           <label class="fld">외화 금액<input id="iUsd" inputmode="decimal" placeholder="예: 20"></label>
           <label class="fld">환율 (원/<span id="iCurL">USD</span>)<input id="iRate" inputmode="decimal"></label>
           <label class="fld" style="flex:0 1 90px">수수료 %<input id="iFee" inputmode="decimal" placeholder="0"></label>
+          <label class="fld" id="paidL" hidden>낸 금액 (원) <small style="font-weight:400;color:var(--muted)">상품권·현금으로 건넨 돈</small><input id="iPaid" inputmode="numeric" placeholder="예: 60,000"></label>
           <button type="button" class="btn small" id="iFxGet">오늘 환율 받기</button>
           <div class="hint" id="fxHint" style="flex-basis:100%;margin:0"></div>
         </div></div>
@@ -2618,7 +2619,7 @@ function renderBudEdit(){
   box.querySelectorAll("[data-rmdate]").forEach(x=>x.onclick=()=>{ const b=bDraft.items[+x.dataset.rmdate]; b.dates=(b.dates||[]).filter(d=>d!==x.dataset.d); renderBudEdit(); });
   box.querySelectorAll("[data-del]").forEach(x=>x.onclick=()=>{ const b=bDraft.items[+x.dataset.del]; if(x.dataset.c!=="1"){ x.dataset.c="1"; x.textContent="한 번 더 누르면 지웁니다"; return; } bOpen.delete(b.key.slice(2)); bDraft.items.splice(+x.dataset.del,1); renderBudEdit(); });
 }
-$("bFind").addEventListener("input",e=>{ bFindQ=e.target.value.trim(); renderBudEdit(); });
+$("bFind").addEventListener("input",e=>{ bFindQ=e.target.value.trim(); if(bFindQ && bOnlyHas){ bOnlyHas=false; $("bOnly").checked=false; } /* 찾을 때는 예산 없는 계정도 보여 줌 */ renderBudEdit(); });
 $("bOnly").onchange=e=>{ bOnlyHas=e.target.checked; renderBudEdit(); };
 $("budEdit").onclick=()=>openBudEdit({fresh:true});
 $("fromPlanB").onclick=()=>{
@@ -3809,7 +3810,9 @@ function spUpd(){ const c=$("iCat").value, on=noAvgCat(c), box=$("spCatTxt"), x=
   const f=async on=>{ const L=new Set(config.catNoAvg||[]); on?L.add(c):L.delete(c); config.catNoAvg=[...L]; spUpd(); render(); await saveConfig(); showNotice(on?`‘${c}’ 계정은 이제 평균에서 뺍니다(하위 계정 포함).`:`‘${c}’ 계정을 다시 평균에 넣습니다.`); };
   const a=$("spCatOn"), b=$("spCatOff"); if(a) a.onclick=()=>f(true); if(b) b.onclick=()=>f(false); }
 $("iCat").addEventListener("change",spUpd);
+let fxCalcBusy=false;
 function updateHint(autoSettle){
+  if(!fxCalcBusy && $("iFxOn").checked && !$("fxBox").hidden && form._fxM!==form.m){ form._fxM=form.m; fxCalcBusy=true; try{ fxCalc(); } finally{ fxCalcBusy=false; } }
   budHintUpd(); $("spRow").hidden = form.t!=="out"; if(form.t==="out") spUpd();
   $("splitBox").hidden = form.t!=="out"; if(form.t==="out") splitInfo();
   const t=form.t, m=methodOf(form.m);
@@ -3908,15 +3911,34 @@ $("iCat").onchange=()=>{ form.catPicked=true; form.entTouched=false; autoEnt();
 /* 달러 입력: $ × 환율 × (1+수수료%) = 원화 금액. 장부에는 원화로 기록하고 달러·환율을 함께 남김 */
 const fxCur=()=>$("iCur").value||"USD";
 $("iCur").innerHTML=CURS.map(([c,sy,nm])=>`<option value="${c}">${c} ${sy} ${nm}</option>`).join("");
-function fxCalc(){ if(!$("iFxOn").checked) return; const c=fxCur(), u=+$("iUsd").value.replace(/[^\d.]/g,"")||0, r=+$("iRate").value.replace(/[^\d.]/g,"")||0, f=+$("iFee").value.replace(/[^\d.]/g,"")||0;
-  $("iCurL").textContent=c; const a=Math.round(u*r*(1+f/100)); if(u&&r) $("iAmt").value=a.toLocaleString("ko-KR");
-  const fi=fxInfo(c); $("fxHint").innerHTML = u&&r ? `${fxTxt(c,u)} × ${r.toLocaleString("ko-KR")}원${f?` × (1 + ${f}%)`:""} = <b>${won(a)}</b>${+r===+fi.rate&&fi.d?` · 환율 ${esc(fi.d)} 기준`:""}. 저장하면 이 환율과 원화 금액이 이 기록에 고정됩니다. 카드 청구액이 다르면 원화 금액을 고쳐 저장하세요(처음 환율은 그대로 남고 실제 환율이 따로 기록됩니다).` : "외화 금액을 넣으면 원화 금액이 자동으로 계산됩니다.";
+/* 외화 기록: 원화 금액 = 외화 × 환율 × (1+수수료).
+   상품권·현금으로 원화를 건넸으면 '낸 금액 − 현금 거스름'이 곧 원화 금액이고, 실제 적용 환율은 거꾸로 계산합니다.
+   수수료는 결제수단(과 연결 카드)에 정한 해외 수수료를 자동으로 채움(직접 고치면 그 값). */
+const paidMode = () => { const m=methodOf(form.m); return form.t==="out" && !!m && ["gift","cash"].includes(kindOf(m)); };
+function fxFeeAuto(u){ const rv=resolve(form.m); if(!rv) return 0; const ms=[methodOf(form.m), ...(rv.chain||[])].filter((m,i,A)=>m&&A.indexOf(m)===i);
+  return ms.reduce((a,m)=>a+((+m.fxFee>0 && !(+m.fxFeeMin>0 && u<=+m.fxFeeMin))?+m.fxFee:0),0); }
+function fxCalc(){ if(!$("iFxOn").checked) return; const c=fxCur(), u=+$("iUsd").value.replace(/[^\d.]/g,"")||0, r=+$("iRate").value.replace(/[^\d.]/g,"")||0;
+  $("paidL").hidden=!paidMode();
+  if(!form.feeTouched && !paidMode()){ const af=fxFeeAuto(u); $("iFee").value = af ? String(Math.round(af*100)/100) : ""; }
+  const f=+$("iFee").value.replace(/[^\d.]/g,"")||0;
+  $("iCurL").textContent=c; const fi=fxInfo(c);
+  const paid = paidMode() ? (+$("iPaid").value.replace(/[^\d]/g,"")||0) : 0, chg = !$("chgRow").hidden ? (+$("iChg").value.replace(/[^\d]/g,"")||0) : 0;
+  if(paid){ const a=Math.max(0,paid-chg); $("iAmt").value=a.toLocaleString("ko-KR");
+    $("fxHint").innerHTML=`낸 돈 ${won(paid)}${chg?` − 현금 거스름 ${won(chg)}`:""} = <b>${won(a)}</b>${u?` · 실제 적용 환율 <b>${(Math.round(a/u*100)/100).toLocaleString("ko-KR")}원</b>/${c} (${fxTxt(c,u)})`:""}. 환율과 관계없이 실제로 낸 원화가 기록됩니다.`; updateHint(false); return; }
+  const a=Math.round(u*r*(1+f/100)); if(u&&r) $("iAmt").value=a.toLocaleString("ko-KR");
+  $("fxHint").innerHTML = u&&r ? `${fxTxt(c,u)} × ${r.toLocaleString("ko-KR")}원${f?` × (1 + ${f}%${!form.feeTouched?" 결제수단 해외 수수료":""})`:""} = <b>${won(a)}</b>${+r===+fi.rate&&fi.d?` · 환율 ${esc(fi.d)} 기준`:""}. 저장하면 이 환율과 원화 금액이 이 기록에 고정됩니다. 카드 청구액이 다르면 원화 금액을 고쳐 저장하세요(처음 환율은 그대로 남고 실제 환율이 따로 기록됩니다).` : "";
   updateHint(false); }
-function fxFormSet(fx,on){ $("iFxOn").checked=!!on; $("fxBox").hidden=!on; $("iCur").value=fx&&fx.cur||"USD"; $("iCurL").textContent=fxCur(); $("iUsd").value=fx&&fx.amt?String(+fx.amt):""; $("iRate").value=fx&&fx.rate?String(+fx.rate):(on?String(fxRate(fxCur())):""); $("iFee").value=fx&&+fx.fee?String(+fx.fee):""; if(on && !(fx&&fx.krwEdited)) fxCalc(); else if(on){ $("iCurL").textContent=fxCur(); } }
+function fxFixedHint(fx){ const c=fx.cur||"USD", u=+fx.amt||0, k=+fx.krw||0;
+  $("fxHint").innerHTML=`원화 <b>${won(k)}</b>으로 고정된 기록입니다 · <b>실제 적용 환율 ${(Math.round((+fx.rateEff||(u?k/u:0))*100)/100).toLocaleString("ko-KR")}원</b>/${c}${fx.paid?` (낸 돈 ${won(+fx.paid)} − 거스름)`:` (처음 환율 ${(+fx.rate).toLocaleString("ko-KR")}원)`}. 외화 금액·환율을 고치면 다시 계산됩니다.`; }
+function fxFormSet(fx,on){ $("iFxOn").checked=!!on; $("fxBox").hidden=!on; $("iCur").value=fx&&fx.cur||"USD"; $("iCurL").textContent=fxCur(); $("iUsd").value=fx&&fx.amt?String(+fx.amt):""; $("iRate").value=fx&&fx.rate?String(+fx.rate):(on?String(fxRate(fxCur())):""); $("iFee").value=fx&&+fx.fee?String(+fx.fee):""; $("iPaid").value=fx&&+fx.paid?(+fx.paid).toLocaleString("ko-KR"):""; form.feeTouched=!!(fx&&fx.rate); form._fxM=form.m; $("paidL").hidden=!(on&&paidMode());
+  if(on && !(fx&&fx.krwEdited)) fxCalc(); else if(on){ $("iCurL").textContent=fxCur(); fxFixedHint(fx); } }
 $("iFxOn").addEventListener("change",async()=>{ const on=$("iFxOn").checked; $("fxBox").hidden=!on; if(!on){ $("fxHint").textContent=""; return; }
   if(!$("iRate").value) $("iRate").value=String(fxRate(fxCur())); fxCalc(); const before=$("iRate").value; const r=await fetchFx(false,fxCur()); if($("iRate").value===before && r){ $("iRate").value=String(r); fxCalc(); } });
 $("iCur").addEventListener("change",async()=>{ $("iRate").value=String(fxRate(fxCur())); fxCalc(); const r=await fetchFx(false,fxCur()); if(r){ $("iRate").value=String(r); fxCalc(); } });
-["iUsd","iRate","iFee"].forEach(id=>$(id).addEventListener("input",fxCalc));
+["iUsd","iRate","iPaid"].forEach(id=>$(id).addEventListener("input",fxCalc));
+$("iFee").addEventListener("input",()=>{ form.feeTouched=true; fxCalc(); });
+$("iPaid").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; });
+$("iChg").addEventListener("input",()=>{ if($("iFxOn").checked && paidMode() && $("iPaid").value) fxCalc(); });
 $("iFxGet").onclick=async()=>{ const b=$("iFxGet"); b.disabled=true; b.textContent="받는 중…"; const r=await fetchFx(true,fxCur()); $("iRate").value=String(r); b.disabled=false; b.textContent="오늘 환율 받기"; fxCalc(); };
 $("iAmt").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; updateHint(false); });
 
@@ -4001,7 +4023,7 @@ $("txForm").onsubmit=async e=>{
   { const u=+$("iUsd").value.replace(/[^\d.]/g,"")||0, r=+$("iRate").value.replace(/[^\d.]/g,"")||0;
     if(form.t!=="move" && $("iFxOn").checked && u && r){ const c=fxCur(), fee=+$("iFee").value.replace(/[^\d.]/g,"")||0, calc=Math.round(u*r*(1+fee/100));
       /* 적용 환율·원화 금액을 기록에 고정. 원화를 직접 고쳤으면(카드 청구 확정 등) 실제 환율을 따로 남김 */
-      tx.fx={cur:c, amt:u, rate:r, fee, d:(base&&base.fx&&+base.fx.rate===r?base.fx.d:(+r===+fxRate(c)?fxInfo(c).d:""))||d, krw:amt};
+      tx.fx={cur:c, amt:u, rate:r, fee, ...(paidMode()&&+$("iPaid").value.replace(/[^\d]/g,"")?{paid:+$("iPaid").value.replace(/[^\d]/g,"")}:{}), d:(base&&base.fx&&+base.fx.rate===r?base.fx.d:(+r===+fxRate(c)?fxInfo(c).d:""))||d, krw:amt};
       if(Math.abs(amt-calc)>1){ tx.fx.krwEdited=true; tx.fx.rateEff=Math.round(amt/u*10000)/10000; } }
     else delete tx.fx; }
   { const P=form.t==="out"?partsDraft.filter(p=>p.m&&+p.a>0).map(p=>({m:p.m,a:+p.a})):[], ps=P.reduce((s,p)=>s+p.a,0);
@@ -4102,7 +4124,8 @@ function renderSettings(){
     const where = k==="pay"
       ? `<select data-i="${i}" data-k="link" data-re="1" aria-label="연결된 카드나 계좌"><option value="">계좌로 바로 →</option>${linkOpts}</select>${m.link?"":`<input data-i="${i}" data-k="acct" value="${esc(m.acct||"")}" list="acctList" placeholder="계좌 이름" aria-label="계좌" style="margin-top:4px">`}`
       : `<input data-i="${i}" data-k="acct" value="${esc(m.acct||"")}" list="acctList" placeholder="${k==="cash"?"현금":"계좌 이름"}" aria-label="계좌">`;
-    return `<tr><td><input data-i="${i}" data-k="code" value="${esc(m.code)}" aria-label="약어"></td><td><input data-i="${i}" data-k="name" value="${esc(m.name)}" aria-label="이름"></td><td>${kindSel}</td><td>${where}</td><td><select data-i="${i}" data-k="own" aria-label="소유"><option value="corp"${m.own==="corp"?" selected":""}>법인</option><option value="me"${m.own!=="corp"?" selected":""}>개인</option></select></td><td>${k==="card"?`<input data-i="${i}" data-k="pay" value="${esc(m.pay||"")}" inputmode="numeric" placeholder="예: 14" aria-label="카드 결제일">`:`<span style="color:var(--muted);font-size:12px">—</span>`}</td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`;
+    const feeIn = (k==="card"||k==="pay") ? `<div style="display:flex;gap:4px;margin-top:4px;align-items:center;font-size:12px;color:var(--muted)">해외 수수료<input data-i="${i}" data-k="fxFee" value="${esc(m.fxFee||"")}" inputmode="decimal" placeholder="%" aria-label="해외 결제 수수료 %" style="width:56px">%${k==="pay"?`<input data-i="${i}" data-k="fxFeeMin" value="${esc(m.fxFeeMin||"")}" inputmode="decimal" placeholder="기준" aria-label="이 외화 금액 넘을 때만" style="width:64px" title="외화 금액이 이 값을 넘을 때만 수수료 (예: 알리페이 200위안)">초과 때만`:""}</div>` : "";
+    return `<tr><td><input data-i="${i}" data-k="code" value="${esc(m.code)}" aria-label="약어"></td><td><input data-i="${i}" data-k="name" value="${esc(m.name)}" aria-label="이름"></td><td>${kindSel}</td><td>${where}${feeIn}</td><td><select data-i="${i}" data-k="own" aria-label="소유"><option value="corp"${m.own==="corp"?" selected":""}>법인</option><option value="me"${m.own!=="corp"?" selected":""}>개인</option></select></td><td>${k==="card"?`<input data-i="${i}" data-k="pay" value="${esc(m.pay||"")}" inputmode="numeric" placeholder="예: 14" aria-label="카드 결제일">`:`<span style="color:var(--muted);font-size:12px">—</span>`}</td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`;
   }).join("") + `<datalist id="acctList">${[...new Set(accounts.list.map(a=>a.name).concat(draft.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))].map(a=>`<option value="${esc(a)}">`).join("")}</datalist>`;
   tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const m=draft.methods[+el.dataset.i], k=el.dataset.k; m[k]=el.value.trim(); if(k==="own"){ const corpA=(config.methods.find(x=>x.code==="지통")||{}).acct||"법인통장"; if(m.own==="corp"&&m.acct===mainAcct()) m.acct=corpA; else if(m.own!=="corp"&&m.acct===corpA) m.acct=mainAcct(); renderSettings(); return; } if(k==="kind"&&m.kind!=="pay") delete m.link; if(k==="kind"&&m.kind!=="card") delete m.pay; if(el.dataset.re) renderSettings(); });
   tb.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ draft.methods.splice(+b.dataset.del,1); renderSettings(); });
