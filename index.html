@@ -788,7 +788,7 @@ tr.mgrp-h td{background:var(--soft,#f1f1ee);font-weight:700;font-size:12.5px;pad
         <div class="two" style="margin-top:8px"><div class="f"><label for="iReb">이번 구매로 받은 적립 (포인트 등)</label><input id="iReb" inputmode="numeric" placeholder="없으면 비워 두기"></div><div class="f"><label for="iRebTo">적립된 곳</label><select id="iRebTo"></select></div></div>
         <div id="splitInfo" class="ag" style="margin-top:8px"></div>
       </details>
-      <div class="f" id="preSnapRow" hidden><label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="iPreSnap" style="width:auto"> 같은 날 입력한 잔액에 <b>이미 반영된</b> 거래 (잔액 입력 전에 있었던 일)</label></div>
+      <div class="f" id="preSnapRow" hidden><label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="iPreSnap" style="width:auto"> 같은 날 입력한 잔액에 <b>이미 반영된</b> 거래 (잔액 입력 전에 있었던 일)</label><div style="font-size:12px;color:var(--muted);margin:2px 0 0 26px">잔액을 입력한 날과 같은 날짜의 기록이라 늘 보입니다. 체크돼 있으면 그 잔액 안에 이미 들어간 거래입니다.</div></div>
       <div class="two" id="chgRow" hidden>
         <div class="f"><label for="iChg">현금 거스름 <small style="font-weight:400;color:var(--muted)">상품권으로 내고 현금으로 돌려받은 돈</small></label><input id="iChg" inputmode="numeric" placeholder="없으면 비워 두기"></div>
         <div class="f"><label for="iChgTo">거스름을 넣은 곳</label><select id="iChgTo"></select></div>
@@ -3972,7 +3972,7 @@ function updateHint(autoSettle){
   if(t!=="move"){ const d=$("iDate").value, accs=[rv.acct, ...(isGiftAcct(rv.acct)&&+($("iChg").value.replace(/[^\d]/g,""))?[$("iChgTo").value]:[]), ...partsDraft.filter(p=>p.m&&+p.a>0).map(p=>acctOf(p.m))].filter((a,i,A)=>a&&!NOT_ACCT(a)&&A.indexOf(a)===i);
     const later=accs.map(a=>({a, s:snapsOf(a).filter(x=>x.d>=d).pop()})).filter(x=>x.s), same=later.filter(x=>x.s.d===d);
     if(d && later.length){ h.innerHTML+=`<div style="margin-top:6px">ℹ︎ ${later.map(x=>`<b>${esc(x.a)}</b>`).join(", ")}에는 이 날짜 이후(${[...new Set(later.map(x=>`${+x.s.d.slice(5,7)}/${+x.s.d.slice(8)}`))].join(", ")}) 입력한 잔액이 있어 <b>지금 잔액은 바뀌지 않습니다</b>. 그 사이 ‘잔액 맞춤’ 기록이 있으면 그만큼 줄어듭니다.</div>`; }
-    $("preSnapRow").hidden=!same.length; if(same.length && form.preSnap0===undefined){ form.preSnap0=true; } }
+    $("preSnapRow").hidden=!same.length; if(same.length && form.preSnap0===undefined){ form.preSnap0=true; /* 고치는 기록이면 지금 상태(이미 잔액 입력 앞인지)를 그대로 보여 줌 */ $("iPreSnap").checked = !!(form.baseTs && same.every(x=>+form.baseTs < +(x.s.ts||0))); } }
 }
 function inAcctList(){ const main=mainAcct(); const names=acctNames(); return [main,...names.filter(n=>n!==main)].filter(n=>n && !NOT_ACCT(n)); }
 function fillAccts(){
@@ -4082,7 +4082,7 @@ function openTx(ym, id, force){
   $("iDesc").value = t ? (t.desc||"") : "";
   fxFormSet(t&&t.fx?t.fx:null, !!(t&&t.fx));
   segSet("typeSeg", form.t); fillCatSelect(form.t, t ? t.cat : ""); segSet("entInSeg", form.ent);
-  { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iXavg").dataset.auto="";
+  { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; form.baseTs=t?+t.ts||0:0; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iXavg").dataset.auto="";
     partsDraft=t&&Array.isArray(t.parts)?t.parts.map(p=>({...p})):[]; $("iReb").value=t&&t.reb&&+t.reb.a?(+t.reb.a).toLocaleString("ko-KR"):"";
     acctOptions($("iRebTo"), (t&&t.reb&&t.reb.to) || (accounts.list.find(a=>a.kind==="point")||{}).name || "", true); renderParts(); $("splitBox").open=!!(t&&t.reb);
     form.useBack={}; if(t&&t.t==="out"){ partsOf(t).forEach(p=>form.useBack[p.m]=(form.useBack[p.m]||0)+(+p.a)); if(isGiftM(t.m)) form.useBack[t.m]=(form.useBack[t.m]||0)+mainAmt(t)+(+t.chg||0); }
@@ -4140,6 +4140,9 @@ $("txForm").onsubmit=async e=>{
   if(!$("preSnapRow").hidden && $("iPreSnap").checked){ /* 그날 이 거래가 닿는 계좌의 '마지막' 잔액 입력 바로 앞으로 */
     const accs=[...new Set(effects(tx).map(e=>e.acct))], last=accs.map(a=>snapsOf(a).filter(x=>x.d===d).pop()).filter(Boolean);
     if(last.length){ const m0=Math.min(...last.map(x=>+x.ts||0)); if(!(+tx.ts<m0)) tx.ts=m0-1; } }
+  else if(!$("preSnapRow").hidden && base){ /* 체크를 끄면 잔액 입력 뒤의 거래로 되돌림 */
+    const accs=[...new Set(effects(tx).map(e=>e.acct))], last=accs.map(a=>snapsOf(a).filter(x=>x.d===d).pop()).filter(Boolean);
+    if(last.length){ const m1=Math.max(...last.map(x=>+x.ts||0)); if(+tx.ts<m1) tx.ts=m1+1; } }
   { const c=+($("iChg").value.replace(/[^\d]/g,""))||0; if(form.t==="out" && !$("chgRow").hidden && c>0 && $("iChgTo").value){ tx.chg=c; tx.chgTo=$("iChgTo").value; } else { delete tx.chg; delete tx.chgTo; } }
   if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; }
   else if(form.t==="out" && isPayM(form.m) && $("iPayVia").value){ delete tx.mx; tx.via=$("iPayVia").value; }
