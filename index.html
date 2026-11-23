@@ -4059,9 +4059,11 @@ function showReconBox(t){
 function recordCause(t){ const ri=reconInfo(t), diff=ri?ri.diff:(t.t==="in"?+t.amt:-t.amt), typ=diff>0?"in":"out", ac=t.ac;
   closeOv("txOv"); openTx(null,null);
   const tb=document.querySelector(`#typeSeg [data-v="${typ}"]`); if(tb && form.t!==typ) tb.click();
-  if(typ==="out"){ const bm=bankMethodOf(ac); if(bm){ form.m=bm.code; fillMethods(); updateHint(true); } } else { form.ac=ac; fillAccts(); }
+  if(typ==="out"){ const bm=bankMethodOf(ac) || config.methods.find(m=>["cash","gift","bank"].includes(kindOf(m)) && acctOf(m.code)===ac); if(bm){ form.m=bm.code; fillMethods(); updateHint(true); } } else { form.ac=ac; fillAccts(); }
   $("iDate").value = ri ? ri.s.d : t.d; $("iDate").dispatchEvent(new Event("change"));
   $("iAmt").value=Math.abs(diff).toLocaleString("ko-KR");
+  /* 원인 거래는 그 잔액 입력 '전에' 있었던 일: 같은 날짜면 잔액 입력보다 앞선 기록으로 저장(그래야 맞춤 기록이 줄어듦) */
+  form.causeSnap = ri ? ri.s : null; updateHint(false); if(!$("preSnapRow").hidden) $("iPreSnap").checked=true;
   const box=$("reconBox"); box.hidden=false;
   box.innerHTML=`<b>원인 거래 기록</b> · ${esc(ac)}의 설명 안 되는 차이 <b class="num">${won(Math.abs(diff))}</b>${ri?` (${ri.prev.d.slice(5).replace("-","/")}~${ri.s.d.slice(5).replace("-","/")} 사이)`:""}<br>실제 날짜·금액·적요·계정·귀속으로 고쳐 저장하세요. 저장하면 잔액 맞춤 기록은 남는 차이만큼으로 자동으로 바뀝니다.${t.lock?"<br><b>주의:</b> 지금 맞춤 기록은 직접 고친 금액으로 고정되어 있어, 저장할 때 자동 맞춤으로 함께 되돌립니다.":""}`;
   form.causeOf = t.lock ? {ym:t.d.slice(0,7), id:t.id} : null;
@@ -4133,8 +4135,11 @@ $("txForm").onsubmit=async e=>{
     if(P.length) tx.parts=P; else delete tx.parts;
     const rb=form.t==="out"?(+($("iReb").value.replace(/[^\d]/g,""))||0):0; if(rb>0 && $("iRebTo").value) tx.reb={a:rb, to:$("iRebTo").value}; else delete tx.reb; }
   if(form.t==="out" && $("iXavg").checked && !noAvgCat(tx.cat)) tx.xavg=true; else delete tx.xavg;
+  if(!base && form.causeSnap && tx.d===form.causeSnap.d && !(+tx.ts < +form.causeSnap.ts)) tx.ts=(+form.causeSnap.ts||1)-1;
   /* 같은 날 잔액에 이미 반영된 거래: 기록 시각을 그날 첫 잔액 입력보다 앞으로 둠 */
-  if(!$("preSnapRow").hidden && $("iPreSnap").checked){ const ss=Object.keys(accounts.snaps||{}).flatMap(a=>snapsOf(a).filter(x=>x.d===d)); if(ss.length){ const m0=Math.min(...ss.map(x=>+x.ts||0)); if(!(+tx.ts<m0)) tx.ts=m0-1; } }
+  if(!$("preSnapRow").hidden && $("iPreSnap").checked){ /* 그날 이 거래가 닿는 계좌의 '마지막' 잔액 입력 바로 앞으로 */
+    const accs=[...new Set(effects(tx).map(e=>e.acct))], last=accs.map(a=>snapsOf(a).filter(x=>x.d===d).pop()).filter(Boolean);
+    if(last.length){ const m0=Math.min(...last.map(x=>+x.ts||0)); if(!(+tx.ts<m0)) tx.ts=m0-1; } }
   { const c=+($("iChg").value.replace(/[^\d]/g,""))||0; if(form.t==="out" && !$("chgRow").hidden && c>0 && $("iChgTo").value){ tx.chg=c; tx.chgTo=$("iChgTo").value; } else { delete tx.chg; delete tx.chgTo; } }
   if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; }
   else if(form.t==="out" && isPayM(form.m) && $("iPayVia").value){ delete tx.mx; tx.via=$("iPayVia").value; }
