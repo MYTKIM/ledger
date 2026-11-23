@@ -2719,7 +2719,9 @@ function lastSnap(name, upto){ const ss=snapsOf(name).filter(s=>!upto||s.d<=upto
 function txKey(t){ return isRecon(t)&&t.snapTs ? t.snapTs : (+t.ts||0); }
 function afterSnap(e, t, s){ return e.d>s.d || (e.d===s.d && txKey(t)>(+s.ts||0)); }
 function flowSplit(name, s, upto){ let inn=0,out=0,card=0; allTx().forEach(t=>effects(t).forEach(e=>{ if(e.acct!==name||!afterSnap(e,t,s)||e.d>upto) return; if(e.v>0) inn+=e.v; else { out-=e.v; if(e.card) card-=e.v; } })); return {inn,out,card,net:inn-out}; }
-function tracked(name, upto){ const s=lastSnap(name, upto); if(!s) return null; const f=flowSplit(name, s, upto); return {snap:s, flow:f, bal:s.bal+f.net}; }
+/* 상품권·포인트 주머니는 잔액을 입력하지 않아도 0원에서 시작해 적립·사용을 더해 나감(가상의 처음 잔액) */
+const vSnap = name => ({acct:name, d:"2000-01-01", bal:0, ts:0, virt:true});
+function tracked(name, upto){ let s=lastSnap(name, upto); if(!s && isGiftAcct(name)) s=vSnap(name); if(!s) return null; const f=flowSplit(name, s, upto); return {snap:s, flow:f, bal:s.bal+f.net}; }
 function cardUpcoming(name){ const today=todayISO(); let v=0; allTx().forEach(t=>effects(t).forEach(e=>{ if(e.acct===name&&e.card&&e.d>today) v-=e.v; })); return v; }
 function personalStats(){
   const full=Object.keys(months).filter(k=>k<CUR_YM&&monthTx(k).length).sort();
@@ -2764,7 +2766,7 @@ function bankMethodOf(acct){ return config.methods.find(m=>kindOf(m)==="bank" &&
 function cardUpBreak(name){ const today=todayISO(), g={}; allTx().forEach(t=>effects(t).forEach(e=>{ if(e.acct===name&&e.card&&e.d>today){ const m=methodOf(t.m), k=(m?m.name||m.code:t.m||"카드")+"|"+e.d; g[k]=(g[k]||0)-e.v; } })); return Object.entries(g).map(([k,v])=>{ const [c,d]=k.split("|"); return {c,d,v}; }).sort((a,b)=>a.d.localeCompare(b.d)||b.v-a.v); }
 function accMeta(a,tr,up){
   const md=d=>+d.slice(5,7)+"/"+ +d.slice(8,10), row=(l,v,cls,sub)=>`<div class="ar"><span class="al">${l}${sub?`<small>${sub}</small>`:""}</span><b class="num ${cls||""}">${v}</b></div>`;
-  let h=`<div class="ag"><div class="ah">잔액 계산</div>`+row(`${md(tr.snap.d)} 입력한 잔액`,won(tr.snap.bal))+row("그 뒤 들어온 돈","+"+won(tr.flow.inn),"p")+row("그 뒤 나간 돈","−"+won(tr.flow.out))+(a.maturity?row(isGiftK(a.kind)?"유효기간":"만기",esc(a.maturity)):"")+`</div>`;
+  let h=`<div class="ag"><div class="ah">잔액 계산</div>`+row(tr.snap.virt?"처음 (잔액 입력 전)":`${md(tr.snap.d)} 입력한 잔액`,won(tr.snap.bal))+row("그 뒤 들어온 돈","+"+won(tr.flow.inn),"p")+row("그 뒤 나간 돈","−"+won(tr.flow.out))+(a.maturity?row(isGiftK(a.kind)?"유효기간":"만기",esc(a.maturity)):"")+`</div>`;
   if(up){ const L=cardUpBreak(a.name), m0=L.length?L[0].d.slice(0,7):"", now=L.filter(x=>x.d.slice(0,7)===m0), later=L.filter(x=>x.d.slice(0,7)!==m0), nowSum=now.reduce((t,x)=>t+x.v,0), laterSum=up-nowSum;
     const cr=x=>row(esc(x.c),"−"+won(x.v),"",`${md(x.d)} 출금`), k="cu:"+a.name;
     h+=`<div class="ag"><div class="ah">카드 결제 예정 <b class="num">${won(up)}</b></div>`+now.map(cr).join("")+
@@ -2779,7 +2781,7 @@ function accMeta(a,tr,up){
 }
 function xfLines(name){ return (accounts.xfers||[]).filter(x=>x.from===name||x.to===name).map(x=>{ const nx=xfNext(x); return `<span>자동이체 ${esc(x.name||"")} · ${xfTxt(x)} ${x.to===name?"← "+esc(x.from):"→ "+esc(xfTo(x))}${nx?` · 다음 ${nx.slice(5).replace("-","/")}`:" · 끝남"}</span>`; }).join(""); }
 function passbook(name){
-  const today=todayISO(), ss=snapsOf(name); if(!ss.length) return [];
+  const today=todayISO(); let ss=snapsOf(name); if(!ss.length){ if(!isGiftAcct(name)) return []; ss=[vSnap(name)]; }
   const s0=ss.length>1?ss[ss.length-2]:ss[0];
   const seg=(d,k)=>ss.filter(s=>s.d<d||(s.d===d&&(+s.ts||0)<k)).length;
   const ev=[], cardG={};
@@ -2800,6 +2802,7 @@ function passbookHTML(name){
   const rows=passbook(name); if(!rows.length) return "";
   const lis=rows.map(x=>{
     const d=x.d.slice(5).replace("-","/");
+    if(x.kind==="snap" && x.s.virt) return `<li class="snap"><span class="d">처음</span><span class="l">잔액 입력 전 (0원에서 시작)</span><span class="v num">${won(0)}</span><span></span><span></span></li>`;
     if(x.kind==="snap") return `<li class="snap"><span class="d">${d}</span><span class="l">잔액 입력</span><span class="v num">${won(x.s.bal)}</span>${x.s.ts?`<span class="s">${whenTxt(x.s.ts)} 입력</span>`:"<span></span>"}<span class="r"><button type="button" class="sdel" data-sdel="${esc(name)}|${x.s.ts||""}|${x.s.d}" title="이 잔액 지우기">× 지우기</button></span></li>`;
     const sign=x.v>0?"+":"−", amt=`<span class="v num ${x.v>0?"p":""}">${sign}${won(Math.abs(x.v))}</span>`, r=`<span class="r num">잔액 ${won(x.bal)}</span>`;
     if(x.kind==="card"){ const ok=(accounts.bills||[]).find(b=>b.card===x.pc&&b.d===x.d); return `<li data-card="${esc(x.pc)}|${x.d}" style="cursor:pointer"><span class="d">${d}</span><span class="l">${esc(x.lbl)} (${x.n}건)</span>${amt}<span class="s">${(()=>{ const tb=sumOf(cbTx(x.pc,x.d).filter(t=>t.tbu)); return tb?`<b style="color:var(--warn)">미확인 차액(TBU) ${won(tb)} 남음</b>`:ok?(ok.ok?"✓ 청구액 확인됨":"청구액 "+won(ok.amt)+" · 차이 남음"):"눌러서 실제 청구액과 맞추기"; })()}</span>${r}</li>`; }
@@ -2809,7 +2812,7 @@ function passbookHTML(name){
     return `<li data-ym="${t.d.slice(0,7)}" data-id="${esc(t.id)}" class="${x.kind==="rc"?"rc":""}"><span class="d">${d}</span><span class="l">${lbl}</span>${amt}<span class="s">${tag}${x.kind==="rc"?"":`${whenTxt(t.ts)} 입력 · `}${sub}</span>${r}</li>`;
   }).join("");
   const n=rows.filter(x=>x.kind!=="snap").length;
-  return `<details data-pb="${esc(name)}" ${accOpen.has(name)?"open":""}><summary>내역 ${n}건 · ${rows[rows.length-1].d.slice(5).replace("-","/")} 잔액 입력부터</summary><ul class="pb">${lis}</ul></details>`;
+  return `<details data-pb="${esc(name)}" ${accOpen.has(name)?"open":""}><summary>내역 ${n}건 · ${rows[rows.length-1].s&&rows[rows.length-1].s.virt?"처음부터":rows[rows.length-1].d.slice(5).replace("-","/")+" 잔액 입력부터"}</summary><ul class="pb">${lis}</ul></details>`;
 }
 /* 자산 탭: 맞추기·정산 건수, 자동이체 목록 */
 function renderAccExtras(){ const today=todayISO();
