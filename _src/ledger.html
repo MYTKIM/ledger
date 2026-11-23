@@ -292,6 +292,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .fixrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .fix{display:grid;gap:4px;align-content:start} .fix .btn{justify-self:start} .fix span{font-size:12.5px;color:var(--muted)}
 .accp{background:none;border:0;padding:0;box-shadow:none}
+.formerr{flex:1 1 100%;margin:0 0 6px!important}
 .guardbar{flex:1 1 100%;margin:0 0 6px!important;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .pjks{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px;margin:4px 0 8px}
 .pjk{border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:var(--surface)}
@@ -740,6 +741,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
         <div class="two" style="margin-top:8px"><div class="f"><label for="iReb">이번 구매로 받은 적립 (포인트 등)</label><input id="iReb" inputmode="numeric" placeholder="없으면 비워 두기"></div><div class="f"><label for="iRebTo">적립된 곳</label><select id="iRebTo"></select></div></div>
         <div id="splitInfo" class="ag" style="margin-top:8px"></div>
       </details>
+      <div class="f" id="preSnapRow" hidden><label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="iPreSnap" style="width:auto"> 같은 날 입력한 잔액에 <b>이미 반영된</b> 거래 (잔액 입력 전에 있었던 일)</label></div>
       <div class="two" id="chgRow" hidden>
         <div class="f"><label for="iChg">현금 거스름 <small style="font-weight:400;color:var(--muted)">상품권으로 내고 현금으로 돌려받은 돈</small></label><input id="iChg" inputmode="numeric" placeholder="없으면 비워 두기"></div>
         <div class="f"><label for="iChgTo">거스름을 넣은 곳</label><select id="iChgTo"></select></div>
@@ -1227,7 +1229,11 @@ function setSort(v){ sortBy=v; try{ localStorage.setItem("sortBy",v); }catch(_){
 function sortTx(list){ return sortBy==="amt" ? list.sort((a,b)=>(+b.amt||0)-(+a.amt||0) || (b.d||"").localeCompare(a.d||"")) : list; }
 function sortSeg(){ return `<span class="seg sortseg" role="group" aria-label="정렬"><button type="button" data-sort="date" aria-pressed="${sortBy==="date"}">날짜순</button><button type="button" data-sort="amt" aria-pressed="${sortBy==="amt"}">금액순</button></span>`; }
 function dayCell(t){ const wd=["일","월","화","수","목","금","토"][new Date((t.d||"")+"T00:00").getDay()]||""; return sortBy==="amt" ? `<b style="font-size:13px">${+t.d.slice(5,7)}/${+t.d.slice(8,10)}</b>${wd}` : `<b>${+(t.d||"").slice(8,10)||""}</b>${wd}`; }
-function showNotice(msg){ const n=$("notice"); n.textContent=msg; n.hidden=!msg; }
+function showNotice(msg){ const n=$("notice"); n.textContent=msg; n.hidden=!msg;
+  /* 팝업이 열려 있으면 뒤에 가려 안 보이므로, 그 팝업 아래 단추줄 위에도 띄움 */
+  const o=typeof topOv==="function"?topOv():null; if(!o) return; const bar=[...o.querySelectorAll(".form > .actions, .actions")].pop(); if(!bar) return;
+  let e=bar.querySelector(".formerr"); if(!msg){ if(e) e.remove(); return; }
+  if(!e){ e=document.createElement("div"); e.className="formerr hint warn"; e.setAttribute("role","alert"); bar.prepend(e); } e.textContent=msg; e.scrollIntoView({block:"nearest"}); }
 /* 바로 앞 상황으로 되돌리기: 기록을 바꾸기 직전의 장부(달별 기록)를 기억해 두었다가, 바뀐 달만 되돌립니다 */
 let undoBase=null, undoTimer=null;
 function beginUndo(){ try{ undoBase=JSON.stringify(months); }catch(_){ undoBase=null; } }
@@ -3641,7 +3647,7 @@ $("tPendBox").onclick=pendGo; $("tPendBox").onkeydown=e=>{ if(e.key==="Enter"||e
 /* ---------- 오버레이 공통 ---------- */
 /* 창 위에 창을 열면 새 창이 늘 위로 오게 하고, Esc는 맨 위 창만 닫음 */
 let ovZ=0;
-function openOv(id){ const o=$(id); o.querySelectorAll(".guardbar").forEach(g=>g.remove()); o._sig=null; if(GUARD_OV.includes(id)) setTimeout(()=>{ if(!o.hidden) o._sig=ovSig(o); },80); const top=[...document.querySelectorAll(".overlay")].filter(x=>!x.hidden&&x!==o).reduce((m,x)=>Math.max(m,+x.style.zIndex||30),30); o.hidden=false; o.style.zIndex=String(Math.min(top+1,55)); /* 되돌리기 막대(60)보다 아래 */ }
+function openOv(id){ const o=$(id); o.querySelectorAll(".guardbar,.formerr").forEach(g=>g.remove()); o._sig=null; if(GUARD_OV.includes(id)) setTimeout(()=>{ if(!o.hidden) o._sig=ovSig(o); },80); const top=[...document.querySelectorAll(".overlay")].filter(x=>!x.hidden&&x!==o).reduce((m,x)=>Math.max(m,+x.style.zIndex||30),30); o.hidden=false; o.style.zIndex=String(Math.min(top+1,55)); /* 되돌리기 막대(60)보다 아래 */ }
 function topOv(){ return [...document.querySelectorAll(".overlay")].filter(o=>!o.hidden).sort((a,b)=>(+b.style.zIndex||30)-(+a.style.zIndex||30))[0]||null; }
 function closeOv(id){ $(id).hidden=true; }
 /* 팝업 닫기 규칙(모든 팝업 같음)
@@ -3782,8 +3788,8 @@ let partsDraft=[];
 const partMethods = () => config.methods.filter(m=>["gift","cash","bank"].includes(kindOf(m)));
 function renderParts(){ const ms=partMethods();
   $("partRows").innerHTML=partsDraft.map((p,i)=>`<div class="part"><select data-pi="${i}" data-pk="m" aria-label="수단"><option value="">수단 고르기</option>${ms.map(m=>`<option value="${esc(m.code)}"${p.m===m.code?" selected":""}>${esc(m.code)}${m.name&&m.name!==m.code?" · "+esc(m.name):""}</option>`).join("")}</select><input data-pi="${i}" data-pk="a" inputmode="numeric" value="${p.a?(+p.a).toLocaleString("ko-KR"):""}" placeholder="금액" aria-label="금액"><button type="button" class="x" data-pdel="${i}" aria-label="빼기">×</button></div>`).join("");
-  $("partRows").querySelectorAll("[data-pk]").forEach(el=>el.oninput=el.onchange=()=>{ const p=partsDraft[+el.dataset.pi]; p[el.dataset.pk]= el.dataset.pk==="a" ? (+el.value.replace(/[^\d]/g,"")||0) : el.value; splitInfo(); });
-  $("partRows").querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>{ partsDraft.splice(+b.dataset.pdel,1); renderParts(); });
+  $("partRows").querySelectorAll("[data-pk]").forEach(el=>el.oninput=el.onchange=()=>{ const p=partsDraft[+el.dataset.pi]; p[el.dataset.pk]= el.dataset.pk==="a" ? (+el.value.replace(/[^\d]/g,"")||0) : el.value; splitInfo(); updateHint(false); });
+  $("partRows").querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>{ partsDraft.splice(+b.dataset.pdel,1); renderParts(); updateHint(false); });
   splitInfo(); }
 function splitInfo(){ const amt=+($("iAmt").value.replace(/[^\d]/g,""))||0, P=partsDraft.filter(p=>p.m&&+p.a>0), ps=P.reduce((s,p)=>s+(+p.a),0), reb=+($("iReb").value.replace(/[^\d]/g,""))||0;
   const box=$("splitInfo"); if(!P.length && !reb){ box.innerHTML=""; $("splitSum").textContent=""; return; }
@@ -3791,9 +3797,11 @@ function splitInfo(){ const amt=+($("iAmt").value.replace(/[^\d]/g,""))||0, P=pa
   const cashOut = (mm && ["card","bank","cash","pay"].includes(kindOf(mm)) ? main : 0) + P.filter(p=>kindOf(methodOf(p.m))!=="gift").reduce((s,p)=>s+(+p.a),0);
   box.innerHTML=row("상품 가격",won(amt))+P.map(p=>row(`└ ${esc(p.m)}`,won(+p.a))).join("")+row(`└ ${esc(form.m||"결제수단")} (나머지)`,won(main),main<0?"bad":"")
     +(reb?row("받은 적립","−"+won(reb),"p")+row("<b>실질 가격</b>",won(amt-reb)):"")+row("실제 현금·카드로 낸 돈",won(cashOut));
+  if(main<0 || P.some(p=>p.m===form.m)) box.innerHTML+=`<div class="hint warn" style="margin-top:6px">${main<0?"나눠 낸 몫이 상품 가격보다 큽니다. ":""}${P.some(p=>p.m===form.m)?`위에서 고른 결제수단(${esc(form.m)})은 여기에 다시 넣지 않습니다. `:""}거스름을 받았다면 나누기는 비우고 아래 ‘현금 거스름’만 적으세요.</div>`;
   $("splitSum").textContent=[P.length?`${P.length+1}가지로 나눠 냄`:"", reb?`적립 ${won(reb)}`:""].filter(Boolean).join(" · "); }
 $("partAdd").onclick=()=>{ partsDraft.push({m:(partMethods().find(m=>kindOf(m)==="gift")||{}).code||"", a:0}); renderParts(); };
-$("iReb").addEventListener("input",splitInfo); $("iAmt").addEventListener("input",()=>{ if(!$("splitBox").hidden) splitInfo(); });
+$("iReb").addEventListener("input",splitInfo);
+["iChg","iDate"].forEach(id=>$(id).addEventListener("input",()=>updateHint(false))); $("iChgTo").addEventListener("change",()=>updateHint(false)); $("iAmt").addEventListener("input",()=>{ if(!$("splitBox").hidden) splitInfo(); });
 function spUpd(){ const c=$("iCat").value, on=noAvgCat(c), box=$("spCatTxt"), x=$("iXavg");
   x.disabled=on; if(on) x.checked=true; else if(x.dataset.auto==="1"){ x.checked=!!form.xavg0; } x.dataset.auto=on?"1":"";
   box.innerHTML = !c ? "" : on ? `‘${esc(c)}’ 계정은 늘 평균에서 뺍니다. <button type="button" class="linkish" id="spCatOff">규칙 끄기</button>`
@@ -3856,7 +3864,14 @@ function updateHint(autoSettle){
   else if(pcat && form.ent!=="corp" && pMode(pcat)==="flow"){ h.innerHTML=`${via}<b>${ac}</b>에서 ${amt?won(amt)+"이 ":""}빠져나갑니다${when}. ‘${esc($("iCat").value)}’은(는) <b>${esc(pcat.name)}</b>에게 묶인 계정이라, 지출로 기록하면서 ${esc(pcat.name)}의 맡은 돈에서 돌려준 돈(모자라면 빌려 준 돈)으로도 셉니다.`; }
   else if(pcat && form.ent!=="corp"){ h.className="hint"; h.innerHTML=`‘${esc($("iCat").value)}’은(는) <b>${esc(pcat.name)}</b>에게 묶인 계정입니다. 저장하면 <b>${ac}</b> → <b>${esc(pcat.name)}</b> 이체로 바뀌어, 지출 합계에서 빠지고 ${esc(pcat.name)}의 맡은 돈에서 돌려준 돈(모자라면 빌려 준 돈)으로 셉니다.`; }
   else if(isCard && +$("iInst").value>1){ const n=+$("iInst").value, base=Math.floor(amt/n/100)*100; h.innerHTML=`${via}<b>${ac}</b>에서 <b>${n}개월 할부</b>로 결제일마다 ${amt?`약 ${won(base)}씩 (1회차 ${won(amt-base*(n-1))})`:"나눠"} 빠져나갑니다. 지출은 산 날 ${amt?won(amt):"전액"}으로 잡힙니다.`; }
-  else h.innerHTML=`${via}<b>${ac}</b>에서 ${amt?won(amt)+"이 ":""}빠져나갑니다${when}.`;
+  else { const chg=isGiftAcct(rv.acct)?(+($("iChg").value.replace(/[^\d]/g,""))||0):0, pt=partsDraft.filter(p=>p.m&&+p.a>0).reduce((a,p)=>a+(+p.a),0), main=amt-pt;
+    h.innerHTML = chg ? `<b>${ac}</b>에서 <b>${won(main+chg)}</b>이 빠지고(물건 ${won(main)} + 현금 거스름 ${won(chg)}), <b>${esc($("iChgTo").value||"현금")}</b>에 ${won(chg)}이 들어옵니다. 지출로는 ${won(amt)}만 잡힙니다.`
+      : `${via}<b>${ac}</b>에서 ${amt?won(main)+"이 ":""}빠져나갑니다${when}.${pt?` (나머지 ${won(pt)}은 결제 나누기 수단에서)`:""}`; }
+  /* 이미 그 뒤 날짜로 잔액을 입력해 둔 계좌: 지금 잔액은 그대로이고, 그 사이 맞춤 기록만 줄어듦 */
+  if(t!=="move"){ const d=$("iDate").value, accs=[rv.acct, ...(isGiftAcct(rv.acct)&&+($("iChg").value.replace(/[^\d]/g,""))?[$("iChgTo").value]:[]), ...partsDraft.filter(p=>p.m&&+p.a>0).map(p=>acctOf(p.m))].filter((a,i,A)=>a&&!NOT_ACCT(a)&&A.indexOf(a)===i);
+    const later=accs.map(a=>({a, s:snapsOf(a).filter(x=>x.d>=d).pop()})).filter(x=>x.s), same=later.filter(x=>x.s.d===d);
+    if(d && later.length){ h.innerHTML+=`<div style="margin-top:6px">ℹ︎ ${later.map(x=>`<b>${esc(x.a)}</b>`).join(", ")}에는 이 날짜 이후(${[...new Set(later.map(x=>`${+x.s.d.slice(5,7)}/${+x.s.d.slice(8)}`))].join(", ")}) 입력한 잔액이 있어 <b>지금 잔액은 바뀌지 않습니다</b>. 그 사이 ‘잔액 맞춤’ 기록이 있으면 그만큼 줄어듭니다.</div>`; }
+    $("preSnapRow").hidden=!same.length; if(same.length && form.preSnap0===undefined){ form.preSnap0=true; } }
 }
 function inAcctList(){ const main=mainAcct(); const names=acctNames(); return [main,...names.filter(n=>n!==main)].filter(n=>n && !NOT_ACCT(n)); }
 function fillAccts(){
@@ -3945,7 +3960,7 @@ function openTx(ym, id, force){
   $("iDesc").value = t ? (t.desc||"") : "";
   fxFormSet(t&&t.fx?t.fx:null, !!(t&&t.fx));
   segSet("typeSeg", form.t); fillCatSelect(form.t, t ? t.cat : ""); segSet("entInSeg", form.ent);
-  { const ef = t && t.t==="move" ? effects(t) : []; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iXavg").dataset.auto="";
+  { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iXavg").dataset.auto="";
     partsDraft=t&&Array.isArray(t.parts)?t.parts.map(p=>({...p})):[]; $("iReb").value=t&&t.reb&&+t.reb.a?(+t.reb.a).toLocaleString("ko-KR"):"";
     acctOptions($("iRebTo"), (t&&t.reb&&t.reb.to) || (accounts.list.find(a=>a.kind==="point")||{}).name || "", true); renderParts(); $("splitBox").open=!!(partsDraft.length||(t&&t.reb));
     $("iChg").value=t&&+t.chg?(+t.chg).toLocaleString("ko-KR"):""; acctOptions($("iChgTo"), (t&&t.chgTo) || (accounts.list.find(a=>a.kind==="cash")||{}).name || "", true); $("chgRow").hidden=true;
@@ -3990,10 +4005,13 @@ $("txForm").onsubmit=async e=>{
       if(Math.abs(amt-calc)>1){ tx.fx.krwEdited=true; tx.fx.rateEff=Math.round(amt/u*10000)/10000; } }
     else delete tx.fx; }
   { const P=form.t==="out"?partsDraft.filter(p=>p.m&&+p.a>0).map(p=>({m:p.m,a:+p.a})):[], ps=P.reduce((s,p)=>s+p.a,0);
-    if(ps>amt){ $("splitBox").open=true; splitInfo(); showNotice(`나눠 낸 몫 합계(${won(ps)})가 상품 가격(${won(amt)})보다 큽니다.`); return; }
+    if(ps>amt){ $("splitBox").open=true; splitInfo(); showNotice(`나눠 낸 몫 합계(${won(ps)})가 상품 가격(${won(amt)})보다 큽니다. 상품권으로 내고 거스름을 받았다면 ‘결제 나누기’는 비우고, 결제수단을 상품권으로 고른 뒤 아래 ‘현금 거스름’만 적으세요.`); return; }
+    if(P.some(p=>p.m===form.m)){ $("splitBox").open=true; showNotice(`‘${form.m}’은(는) 이미 주 결제수단입니다. 결제 나누기에는 다른 수단으로 낸 몫만 적으세요.`); return; }
     if(P.length) tx.parts=P; else delete tx.parts;
     const rb=form.t==="out"?(+($("iReb").value.replace(/[^\d]/g,""))||0):0; if(rb>0 && $("iRebTo").value) tx.reb={a:rb, to:$("iRebTo").value}; else delete tx.reb; }
   if(form.t==="out" && $("iXavg").checked && !noAvgCat(tx.cat)) tx.xavg=true; else delete tx.xavg;
+  /* 같은 날 잔액에 이미 반영된 거래: 기록 시각을 그날 첫 잔액 입력보다 앞으로 둠 */
+  if(!$("preSnapRow").hidden && $("iPreSnap").checked){ const ss=Object.keys(accounts.snaps||{}).flatMap(a=>snapsOf(a).filter(x=>x.d===d)); if(ss.length){ const m0=Math.min(...ss.map(x=>+x.ts||0)); if(!(+tx.ts<m0)) tx.ts=m0-1; } }
   { const c=+($("iChg").value.replace(/[^\d]/g,""))||0; if(form.t==="out" && !$("chgRow").hidden && c>0 && $("iChgTo").value){ tx.chg=c; tx.chgTo=$("iChgTo").value; } else { delete tx.chg; delete tx.chgTo; } }
   if(form.t==="out" && form.m==="기타"){ tx.mx=$("iMx").value.trim(); tx.via=$("iVia").value; }
   else if(form.t==="out" && isPayM(form.m) && $("iPayVia").value){ delete tx.mx; tx.via=$("iPayVia").value; }
