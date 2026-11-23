@@ -279,6 +279,11 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
 .todo{display:grid;gap:6px}
+.mv{display:inline-flex;align-items:center;gap:2px;white-space:nowrap} .mv .drag{cursor:grab;color:var(--muted);padding:0 4px;font-size:15px;user-select:none;touch-action:none}
+.mv button{border:1px solid var(--line);background:var(--surface);border-radius:6px;width:24px;height:24px;padding:0;font-size:12px;cursor:pointer;color:var(--ink)} .mv button:disabled{opacity:.3;cursor:default}
+.dragover{outline:2px dashed var(--ink);outline-offset:-2px} .dragging{opacity:.5}
+#mTable input[data-k="name"]{min-width:110px} #mTable td{vertical-align:middle}
+tr.mgrp-h td{background:var(--soft,#f1f1ee);font-weight:700;font-size:12.5px;padding:6px 8px;color:var(--muted)}
 .linkish{border:0;background:none;padding:0;color:var(--ink);text-decoration:underline;font:inherit;cursor:pointer}
 .split{border:1px solid var(--line);border-radius:10px;padding:8px 12px} .split summary{cursor:pointer;font-weight:600;font-size:13.5px}
 .parts{display:grid;gap:6px;margin-bottom:6px} .part{display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:6px;align-items:center}
@@ -884,7 +889,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <div class="form">
       <p class="hint" style="margin:0">결제수단 설정의 ‘출금·입금 계좌’ 이름과 같아야 기록이 연결됩니다. <b>가용자금</b>에 체크한 계좌만 여유자금 계산에 들어갑니다.</p>
       <p class="hint" style="margin:0"><b>상품권·포인트</b>는 종류를 ‘상품권’이나 ‘포인트’로 고르면 같은 이름의 결제수단이 저절로 생깁니다. 지금 가진 금액은 저장 뒤 자산 › 잔액 입력으로 넣으세요(처음 입력은 맞춤 기록이 생기지 않음). 카드로 산 상품권은 <b>이체·정산</b>에서 보낸 곳을 그 카드로, 선물·적립은 <b>수입</b>(혜택-…)으로 기록합니다.</p>
-      <div class="scroll-x"><table class="cfg" id="aTable"><thead><tr><th>계좌 이름</th><th>금융기관·메모</th><th style="width:56px">주 통장</th><th style="width:110px">종류</th><th style="width:70px">가용자금</th><th style="width:140px">만기일 (적금) · 유효기간 (상품권·포인트)</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
+      <div class="scroll-x"><table class="cfg" id="aTable"><thead><tr><th style="width:78px">순서</th><th>계좌 이름</th><th>금융기관·메모</th><th style="width:56px">주 통장</th><th style="width:110px">종류</th><th style="width:70px">가용자금</th><th style="width:140px">만기일 (적금) · 유효기간 (상품권·포인트)</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
       <button class="btn small" id="addA" style="justify-self:start">계좌 추가</button>
       <div class="two"><div class="f"><label for="aBuf">비상금으로 남겨 둘 생활비 (개월)</label><input id="aBuf" inputmode="numeric"></div></div>
       <div class="actions"><span></span><div class="r"><button class="btn" data-close>취소</button><button class="btn primary" id="saveAcc">저장</button></div></div>
@@ -1020,7 +1025,7 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
     <div class="form">
       <div>
         <span class="lbl" style="font-size:12px;font-weight:600;color:var(--muted)">결제수단과 실제 돈이 나가는 계좌</span>
-        <div class="scroll-x"><table class="cfg" id="mTable"><thead><tr><th style="width:80px">약어</th><th>이름</th><th style="width:110px">종류</th><th>돈이 나가는 곳</th><th style="width:84px">소유</th><th style="width:80px">결제일</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
+        <div class="scroll-x"><table class="cfg" id="mTable"><thead><tr><th style="width:78px">순서</th><th style="width:80px">약어</th><th>이름</th><th style="width:110px">종류</th><th>돈이 나가는 곳</th><th style="width:84px">소유</th><th style="width:80px">결제일</th><th style="width:36px"></th></tr></thead><tbody></tbody></table></div>
         <button class="btn small" id="addM" style="margin-top:8px">결제수단 추가</button>
       </div>
       <div class="f"><label for="setHol">추가 휴일 <small style="font-weight:400;color:var(--muted)">카드 결제일이 주말·공휴일이면 다음 영업일로 계산합니다. 공휴일은 한국천문연구원 자료로 매달 자동으로 받습니다<span id="holSrc"></span>. 그래도 빠진 날만 넣으세요 (예: 2027-03-03, 쉼표로 여러 개)</small></label><input id="setHol" placeholder="YYYY-MM-DD, YYYY-MM-DD"></div>
@@ -1069,6 +1074,19 @@ const KIND = {cma:"CMA", bank:"입출금", saving:"적금·예금", cash:"현금
 const isGiftK = k => k==="voucher" || k==="point";
 const isGiftAcct = n => { const a=accounts.list.find(x=>x.name===n); return !!a && isGiftK(a.kind); };
 const GIFT_CATS=["혜택-상품권·선물 받음","혜택-포인트 적립"];
+/* ---------- 목록 순서 바꾸기 (결제수단·계좌·사람·자동이체 공통) ----------
+   ≡ 손잡이를 끌어 옮기기(PC) + ↑↓ 단추(휴대폰). up/dn은 옮겨 갈 자리(배열 위치), 없으면 단추를 끔. grp가 같은 줄끼리만 끌어 옮김 */
+function mvCtl(i,up,dn){ return `<span class="mv"><span class="drag" title="끌어서 옮기기" aria-hidden="true">≡</span><button type="button" data-mv="${i}|${up}" ${up<0?"disabled":""} aria-label="위로" title="위로">↑</button><button type="button" data-mv="${i}|${dn}" ${dn<0?"disabled":""} aria-label="아래로" title="아래로">↓</button></span>`; }
+function arrMove(arr,f,t){ if(f===t||f<0||t<0||f>=arr.length||t>=arr.length) return; const [x]=arr.splice(f,1); arr.splice(t,0,x); }
+function bindSortable(box, rowSel, move){
+  box.querySelectorAll("[data-mv]").forEach(b=>b.onclick=e=>{ e.preventDefault(); const [f,t]=b.dataset.mv.split("|").map(Number); if(t>=0) move(f,t); });
+  box.querySelectorAll(rowSel).forEach(r=>{ const h=r.querySelector(".drag"); if(!h) return;
+    h.onpointerdown=()=>{ r.draggable=true; }; h.onpointerup=()=>{ r.draggable=false; };
+    r.ondragstart=e=>{ box._dg=r.dataset.grp||""; box._df=+r.dataset.ri; e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain",r.dataset.ri); }catch(_){} r.classList.add("dragging"); };
+    r.ondragend=()=>{ r.draggable=false; r.classList.remove("dragging"); box.querySelectorAll(".dragover").forEach(x=>x.classList.remove("dragover")); };
+    r.ondragover=e=>{ if(box._df==null || (r.dataset.grp||"")!==box._dg) return; e.preventDefault(); box.querySelectorAll(".dragover").forEach(x=>x!==r&&x.classList.remove("dragover")); r.classList.add("dragover"); };
+    r.ondragleave=()=>r.classList.remove("dragover");
+    r.ondrop=e=>{ if(box._df==null || (r.dataset.grp||"")!==box._dg) return; e.preventDefault(); const f=box._df; box._df=null; move(f,+r.dataset.ri); }; }); }
 const DEFAULT_INST = {"저수지통장":"한국투자증권 CMA", "아내 저수지통장":"MH · 미래에셋증권 CMA"};
 const instOf = a => a.inst!=null && a.inst!=="" ? a.inst : (DEFAULT_INST[a.name]||"");
 const mainAcct = () => (accounts.list.find(a=>a.main) || accounts.list.find(a=>a.name==="저수지통장") || accounts.list[0] || {}).name || "저수지통장";
@@ -2982,14 +3000,15 @@ $("pplEdit").onclick=()=>{ pDraft=JSON.parse(JSON.stringify(accounts.people||[])
   const all=[...new Set(pjCands().concat(pDraft.map(P=>P.name).filter(Boolean)))]; pjCandDraft={all, on:new Set(pjCands())};
   renderPplEdit(); openOv("pplOv"); };
 function renderPplCands(){ const D=pjCandDraft, cust=new Set(pDraft.map(P=>P.name)), used=new Set(); wsList().forEach(w=>pjPeopleOf(w).forEach(p=>used.add(p)));
-  $("pplCands").innerHTML=D.all.map(n=>`<span style="display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:2px 10px"><label class="check" style="font-size:13px"><input type="checkbox" data-pc="${esc(n)}"${D.on.has(n)?" checked":""} style="width:auto"> <b>${esc(n)}</b></label>${cust.has(n)?'<span class="tag">예수금 대상</span>':""}${used.has(n)?'<span class="tag">프로젝트 참가</span>':""}${!cust.has(n)&&!used.has(n)?`<button type="button" data-pcdel="${esc(n)}" aria-label="${esc(n)} 빼기" style="border:0;background:none;cursor:pointer;color:var(--muted)">×</button>`:""}</span>`).join("")||'<span class="hint">아직 없습니다.</span>';
+  $("pplCands").innerHTML=D.all.map((n,i)=>`<span data-ri="${i}" style="display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:2px 10px"><span class="mv"><span class="drag" title="끌어서 옮기기" aria-hidden="true">≡</span><button type="button" data-mv="${i}|${i-1}" ${i?"":"disabled"} aria-label="앞으로">‹</button><button type="button" data-mv="${i}|${i<D.all.length-1?i+1:-1}" ${i<D.all.length-1?"":"disabled"} aria-label="뒤로">›</button></span><label class="check" style="font-size:13px"><input type="checkbox" data-pc="${esc(n)}"${D.on.has(n)?" checked":""} style="width:auto"> <b>${esc(n)}</b></label>${cust.has(n)?'<span class="tag">예수금 대상</span>':""}${used.has(n)?'<span class="tag">프로젝트 참가</span>':""}${!cust.has(n)&&!used.has(n)?`<button type="button" data-pcdel="${esc(n)}" aria-label="${esc(n)} 빼기" style="border:0;background:none;cursor:pointer;color:var(--muted)">×</button>`:""}</span>`).join("")||'<span class="hint">아직 없습니다.</span>';
   $("pplCands").querySelectorAll("[data-pc]").forEach(c=>c.onchange=()=>{ c.checked?D.on.add(c.dataset.pc):D.on.delete(c.dataset.pc); });
-  $("pplCands").querySelectorAll("[data-pcdel]").forEach(b=>b.onclick=()=>{ D.all=D.all.filter(x=>x!==b.dataset.pcdel); D.on.delete(b.dataset.pcdel); renderPplCands(); }); }
+  $("pplCands").querySelectorAll("[data-pcdel]").forEach(b=>b.onclick=()=>{ D.all=D.all.filter(x=>x!==b.dataset.pcdel); D.on.delete(b.dataset.pcdel); renderPplCands(); });
+  bindSortable($("pplCands"), "[data-ri]", (f,t)=>{ arrMove(D.all,f,t); renderPplCands(); }); }
 $("pplCandAdd").onclick=()=>{ const n=$("pplCandNew").value.trim(); if(!n) return; if(!pjCandDraft.all.includes(n)) pjCandDraft.all.push(n); pjCandDraft.on.add(n); $("pplCandNew").value=""; renderPplCands(); };
 function renderPplEdit(){
   if(pjCandDraft && pjCandDraft.all){ pDraft.forEach(P=>{ if(P.name && !pjCandDraft.all.includes(P.name)) pjCandDraft.all.push(P.name); }); renderPplCands(); }
   const num=v=>v?(+v).toLocaleString("ko-KR"):"";
-  $("pplList").innerHTML = pDraft.length ? pDraft.map((P,i)=>`<div class="xf"><div class="g">
+  $("pplList").innerHTML = pDraft.length ? pDraft.map((P,i)=>`<div class="xf" data-ri="${i}"><div style="margin-bottom:6px">${mvCtl(i,i-1,i<pDraft.length-1?i+1:-1)}</div><div class="g">
       <label>이름<input data-i="${i}" data-k="name" value="${esc(P.name||"")}" placeholder="예: YJ"></label>
       <label>메모 (선택)<input data-i="${i}" data-k="note" value="${esc(P.note||"")}" placeholder="예: 청년미래적금"></label>
       <label>약정 총액 (선택)<input data-i="${i}" data-k="target" inputmode="numeric" value="${num(P.target)}" placeholder="예: 36,000,000"></label>
@@ -3006,6 +3025,7 @@ function renderPplEdit(){
   $("pplList").querySelectorAll("[data-k]").forEach(el=>el.oninput=el.onchange=()=>{ const P=pDraft[+el.dataset.i], k=el.dataset.k;
     if(["target","hold0","loan0","paid0"].includes(k)){ const n=el.value.replace(/[^\d]/g,""); P[k]=+n||0; el.value=n?(+n).toLocaleString("ko-KR"):""; } else P[k]=el.value.trim(); });
   $("pplList").querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>{ pDraft.splice(+b.dataset.pdel,1); renderPplEdit(); });
+  bindSortable($("pplList"), ".xf[data-ri]", (f,t)=>{ arrMove(pDraft,f,t); renderPplEdit(); });
   $("pplList").querySelectorAll("[data-padd]").forEach(sel=>sel.onchange=()=>{ const P=pDraft[+sel.dataset.padd]; if(sel.value){ P.cats=(P.cats||[]).concat([sel.value]); renderPplEdit(); } });
   $("pplList").querySelectorAll("[data-pcat]").forEach(b=>b.onclick=()=>{ const [i,j]=b.dataset.pcat.split("|").map(Number); pDraft[i].cats.splice(j,1); renderPplEdit(); });
 }
@@ -3032,7 +3052,7 @@ function renderXf(){
   const names=inAcctList(), opt=(v,ppl)=>`<option value="">고르세요</option>`+names.map(n=>`<option value="${esc(n)}" ${n===v?"selected":""}>${esc(n)}</option>`).join("")+(ppl&&(accounts.people||[]).length?`<optgroup label="사람 (맡은 돈·빌려 준 돈)">${(accounts.people||[]).map(P=>`<option value="@${esc(P.name)}" ${"@"+P.name===v?"selected":""}>${esc(P.name)}에게 (그 사람 통장)</option>`).join("")}</optgroup>`:"");
   const rules=[["date","며칠"],["last","마지막 날"],["lastBiz","마지막 평일"],["firstBiz","첫 평일"]];
   $("xfList").innerHTML = xDraft.length ? xDraft.map((x,i)=>{ const nx=xfNext(x), done=x.posted&&x.posted.length;
-    return `<div class="xf"><div class="g">
+    return `<div class="xf" data-ri="${i}"><div style="margin-bottom:6px">${mvCtl(i,i-1,i<xDraft.length-1?i+1:-1)}</div><div class="g">
       <label>이름<input data-i="${i}" data-k="name" value="${esc(x.name||"")}" placeholder="예: 농협 특판 적금"></label>
       <label>금액 (원)<input data-i="${i}" data-k="amt" inputmode="numeric" value="${x.amt?(+x.amt).toLocaleString("ko-KR"):""}"></label>
       <label>보낸 계좌<select data-i="${i}" data-k="from">${opt(x.from)}</select></label>
@@ -3053,6 +3073,7 @@ function renderXf(){
     else if(k==="day") x.day=+el.value.replace(/[^\d]/g,"")||""; else x[k]=el.value;
     if(k==="dayRule" || k==="to" || k==="kind" || (ev.type==="change" && ["day","start","end"].includes(k))) setTimeout(renderXf,0); });
   $("xfList").querySelectorAll("[data-xdel]").forEach(b=>b.onclick=()=>{ xDraft.splice(+b.dataset.xdel,1); renderXf(); });
+  bindSortable($("xfList"), ".xf[data-ri]", (f,t)=>{ arrMove(xDraft,f,t); renderXf(); });
 }
 $("xfAdd").onclick=()=>{ xDraft.push({id:uid(), name:"", amt:0, from:mainAcct(), to:"", dayRule:"date", day:"", auto:true}); renderXf(); };
 $("xfSave").onclick=async()=>{
@@ -3070,9 +3091,11 @@ $("accEditBtn").onclick=()=>{ aDraft=JSON.parse(JSON.stringify(accounts)); rende
 function mainAcct2(d){ return (d.list.find(a=>a.main) || d.list.find(a=>a.name==="저수지통장") || d.list[0] || {}).name; }
 function renderAccEdit(){
   const tb=$("aTable").querySelector("tbody");
-  tb.innerHTML=aDraft.list.map((a,i)=>`<tr><td><input data-i="${i}" data-k="name" value="${esc(a.name)}" aria-label="계좌 이름"></td><td><input data-i="${i}" data-k="inst" value="${esc(instOf(a))}" placeholder="예: 한국투자증권 CMA" aria-label="금융기관"></td><td style="text-align:center"><input type="radio" name="mainA" data-i="${i}" data-k="main" ${a.name===mainAcct2(aDraft)?"checked":""} aria-label="주 통장" style="width:auto"></td><td><select data-i="${i}" data-k="kind" aria-label="종류">${Object.entries(KIND).map(([k,v])=>`<option value="${k}"${a.kind===k?" selected":""}>${v}</option>`).join("")}</select></td><td style="text-align:center"><input type="checkbox" data-i="${i}" data-k="liquid" ${a.liquid?"checked":""} aria-label="가용자금" style="width:auto"></td><td><input type="date" data-i="${i}" data-k="maturity" value="${esc(a.maturity||"")}" aria-label="만기일"></td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`).join("");
+  const nA=aDraft.list.length;
+  tb.innerHTML=aDraft.list.map((a,i)=>`<tr data-ri="${i}"><td>${mvCtl(i,i-1,i<nA-1?i+1:-1)}</td><td><input data-i="${i}" data-k="name" value="${esc(a.name)}" aria-label="계좌 이름"></td><td><input data-i="${i}" data-k="inst" value="${esc(instOf(a))}" placeholder="예: 한국투자증권 CMA" aria-label="금융기관"></td><td style="text-align:center"><input type="radio" name="mainA" data-i="${i}" data-k="main" ${a.name===mainAcct2(aDraft)?"checked":""} aria-label="주 통장" style="width:auto"></td><td><select data-i="${i}" data-k="kind" aria-label="종류">${Object.entries(KIND).map(([k,v])=>`<option value="${k}"${a.kind===k?" selected":""}>${v}</option>`).join("")}</select></td><td style="text-align:center"><input type="checkbox" data-i="${i}" data-k="liquid" ${a.liquid?"checked":""} aria-label="가용자금" style="width:auto"></td><td><input type="date" data-i="${i}" data-k="maturity" value="${esc(a.maturity||"")}" aria-label="만기일"></td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`).join("");
   tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const a=aDraft.list[+el.dataset.i]; if(el.dataset.k==="main"){ aDraft.list.forEach(x=>delete x.main); a.main=true; return; } a[el.dataset.k]= el.type==="checkbox" ? el.checked : el.value.trim(); });
   tb.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ aDraft.list.splice(+b.dataset.del,1); renderAccEdit(); });
+  bindSortable(tb, "tr[data-ri]", (f,t)=>{ arrMove(aDraft.list,f,t); renderAccEdit(); });
   $("aBuf").value=aDraft.buffer;
 }
 $("addA").onclick=()=>{ aDraft.list.push({name:"",kind:"saving",liquid:false,maturity:""}); renderAccEdit(); };
@@ -4117,18 +4140,21 @@ let draft=null;
 function openSettings(){ draft=JSON.parse(JSON.stringify(config)); $("setHol").value=(config.holidays||[]).join(", "); $("holSrc").textContent=holInfo?` (마지막 갱신 ${holInfo.updated} · ${holInfo.years.join("·")}년)`:" (아직 받은 자료 없음 — 내장 표 2024~2027년 사용)"; renderSettings(); openOv("setOv"); }
 function renderSettings(){
   const tb=$("mTable").querySelector("tbody");
-  tb.innerHTML=draft.methods.map((m,i)=>{
+  /* 종류별로 묶어 보여 주고, 묶음 안 순서 = 거래 입력 창 단추 순서 */
+  const kinds=KINDS.map(x=>x[0]).concat(["other"]), idxOfK=k=>draft.methods.map((m,i)=>[m,i]).filter(([m])=>(kinds.includes(kindOf(m))?kindOf(m):"other")===k).map(([,i])=>i);
+  tb.innerHTML=kinds.map(K=>{ const ids=idxOfK(K); if(!ids.length) return ""; return `<tr class="mgrp-h"><td colspan="8">${esc(KIND_LBL[K]||K)} <small style="font-weight:400">${ids.length}개</small></td></tr>`+ids.map((i,j)=>{ const m=draft.methods[i];
     const k=kindOf(m);
     const kindSel=`<select data-i="${i}" data-k="kind" data-re="1" aria-label="종류">${KINDS.map(([v,l])=>`<option value="${v}"${k===v?" selected":""}>${l}</option>`).join("")}</select>`;
     const linkOpts=draft.methods.filter(x=>x.code && x.code!==m.code && kindOf(x)!=="pay").map(x=>`<option value="${esc(x.code)}"${m.link===x.code?" selected":""}>${esc(x.code)} · ${esc(x.name)}</option>`).join("");
     const where = k==="pay"
       ? `<select data-i="${i}" data-k="link" data-re="1" aria-label="연결된 카드나 계좌"><option value="">계좌로 바로 →</option>${linkOpts}</select>${m.link?"":`<input data-i="${i}" data-k="acct" value="${esc(m.acct||"")}" list="acctList" placeholder="계좌 이름" aria-label="계좌" style="margin-top:4px">`}`
       : `<input data-i="${i}" data-k="acct" value="${esc(m.acct||"")}" list="acctList" placeholder="${k==="cash"?"현금":"계좌 이름"}" aria-label="계좌">`;
-    const feeIn = (k==="card"||k==="pay") ? `<div style="display:flex;gap:4px;margin-top:4px;align-items:center;font-size:12px;color:var(--muted)">해외 수수료<input data-i="${i}" data-k="fxFee" value="${esc(m.fxFee||"")}" inputmode="decimal" placeholder="%" aria-label="해외 결제 수수료 %" style="width:56px">%${k==="pay"?`<input data-i="${i}" data-k="fxFeeMin" value="${esc(m.fxFeeMin||"")}" inputmode="decimal" placeholder="기준" aria-label="이 외화 금액 넘을 때만" style="width:64px" title="외화 금액이 이 값을 넘을 때만 수수료 (예: 알리페이 200위안)">초과 때만`:""}</div>` : "";
-    return `<tr><td><input data-i="${i}" data-k="code" value="${esc(m.code)}" aria-label="약어"></td><td><input data-i="${i}" data-k="name" value="${esc(m.name)}" aria-label="이름"></td><td>${kindSel}</td><td>${where}${feeIn}</td><td><select data-i="${i}" data-k="own" aria-label="소유"><option value="corp"${m.own==="corp"?" selected":""}>법인</option><option value="me"${m.own!=="corp"?" selected":""}>개인</option></select></td><td>${k==="card"?`<input data-i="${i}" data-k="pay" value="${esc(m.pay||"")}" inputmode="numeric" placeholder="예: 14" aria-label="카드 결제일">`:`<span style="color:var(--muted);font-size:12px">—</span>`}</td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`;
-  }).join("") + `<datalist id="acctList">${[...new Set(accounts.list.map(a=>a.name).concat(draft.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))].map(a=>`<option value="${esc(a)}">`).join("")}</datalist>`;
+    const feeIn = (k==="card"||k==="pay") ? `<div style="display:flex;gap:4px;margin-top:4px;align-items:center;font-size:12px;color:var(--muted);white-space:nowrap">해외수수료<input data-i="${i}" data-k="fxFee" value="${esc(m.fxFee||"")}" inputmode="decimal" placeholder="%" aria-label="해외 결제 수수료 %" style="width:56px">%${k==="pay"?`<input data-i="${i}" data-k="fxFeeMin" value="${esc(m.fxFeeMin||"")}" inputmode="decimal" placeholder="초과 때만" aria-label="이 외화 금액 넘을 때만" style="width:72px" title="외화 금액이 이 값을 넘을 때만 수수료 (예: 알리페이 200위안)">`:""}</div>` : "";
+    return `<tr data-ri="${i}" data-grp="${K}"><td>${mvCtl(i, j>0?ids[j-1]:-1, j<ids.length-1?ids[j+1]:-1)}</td><td><input data-i="${i}" data-k="code" value="${esc(m.code)}" aria-label="약어"></td><td><input data-i="${i}" data-k="name" value="${esc(m.name)}" aria-label="이름"></td><td>${kindSel}</td><td>${where}${feeIn}</td><td><select data-i="${i}" data-k="own" aria-label="소유"><option value="corp"${m.own==="corp"?" selected":""}>법인</option><option value="me"${m.own!=="corp"?" selected":""}>개인</option></select></td><td>${k==="card"?`<input data-i="${i}" data-k="pay" value="${esc(m.pay||"")}" inputmode="numeric" placeholder="예: 14" aria-label="카드 결제일">`:`<span style="color:var(--muted);font-size:12px">—</span>`}</td><td><button class="x" data-del="${i}" aria-label="삭제">×</button></td></tr>`;
+  }).join(""); }).join("") + `<datalist id="acctList">${[...new Set(accounts.list.map(a=>a.name).concat(draft.methods.map(m=>m.acct)).filter(a=>!NOT_ACCT(a)))].map(a=>`<option value="${esc(a)}">`).join("")}</datalist>`;
   tb.querySelectorAll("input,select").forEach(el=>el.oninput=el.onchange=()=>{ const m=draft.methods[+el.dataset.i], k=el.dataset.k; m[k]=el.value.trim(); if(k==="own"){ const corpA=(config.methods.find(x=>x.code==="지통")||{}).acct||"법인통장"; if(m.own==="corp"&&m.acct===mainAcct()) m.acct=corpA; else if(m.own!=="corp"&&m.acct===corpA) m.acct=mainAcct(); renderSettings(); return; } if(k==="kind"&&m.kind!=="pay") delete m.link; if(k==="kind"&&m.kind!=="card") delete m.pay; if(el.dataset.re) renderSettings(); });
   tb.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ draft.methods.splice(+b.dataset.del,1); renderSettings(); });
+  bindSortable(tb, "tr[data-ri]", (f,t)=>{ arrMove(draft.methods,f,t); renderSettings(); });
 }
 $("addM").onclick=()=>{ draft.methods.push({code:"",name:"",acct:mainAcct(),own:"me",kind:"card"}); renderSettings(); };
 /* 소유를 법인으로 바꾸면 돈이 나가는 곳을 법인통장으로 맞춥니다 */
