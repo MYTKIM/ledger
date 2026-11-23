@@ -323,6 +323,8 @@ tr.mgrp-h td{background:var(--soft,#f1f1ee);font-weight:700;font-size:12.5px;pad
 .linkish{border:0;background:none;padding:0;color:var(--ink);text-decoration:underline;font:inherit;cursor:pointer}
 .split{border:1px solid var(--line);border-radius:10px;padding:8px 12px} .split summary{cursor:pointer;font-weight:600;font-size:13.5px}
 .parts{display:grid;gap:6px;margin-bottom:6px} .part{display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:6px;align-items:center}
+.mrow{display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13.5px}
+.mrow small{color:var(--muted)} .mrow .rem{font-size:12px;color:var(--muted);white-space:nowrap} .mrow input{text-align:right}
 .bedit{margin-left:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;font:inherit;font-size:11px;padding:1px 8px;cursor:pointer;white-space:nowrap;vertical-align:1px}
 .bedit:hover,.bedit:focus-visible{color:var(--ink);border-color:var(--ink)}
 .seg.ro{pointer-events:none;opacity:.55}
@@ -773,15 +775,16 @@ tr.mgrp-h td{background:var(--soft,#f1f1ee);font-weight:700;font-size:12.5px;pad
         <div class="f"><label for="iTo">받은 계좌</label><select id="iTo"></select></div>
       </div>
       <div class="f" id="pkRow" hidden><label for="iPk" id="pkLbl">맡은 돈·빌려 준 돈 처리</label><select id="iPk"></select></div>
-      <div class="f" id="methodRow"><span class="lbl" id="mLbl">결제수단</span><div class="methods" id="iMethods" role="group" aria-labelledby="mLbl"></div></div>
+      <div class="f" id="methodRow"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="lbl" id="mLbl">결제수단</span><label id="multiL" style="display:flex;gap:6px;align-items:center;font-size:13px;font-weight:400"><input type="checkbox" id="iMulti" style="width:auto"> 여러 수단으로 나눠 냄</label></div><div class="methods" id="iMethods" role="group" aria-labelledby="mLbl"></div>
+        <div id="multiRows" class="parts" hidden style="margin-top:8px"></div></div>
       <div class="f" id="inAcctRow" hidden><span class="lbl" id="iaLbl">들어온 계좌</span><div class="methods" id="iAccts" role="group" aria-labelledby="iaLbl"></div></div>
       <div class="f" id="inFromRow" hidden><label for="iFromAc">보낸 곳</label><select id="iFromAc"></select></div>
       <div class="f" id="payViaRow" hidden><label for="iPayVia" id="pvLbl">페이로 낸 돈이 실제로 나간 수단</label><select id="iPayVia"></select></div>
       <div class="f" id="instRow" hidden><label for="iInst">할부</label><select id="iInst"><option value="">일시불</option><option value="2">2개월</option><option value="3">3개월</option><option value="4">4개월</option><option value="5">5개월</option><option value="6">6개월</option><option value="7">7개월</option><option value="8">8개월</option><option value="9">9개월</option><option value="10">10개월</option><option value="11">11개월</option><option value="12">12개월</option><option value="18">18개월</option><option value="24">24개월</option></select></div>
-      <details class="split" id="splitBox" hidden><summary>결제 나누기 · 적립 <span id="splitSum" class="aside"></span></summary>
-        <p class="hint" style="margin:4px 0 6px">금액 칸에는 <b>상품 가격 전체</b>를 넣고, 상품권·포인트·현금 등으로 낸 몫만 여기에 적으세요. 나머지는 위에서 고른 결제수단으로 낸 것으로 봅니다.</p>
-        <div id="partRows" class="parts"></div>
-        <button type="button" class="btn small" id="partAdd">+ 다른 수단으로 낸 몫 더하기</button>
+      <details class="split" id="splitBox" hidden><summary>적립 · 실질 가격 <span id="splitSum" class="aside"></span></summary>
+        <p class="hint" id="splitOldHint" hidden style="margin:4px 0 6px">금액 칸에는 <b>상품 가격 전체</b>를 넣고, 상품권·포인트·현금 등으로 낸 몫만 여기에 적으세요. 나머지는 위에서 고른 결제수단으로 낸 것으로 봅니다.</p>
+        <div id="partRows" class="parts" hidden></div>
+        <button type="button" class="btn small" id="partAdd" hidden>+ 다른 수단으로 낸 몫 더하기</button>
         <div class="two" style="margin-top:8px"><div class="f"><label for="iReb">이번 구매로 받은 적립 (포인트 등)</label><input id="iReb" inputmode="numeric" placeholder="없으면 비워 두기"></div><div class="f"><label for="iRebTo">적립된 곳</label><select id="iRebTo"></select></div></div>
         <div id="splitInfo" class="ag" style="margin-top:8px"></div>
       </details>
@@ -3761,8 +3764,36 @@ function fillMethods(){
   const box=$("iMethods");
   box.innerHTML=KINDS.map(([k,lbl])=>{ const ms=config.methods.filter(m=>kindOf(m)===k); return ms.length?`<span class="mgrp">${lbl}</span>`+ms.map(m=>`<button type="button" data-v="${esc(m.code)}" aria-pressed="${m.code===form.m?"true":"false"}">${esc(m.code)}<small>${esc(m.name)}</small></button>`).join(""):""; }).join("")
     + (config.methods.some(m=>m.code==="기타") ? "" : `<span class="mgrp">기타</span><button type="button" data-v="기타" aria-pressed="${form.m==="기타"?"true":"false"}">기타<small>목록에 없는 수단</small></button>`);
-  box.querySelectorAll("button").forEach(b=>b.onclick=()=>{ form.m=b.dataset.v; fillMethods(); updateHint(true); });
+  if(form.multi) box.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", form.multi.sel.includes(b.dataset.v)?"true":"false"));
+  box.querySelectorAll("button").forEach(b=>b.onclick=()=>{ const v=b.dataset.v;
+    if(form.multi){ const S=form.multi.sel; const i=S.indexOf(v); if(i>=0) S.splice(i,1); else S.push(v); multiSync(); fillMethods(); renderMulti(); updateHint(true); return; }
+    form.m=v; fillMethods(); updateHint(true); });
 }
+/* ---------- 여러 수단으로 나눠 냄 ----------
+   고른 수단마다 금액. 카드·계좌·현금·간편결제가 있으면 그 수단이 '나머지'를, 상품권·포인트만이면 금액을 비운 쪽이 나머지를 냄.
+   저장 형식은 그대로: form.m = 나머지 수단, partsDraft = 나머지를 뺀 수단들의 금액 */
+const isGiftM = c => kindOf(methodOf(c)||{})==="gift";
+function multiRem(){ const M=form.multi; if(!M||!M.sel.length) return ""; const S=M.sel;
+  const nonGift=S.filter(c=>!isGiftM(c)); if(nonGift.length) return nonGift.find(c=>!(+M.amt[c]>0)) || nonGift[nonGift.length-1];
+  const blank=S.filter(c=>!(+M.amt[c]>0)); return blank.length ? blank[blank.length-1] : S[S.length-1]; }
+function multiSync(){ const M=form.multi; if(!M) return; const rem=multiRem(); form.m=rem||""; partsDraft=M.sel.filter(c=>c!==rem && +M.amt[c]>0).map(c=>({m:c, a:+M.amt[c]})); }
+function giftBal(c){ const a=acctOf(c), tr=a&&!NOT_ACCT(a)?tracked(a,todayISO()):null; return tr?tr.bal+((form.useBack||{})[c]||0):null; }  /* 고치는 중인 기록이 이미 쓴 몫은 되돌려 셈 */
+function renderMulti(){ const box=$("multiRows"), M=form.multi; box.hidden=!M; if(!M) return;
+  if(!M.sel.length){ box.innerHTML=`<div class="hint" style="margin:0">위에서 낸 수단을 모두 고르세요 (예: 상품권 + 포인트, 포인트 + 카드).</div>`; return; }
+  const amt=+($("iAmt").value.replace(/[^\d]/g,""))||0, rem=multiRem(), others=M.sel.filter(c=>c!==rem).reduce((a,c)=>a+(+M.amt[c]||0),0);
+  box.innerHTML=M.sel.map(c=>{ const m=methodOf(c)||{code:c}, g=isGiftM(c), bal=g?giftBal(c):null, isRem=c===rem;
+    return `<div class="mrow"><div><b>${esc(c)}</b>${m.name&&m.name!==c?` <small>${esc(m.name)}</small>`:""}${bal!=null?`<br><small>잔액 ${won(bal)}</small>`:""}</div>
+      ${isRem?`<div class="num" style="text-align:right"><b>${won(Math.max(0,amt-others))}</b><br><span class="rem">나머지 자동</span></div>`:`<input inputmode="numeric" data-ma="${esc(c)}" value="${+M.amt[c]?(+M.amt[c]).toLocaleString("ko-KR"):""}" placeholder="금액" aria-label="${esc(c)} 금액">`}
+      <span>${g&&!isRem?`<button type="button" class="btn small" data-mall="${esc(c)}">전부 사용</button>`:""}</span></div>`; }).join("")
+    + (amt-others<0?`<div class="hint warn" style="margin:0">수단별 금액 합계가 상품 가격(${won(amt)})보다 큽니다.</div>`:"")
+    + M.sel.filter(c=>isGiftM(c)).map(c=>{ const bal=giftBal(c), use=c===rem?Math.max(0,amt-others):(+M.amt[c]||0); return bal!=null&&use>bal?`<div class="hint warn" style="margin:0">${esc(c)}: 낼 금액 ${won(use)}이 잔액 ${won(bal)}보다 많습니다. 모자란 만큼 다른 수단을 더하세요.</div>`:""; }).join("");
+  box.querySelectorAll("[data-ma]").forEach(el=>el.oninput=()=>{ const n=el.value.replace(/[^\d]/g,""); M.amt[el.dataset.ma]=+n||0; el.value=n?(+n).toLocaleString("ko-KR"):""; const pos=el.value.length; multiSync(); splitInfo(); updateHint(false);
+    const was=multiRem(); clearTimeout(M._t); M._t=setTimeout(()=>{ renderMulti(); const e2=box.querySelector(`[data-ma="${CSS.escape(el.dataset.ma)}"]`); if(e2){ e2.focus(); e2.setSelectionRange(pos,pos); } },400); });
+  box.querySelectorAll("[data-mall]").forEach(b=>b.onclick=()=>{ const c=b.dataset.mall, bal=Math.max(0,giftBal(c)||0), amt2=+($("iAmt").value.replace(/[^\d]/g,""))||0;
+    const rest=amt2-M.sel.filter(x=>x!==c&&x!==multiRem()).reduce((a,x)=>a+(+M.amt[x]||0),0); M.amt[c]=Math.max(0,Math.min(bal,rest)); multiSync(); renderMulti(); splitInfo(); updateHint(false); }); }
+$("iMulti").onchange=()=>{ if($("iMulti").checked){ form.multi={sel:form.m&&form.m!=="기타"?[form.m]:[], amt:{}}; } else { const keep=multiRem(); form.multi=null; form.m=keep||form.m; partsDraft=[]; }
+  multiSync(); fillMethods(); renderMulti(); splitInfo(); updateHint(true); };
+$("iAmt").addEventListener("input",()=>{ if(form.multi){ multiSync(); clearTimeout(form._mt); form._mt=setTimeout(renderMulti,300); } });
 /* 페이(네이버·카카오페이)의 실제 결제수단: 기본은 페이에 연결된 수단, 같은 페이로 마지막에 쓴 수단을 먼저 고릅니다 */
 /* 워크샵: 미리 낸 숙박·교통부터 기간 중 비용까지 한 워크샵으로 묶어 봅니다 */
 function wsList(){ return config.workshops||[]; }
@@ -3861,7 +3892,7 @@ function splitInfo(){ const amt=+($("iAmt").value.replace(/[^\d]/g,""))||0, P=pa
   const cashOut = (mm && ["card","bank","cash","pay"].includes(kindOf(mm)) ? main : 0) + P.filter(p=>kindOf(methodOf(p.m))!=="gift").reduce((s,p)=>s+(+p.a),0);
   box.innerHTML=row("상품 가격",won(amt))+P.map(p=>row(`└ ${esc(p.m)}`,won(+p.a))).join("")+row(`└ ${esc(form.m||"결제수단")} (나머지)`,won(main),main<0?"bad":"")
     +(reb?row("받은 적립","−"+won(reb),"p")+row("<b>실질 가격</b>",won(amt-reb)):"")+row("실제 현금·카드로 낸 돈",won(cashOut));
-  if(main<0 || P.some(p=>p.m===form.m)) box.innerHTML+=`<div class="hint warn" style="margin-top:6px">${main<0?"나눠 낸 몫이 상품 가격보다 큽니다. ":""}${P.some(p=>p.m===form.m)?`위에서 고른 결제수단(${esc(form.m)})은 여기에 다시 넣지 않습니다. `:""}거스름을 받았다면 나누기는 비우고 아래 ‘현금 거스름’만 적으세요.</div>`;
+  if(main<0 || P.some(p=>p.m===form.m)) box.innerHTML+=`<div class="hint warn" style="margin-top:6px">${main<0?"나눠 낸 몫이 상품 가격보다 큽니다. ":""}${P.some(p=>p.m===form.m)?`위에서 고른 결제수단(${esc(form.m)})은 여기에 다시 넣지 않습니다. `:""}거스름을 받았다면 ‘여러 수단으로 나눠 냄’을 끄고 아래 ‘현금 거스름’만 적으세요.</div>`;
   $("splitSum").textContent=[P.length?`${P.length+1}가지로 나눠 냄`:"", reb?`적립 ${won(reb)}`:""].filter(Boolean).join(" · "); }
 $("partAdd").onclick=()=>{ partsDraft.push({m:(partMethods().find(m=>kindOf(m)==="gift")||{}).code||"", a:0}); renderParts(); };
 $("iReb").addEventListener("input",splitInfo);
@@ -3878,6 +3909,7 @@ function updateHint(autoSettle){
   if(!fxCalcBusy && $("iFxOn").checked && !$("fxBox").hidden && form._fxM!==form.m){ form._fxM=form.m; fxCalcBusy=true; try{ fxCalc(); } finally{ fxCalcBusy=false; } }
   budHintUpd(); $("spRow").hidden = form.t!=="out"; if(form.t==="out") spUpd();
   $("splitBox").hidden = form.t!=="out"; if(form.t==="out") splitInfo();
+  $("multiL").hidden = form.t!=="out"; if(form.t!=="out" && form.multi){ form.multi=null; $("iMulti").checked=false; partsDraft=[]; renderMulti(); }
   const t=form.t, m=methodOf(form.m);
   { const show = t==="out" && !!form.m && isGiftAcct(acctOf(form.m)); const was=!$("chgRow").hidden; $("chgRow").hidden=!show;
     if(show && !was){ const cur=$("iChgTo").value; acctOptions($("iChgTo"), cur || (accounts.list.find(a=>a.kind==="cash")||{}).name || "", true); } }
@@ -3932,7 +3964,7 @@ function updateHint(autoSettle){
   else if(isCard && +$("iInst").value>1){ const n=+$("iInst").value, base=Math.floor(amt/n/100)*100; h.innerHTML=`${via}<b>${ac}</b>에서 <b>${n}개월 할부</b>로 결제일마다 ${amt?`약 ${won(base)}씩 (1회차 ${won(amt-base*(n-1))})`:"나눠"} 빠져나갑니다. 지출은 산 날 ${amt?won(amt):"전액"}으로 잡힙니다.`; }
   else { const chg=isGiftAcct(rv.acct)?(+($("iChg").value.replace(/[^\d]/g,""))||0):0, pt=partsDraft.filter(p=>p.m&&+p.a>0).reduce((a,p)=>a+(+p.a),0), main=amt-pt;
     h.innerHTML = chg ? `<b>${ac}</b>에서 <b>${won(main+chg)}</b>이 빠지고(물건 ${won(main)} + 현금 거스름 ${won(chg)}), <b>${esc($("iChgTo").value||"현금")}</b>에 ${won(chg)}이 들어옵니다. 지출로는 ${won(amt)}만 잡힙니다.`
-      : `${via}<b>${ac}</b>에서 ${amt?won(main)+"이 ":""}빠져나갑니다${when}.${pt?` (나머지 ${won(pt)}은 결제 나누기 수단에서)`:""}`; }
+      : `${via}<b>${ac}</b>에서 ${amt?won(main)+"이 ":""}빠져나갑니다${when}.${pt?` (나머지 ${won(pt)}은 함께 낸 수단에서)`:""}`; }
   /* 이미 그 뒤 날짜로 잔액을 입력해 둔 계좌: 지금 잔액은 그대로이고, 그 사이 맞춤 기록만 줄어듦 */
   if(t!=="move"){ const d=$("iDate").value, accs=[rv.acct, ...(isGiftAcct(rv.acct)&&+($("iChg").value.replace(/[^\d]/g,""))?[$("iChgTo").value]:[]), ...partsDraft.filter(p=>p.m&&+p.a>0).map(p=>acctOf(p.m))].filter((a,i,A)=>a&&!NOT_ACCT(a)&&A.indexOf(a)===i);
     const later=accs.map(a=>({a, s:snapsOf(a).filter(x=>x.d>=d).pop()})).filter(x=>x.s), same=later.filter(x=>x.s.d===d);
@@ -4047,7 +4079,10 @@ function openTx(ym, id, force){
   segSet("typeSeg", form.t); fillCatSelect(form.t, t ? t.cat : ""); segSet("entInSeg", form.ent);
   { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iXavg").dataset.auto="";
     partsDraft=t&&Array.isArray(t.parts)?t.parts.map(p=>({...p})):[]; $("iReb").value=t&&t.reb&&+t.reb.a?(+t.reb.a).toLocaleString("ko-KR"):"";
-    acctOptions($("iRebTo"), (t&&t.reb&&t.reb.to) || (accounts.list.find(a=>a.kind==="point")||{}).name || "", true); renderParts(); $("splitBox").open=!!(partsDraft.length||(t&&t.reb));
+    acctOptions($("iRebTo"), (t&&t.reb&&t.reb.to) || (accounts.list.find(a=>a.kind==="point")||{}).name || "", true); renderParts(); $("splitBox").open=!!(t&&t.reb);
+    form.useBack={}; if(t&&t.t==="out"){ partsOf(t).forEach(p=>form.useBack[p.m]=(form.useBack[p.m]||0)+(+p.a)); if(isGiftM(t.m)) form.useBack[t.m]=(form.useBack[t.m]||0)+mainAmt(t)+(+t.chg||0); }
+    if(partsDraft.length && t){ form.multi={sel:[...partsDraft.map(p=>p.m), t.m], amt:Object.fromEntries(partsDraft.map(p=>[p.m,+p.a]))}; $("iMulti").checked=true; } else { form.multi=null; $("iMulti").checked=false; }
+    $("multiL").hidden=!(form.t==="out"); renderMulti(); fillMethods();
     $("iChg").value=t&&+t.chg?(+t.chg).toLocaleString("ko-KR"):""; acctOptions($("iChgTo"), (t&&t.chgTo) || (accounts.list.find(a=>a.kind==="cash")||{}).name || "", true); $("chgRow").hidden=true;
     acctOptions($("iFrom"), t&&t.t==="move"&&t.cardFrom ? "card:"+t.cardFrom : t&&t.t==="move"&&isPerson(t.from) ? t.from : (ef.find(e=>e.v<0)||{}).acct || "", false, true); acctOptions($("iTo"), t&&t.t==="move"&&isPerson(t.to) ? t.to : (ef.find(e=>e.v>0)||{}).acct || "");
     $("iPk").innerHTML=`<option value=""></option><option value="hold"></option><option value="loan"></option>`; $("iPk").value = t&&t.pk ? t.pk : ""; }
@@ -4090,8 +4125,8 @@ $("txForm").onsubmit=async e=>{
       if(Math.abs(amt-calc)>1){ tx.fx.krwEdited=true; tx.fx.rateEff=Math.round(amt/u*10000)/10000; } }
     else delete tx.fx; }
   { const P=form.t==="out"?partsDraft.filter(p=>p.m&&+p.a>0).map(p=>({m:p.m,a:+p.a})):[], ps=P.reduce((s,p)=>s+p.a,0);
-    if(ps>amt){ $("splitBox").open=true; splitInfo(); showNotice(`나눠 낸 몫 합계(${won(ps)})가 상품 가격(${won(amt)})보다 큽니다. 상품권으로 내고 거스름을 받았다면 ‘결제 나누기’는 비우고, 결제수단을 상품권으로 고른 뒤 아래 ‘현금 거스름’만 적으세요.`); return; }
-    if(P.some(p=>p.m===form.m)){ $("splitBox").open=true; showNotice(`‘${form.m}’은(는) 이미 주 결제수단입니다. 결제 나누기에는 다른 수단으로 낸 몫만 적으세요.`); return; }
+    if(ps>amt){ $("splitBox").open=true; splitInfo(); showNotice(`수단별 금액 합계(${won(ps)})가 상품 가격(${won(amt)})보다 큽니다. 상품권으로 내고 거스름을 받았다면 ‘여러 수단으로 나눠 냄’을 끄고, 결제수단을 상품권으로 고른 뒤 아래 ‘현금 거스름’만 적으세요.`); return; }
+    if(P.some(p=>p.m===form.m)){ $("splitBox").open=true; showNotice(`‘${form.m}’이(가) 두 번 들어갔습니다. 수단마다 한 번만 고르세요.`); return; }
     if(P.length) tx.parts=P; else delete tx.parts;
     const rb=form.t==="out"?(+($("iReb").value.replace(/[^\d]/g,""))||0):0; if(rb>0 && $("iRebTo").value) tx.reb={a:rb, to:$("iRebTo").value}; else delete tx.reb; }
   if(form.t==="out" && $("iXavg").checked && !noAvgCat(tx.cat)) tx.xavg=true; else delete tx.xavg;
