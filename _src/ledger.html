@@ -749,6 +749,10 @@ tr.mgrp-h td{background:var(--soft,#f1f1ee);font-weight:700;font-size:12.5px;pad
         <div id="multiRows" class="parts" hidden style="margin-top:8px"></div></div>
       <div class="f" id="inAcctRow" hidden><span class="lbl" id="iaLbl">들어온 계좌</span><div class="methods" id="iAccts" role="group" aria-labelledby="iaLbl"></div></div>
       <div class="f" id="inFromRow" hidden><label for="iFromAc">보낸 곳</label><select id="iFromAc"></select></div>
+      <div class="two" id="custRow" hidden>
+        <div class="f"><label for="iCustP">맡은 돈과 함께 보냄 <small style="font-weight:400;color:var(--muted)">예: 걷은 순헌금 + 내 헌금을 한 번에 송금</small></label><select id="iCustP"></select></div>
+        <div class="f"><label for="iCustA">그중 맡은 돈 (원)</label><input id="iCustA" inputmode="numeric" placeholder="사람을 고르면 맡은 금액이 채워짐"></div>
+      </div>
       <div class="f" id="payViaRow" hidden><label for="iPayVia" id="pvLbl">페이로 낸 돈이 실제로 나간 수단</label><select id="iPayVia"></select></div>
       <div class="f" id="instRow" hidden><label for="iInst">할부</label><select id="iInst"><option value="">일시불</option><option value="2">2개월</option><option value="3">3개월</option><option value="4">4개월</option><option value="5">5개월</option><option value="6">6개월</option><option value="7">7개월</option><option value="8">8개월</option><option value="9">9개월</option><option value="10">10개월</option><option value="11">11개월</option><option value="12">12개월</option><option value="18">18개월</option><option value="24">24개월</option></select></div>
       <details class="split" id="splitBox" hidden><summary>적립 · 실질 가격 <span id="splitSum" class="aside"></span></summary>
@@ -1193,13 +1197,15 @@ function instShares(t){
 /* 결제 나누기: 상품 가격(amt) 중 parts[{m,a}]는 상품권·포인트·현금·계좌로 내고, 나머지(mainAmt)를 주 결제수단(m)으로 냄 */
 const partsOf = t => t.t==="out" && Array.isArray(t.parts) ? t.parts.filter(p=>p&&p.m&&+p.a>0) : [];
 const mainAmt = t => (+t.amt||0) - partsOf(t).reduce((s,p)=>s+(+p.a),0);
+/* 맡은 돈과 함께 보냄(예: 걷은 순헌금 + 내 헌금을 한 번에 송금): amt = 내 몫, cust{p,a} = 함께 보낸 맡은 돈. 통장에서는 amt+a가 한 번에 빠짐 */
+const custA = t => t.t==="out" && t.cust && +t.cust.a>0 ? +t.cust.a : 0;
 const rebOf = t => t.reb && +t.reb.a>0 ? +t.reb.a : 0;
 /* 특별 지출: 합계·계정·예산 집행에는 그대로 넣고, 평균(생활비 평균·예상 지출·순흐름·전망)에서만 뺌.
    거래마다(xavg) 또는 계정 규칙(config.catNoAvg, 하위 계정 포함)으로 정함. 계정 규칙 지출은 예산 집행 일정으로 전망에 따로 더함 */
 const noAvgCat = c => (config.catNoAvg||[]).some(P=>under(c||"",catSegs(P)));
 const isSpecial = t => t.t==="out" && (!!t.xavg || noAvgCat(t.cat));   /* 이번 구매로 받은 적립(혜택). 실질 가격 = 상품 가격 − 적립 */
 function effects(t){
-  const a=t.t==="out" ? mainAmt(t) : (+t.amt||0);
+  const a=t.t==="out" ? mainAmt(t)+custA(t) : (+t.amt||0);
   if(t.t==="out" && partsOf(t).length){ const r=effectsMain(t,a); partsOf(t).forEach(p=>r.push({acct:acctOf(p.m), d:t.d, v:-(+p.a)})); return r.filter(e=>!NOT_ACCT(e.acct)||e===r[0]); }
   if(t.t==="out") return effectsMain(t,a);
   return effectsRest(t,a); }
@@ -1449,7 +1455,7 @@ function aiTx(t, o){
     entity:ent, paymentMethod:m?{code:m.code, name:m.name||"", kind:kindOf(m)}:(t.m?{code:t.m,name:"",kind:null}:null),
     ...(partsOf(t).length?{paymentSplit:[...partsOf(t).map(p=>({method:p.m, kind:kindOf(methodOf(p.m)), amount:+p.a})),{method:t.m, kind:m?kindOf(m):null, amount:mainAmt(t), main:true}]}:{}),
     ...(rebOf(t)?{rewardEarned:{amount:rebOf(t), to:t.reb.to, effectivePrice:(+t.amt||0)-rebOf(t), note:"설명용. 적립 금액은 별도 수입 거래(rebateOf)로 이미 기록되어 있으니 합계에는 그 거래만 셀 것"}}:{}),
-    ...(t.rebOf?{rebateOf:t.rebOf}:{}), ...(isSpecial(t)?{excludeFromAverage:true}:{}), ...(t.t2?{secondTithe:true}:{}),
+    ...(t.rebOf?{rebateOf:t.rebOf}:{}), ...(isSpecial(t)?{excludeFromAverage:true}:{}), ...(t.t2?{secondTithe:true}:{}), ...(custA(t)?{custodyAlsoSent:{person:t.cust.p, amount:custA(t), note:"amount는 내 몫. 계좌에서는 amount+custody가 함께 나감"}}:{}),
     ...(t.cardFrom?{cardFrom:t.cardFrom}:{}), ...(+t.chg?{cashChange:{amount:+t.chg, to:t.chgTo}}:{}),
     payVia:t.via||null, account:t.t==="move"||NOT_ACCT(txAcct(t))?null:(txAcct(t)||null), from:t.t==="move"?(effects(t).find(e=>e.v<0)||{}).acct||null:null, to:t.t==="move"?(effects(t).find(e=>e.v>0)||{}).acct||null:null,
     projectId:t.ws||null, projectName:W?W.name:null, beneficiary:t.ws?(t.bf||null):null, purpose:t.ws?(t.pur||null):null, taxTreatment:t.ws?(t.tax||"REVIEW"):null,
@@ -1834,7 +1840,8 @@ function renderLedger(tx){
     const m=methodOf(t.m), acct=txAcct(t);
     const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : isRecon(t) ? `<span class="chip plain">잔액 맞춤 · ${t.lock?"수동":"자동"}</span>` : "";
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
-    const t2Chip = t.t2 ? `<span class="chip plain" style="border-color:var(--ink)">십2조</span>` : "";
+    const custChip = custA(t) ? `<span class="chip plain" title="통장에서 ${won(+t.amt+custA(t))} 한 번에 나감">${esc(t.cust.p)} 맡은 돈 ${won(custA(t))} 함께 보냄</span>` : "";
+    const t2Chip = custChip + (t.t2 ? `<span class="chip plain" style="border-color:var(--ink)">십2조</span>` : "");
     const spChip = t2Chip + (isSpecial(t) ? `<span class="chip plain" title="합계에는 들어가고 평균에서만 빠짐">평균 제외</span>` : "");
     const splitChip = spChip + ((partsOf(t).length||rebOf(t)) ? `<span class="chip plain" title="${esc([...partsOf(t).map(p=>`${p.m} ${won(+p.a)}`), `${t.m} ${won(mainAmt(t))}`].join(" · "))}">${partsOf(t).length?`${partsOf(t).length+1}가지로 나눠 냄`:""}${partsOf(t).length&&rebOf(t)?" · ":""}${rebOf(t)?`실질 ${won(+t.amt-rebOf(t))}`:""}</span>` : t.rebOf ? `<span class="chip plain">구매 적립 · 그 거래에서 고침</span>` : "");
     const instChip = splitChip + (+t.inst>1 ? (()=>{ const sh=instShares(t); if(sh.length<2) return `<span class="chip plain">${t.inst}개월 할부</span>`; const f=x=>`${+x.d.slice(5,7)}/${+x.d.slice(8)}`;
@@ -2719,7 +2726,7 @@ function personFor(cat){ if(!cat) return null; return (accounts.people||[]).find
 /* P.mode: "flow"(기본) = 수입·지출로 기록하고 사람 장부에도 셈 / "move" = 그 사람과의 이체로 바꿔 합계에서 뺌 */
 function pMode(P){ return P && P.mode==="move" ? "move" : "flow"; }
 function personByName(n){ return (accounts.people||[]).find(P=>P.name===n)||null; }
-function sentTo(t,P){ const key="@"+P.name; if(t.t==="move" && t.to===key) return true; if(isRecon(t)||t.t==="in"||isPerson(t.from)||isPerson(t.to)) return false; if(t.pp===P.name && t.t==="out") return true; return (P.cats||[]).includes(t.cat) && (t.t==="out" || (t.t==="move" && !NOT_ACCT(t.from))); }
+function sentTo(t,P){ const key="@"+P.name; if(custA(t) && t.cust.p===P.name) return true; if(t.t==="move" && t.to===key) return true; if(isRecon(t)||t.t==="in"||isPerson(t.from)||isPerson(t.to)) return false; if(t.pp===P.name && t.t==="out") return true; return (P.cats||[]).includes(t.cat) && (t.t==="out" || (t.t==="move" && !NOT_ACCT(t.from))); }
 function recvFrom(t,P){ const key="@"+P.name; if(t.t==="move" && t.from===key) return true; if(isRecon(t) || t.t!=="in") return false; return t.pp===P.name || (P.cats||[]).includes(t.cat); }
 /* 맡은 돈 관련 수입·지출(합계에 들어가는 것): '예수금(맡은 돈) 제외'와 여유자금 평균에서 걸러 냅니다 */
 function isCustody(t){ if(t.t!=="out" && t.t!=="in") return false; if(t.pp && personByName(t.pp)) return true; return !!personFor(t.cat); }
@@ -2730,7 +2737,7 @@ function toPersonMove(tx){ const P=tx.t==="out" && tx.ent!=="corp" ? personFor(t
 function personLedger(P){
   const key="@"+P.name; let hold=+P.hold0||0, loan=+P.loan0||0, paid=+P.paid0||0; const rows=[];
   const list=allTx().filter(t=>(sentTo(t,P) || recvFrom(t,P)) && (!P.asOf || t.d>P.asOf)).sort((a,b)=>a.d.localeCompare(b.d)||(+a.ts||0)-(+b.ts||0));
-  list.forEach(t=>{ const a=+t.amt||0; let dh=0, dl=0; const out=sentTo(t,P);
+  list.forEach(t=>{ const a=custA(t)&&t.cust.p===P.name ? custA(t) : +t.amt||0; let dh=0, dl=0; const out=sentTo(t,P);
     if(out){ const fromHold = t.pk==="loan" ? 0 : t.pk==="hold" ? a : Math.min(a, Math.max(hold,0)); dh=-fromHold; dl=a-fromHold; paid+=a; }
     else { const rep = t.pk==="hold" ? 0 : t.pk==="loan" ? a : Math.min(a, Math.max(loan,0)); dl=-rep; dh=a-rep; }
     hold+=dh; loan+=dl; rows.push({t, dh, dl, hold, loan, out}); });
@@ -3500,7 +3507,7 @@ function lastPayDate(card){ const t=todayISO(); const pd=payDateOf(card, t.slice
 /* 이 결제일 청구에 들어간 거래 (할부는 이번 회차 금액으로) */
 function cbTx(card,d){ d=bizDay(d); const out=[]; allTx().forEach(t=>{ if((t.t!=="out" && !(t.t==="move"&&t.cardFrom)) || payCode(t)!==card || t.ac) return;
   if(+t.inst>1){ const x=instShares(t).find(x=>x.d===d); if(x) out.push({...t, amt:x.amt, _full:+t.amt, _i:x.i, _n:x.n}); }
-  else if(effDate(t)===d) out.push(partsOf(t).length?{...t, amt:mainAmt(t), _full:+t.amt}:t); }); return out; }
+  else if(effDate(t)===d) out.push(partsOf(t).length||custA(t)?{...t, amt:mainAmt(t)+custA(t), _full:+t.amt}:t); }); return out; }
 function openCB(card, d){
   const cs=cardCodes(); if(!cs.length){ showNotice("결제일이 정해진 카드가 없습니다. 결제수단 설정에서 카드의 결제일을 넣어 주세요."); return; }
   $("cbCard").innerHTML=cs.map(c=>`<option value="${esc(c)}">${esc(c)} · ${esc((methodOf(c)||{}).name||"")} (매달 ${(resolve(c)||{}).pay}일)</option>`).join("");
@@ -3885,9 +3892,15 @@ function spUpd(){ const c=$("iCat").value, on=noAvgCat(c), box=$("spCatTxt"), x=
   const f=async on=>{ const L=new Set(config.catNoAvg||[]); on?L.add(c):L.delete(c); config.catNoAvg=[...L]; spUpd(); render(); await saveConfig(); showNotice(on?`‘${c}’ 계정은 이제 평균에서 뺍니다(하위 계정 포함).`:`‘${c}’ 계정을 다시 평균에 넣습니다.`); };
   const a=$("spCatOn"), b=$("spCatOff"); if(a) a.onclick=()=>f(true); if(b) b.onclick=()=>f(false); }
 $("iCat").addEventListener("change",spUpd);
+/* ---------- 맡은 돈과 함께 보냄 ---------- */
+function custHold(name){ const P=personByName(name); if(!P) return 0; let h=personLedger(P).hold; if(form.custBase && form.custBase.p===name) h+=+form.custBase.a||0; return Math.max(0,h); }
+function custOpts(val){ const ps=(accounts.people||[]); $("iCustP").innerHTML=`<option value="">없음 (내 돈만)</option>`+ps.map(P=>{ const h=custHold(P.name); return `<option value="${esc(P.name)}"${P.name===val?" selected":""}>${esc(P.name)}${h?` · 맡은 돈 ${won(h)}`:""}</option>`; }).join(""); }
+$("iCustP").onchange=()=>{ const n=$("iCustP").value; $("iCustA").value = n ? (custHold(n)||"") && custHold(n).toLocaleString("ko-KR") : ""; updateHint(false); };
+$("iCustA").addEventListener("input",e=>{ const n=e.target.value.replace(/[^\d]/g,""); e.target.value=n?(+n).toLocaleString("ko-KR"):""; updateHint(false); });
 let fxCalcBusy=false;
 function updateHint(autoSettle){
   if(!fxCalcBusy && $("iFxOn").checked && !$("fxBox").hidden && form._fxM!==form.m){ form._fxM=form.m; fxCalcBusy=true; try{ fxCalc(); } finally{ fxCalcBusy=false; } }
+  $("custRow").hidden = form.t!=="out" || !(accounts.people||[]).length;
   budHintUpd(); $("spRow").hidden = form.t!=="out"; $("t2Row").hidden = form.t!=="out"; if(form.t==="out") spUpd();
   $("splitBox").hidden = form.t!=="out"; if(form.t==="out") splitInfo();
   $("multiL").hidden = form.t!=="out"; if(form.t!=="out" && form.multi){ form.multi=null; $("iMulti").checked=false; partsDraft=[]; renderMulti(); }
@@ -3946,6 +3959,7 @@ function updateHint(autoSettle){
   else { const chg=isGiftAcct(rv.acct)?(+($("iChg").value.replace(/[^\d]/g,""))||0):0, pt=partsDraft.filter(p=>p.m&&+p.a>0).reduce((a,p)=>a+(+p.a),0), main=amt-pt;
     h.innerHTML = chg ? `<b>${ac}</b>에서 <b>${won(main+chg)}</b>이 빠지고(물건 ${won(main)} + 현금 거스름 ${won(chg)}), <b>${esc($("iChgTo").value||"현금")}</b>에 ${won(chg)}이 들어옵니다. 지출로는 ${won(amt)}만 잡힙니다.`
       : `${via}<b>${ac}</b>에서 ${amt?won(main)+"이 ":""}빠져나갑니다${when}.${pt?` (나머지 ${won(pt)}은 함께 낸 수단에서)`:""}`; }
+  { const cp=$("iCustP").value, ca=+($("iCustA").value.replace(/[^\d]/g,""))||0; if(t==="out" && !$("custRow").hidden && cp && ca>0) h.innerHTML+=`<div style="margin-top:6px">그중 <b>${esc(cp)}</b> 맡은 돈 <b>${won(ca)}</b>은 맡은 돈에서 정리되고, <b>내 지출은 ${won(Math.max(0,amt-ca))}</b>만 잡힙니다(계정·예산·십2조 모두).${ca>=amt?' <b class="warn">맡은 돈이 보낸 금액 전체와 같거나 큽니다.</b>':""}</div>`; }
   /* 이미 그 뒤 날짜로 잔액을 입력해 둔 계좌: 지금 잔액은 그대로이고, 그 사이 맞춤 기록만 줄어듦 */
   if(t!=="move"){ const d=$("iDate").value, accs=[rv.acct, ...(isGiftAcct(rv.acct)&&+($("iChg").value.replace(/[^\d]/g,""))?[$("iChgTo").value]:[]), ...partsDraft.filter(p=>p.m&&+p.a>0).map(p=>acctOf(p.m))].filter((a,i,A)=>a&&!NOT_ACCT(a)&&A.indexOf(a)===i);
     const later=accs.map(a=>({a, s:snapsOf(a).filter(x=>x.d>=d).pop()})).filter(x=>x.s), same=later.filter(x=>x.s.d===d);
@@ -4061,7 +4075,8 @@ function openTx(ym, id, force){
   $("iDesc").value = t ? (t.desc||"") : "";
   fxFormSet(t&&t.fx?t.fx:null, !!(t&&t.fx));
   segSet("typeSeg", form.t); fillCatSelect(form.t, t ? t.cat : ""); segSet("entInSeg", form.ent);
-  { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; form.baseTs=t?+t.ts||0:0; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iT2").checked=!!(t&&t.t2); $("iXavg").dataset.auto="";
+  { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; form.baseTs=t?+t.ts||0:0; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.custBase=t&&t.cust?{...t.cust}:null; custOpts(t&&t.cust?t.cust.p:""); $("iCustA").value=t&&custA(t)?custA(t).toLocaleString("ko-KR"):""; if(t&&custA(t)) $("iAmt").value=((+t.amt||0)+custA(t)).toLocaleString("ko-KR");
+    form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iT2").checked=!!(t&&t.t2); $("iXavg").dataset.auto="";
     partsDraft=t&&Array.isArray(t.parts)?t.parts.map(p=>({...p})):[]; $("iReb").value=t&&t.reb&&+t.reb.a?(+t.reb.a).toLocaleString("ko-KR"):"";
     acctOptions($("iRebTo"), (t&&t.reb&&t.reb.to) || (accounts.list.find(a=>a.kind==="point")||{}).name || "", true); renderParts(); $("splitBox").open=!!(t&&t.reb);
     form.useBack={}; if(t&&t.t==="out"){ partsOf(t).forEach(p=>form.useBack[p.m]=(form.useBack[p.m]||0)+(+p.a)); if(isGiftM(t.m)) form.useBack[t.m]=(form.useBack[t.m]||0)+mainAmt(t)+(+t.chg||0); }
@@ -4115,6 +4130,9 @@ $("txForm").onsubmit=async e=>{
     const rb=form.t==="out"?(+($("iReb").value.replace(/[^\d]/g,""))||0):0; if(rb>0 && $("iRebTo").value) tx.reb={a:rb, to:$("iRebTo").value}; else delete tx.reb; }
   if(form.t==="out" && $("iXavg").checked && !noAvgCat(tx.cat)) tx.xavg=true; else delete tx.xavg;
   if(form.t==="out" && $("iT2").checked) tx.t2=true; else delete tx.t2;
+  { const cp=$("iCustP").value, ca=+($("iCustA").value.replace(/[^\d]/g,""))||0;
+    if(form.t==="out" && !$("custRow").hidden && cp && ca>0){ if(ca>=amt){ showNotice(`맡은 돈(${won(ca)})이 보낸 금액(${won(amt)})보다 작아야 합니다. 맡은 돈만 보냈다면 ‘이체·정산’에서 보낸 곳을 내 통장, 받은 곳을 ${cp}(으)로 기록하세요.`); return; } tx.amt=amt-ca; tx.cust={p:cp, a:ca}; }
+    else delete tx.cust; }
   if(!base && form.causeSnap && tx.d===form.causeSnap.d && !(+tx.ts < +form.causeSnap.ts)) tx.ts=(+form.causeSnap.ts||1)-1;
   /* 같은 날 잔액에 이미 반영된 거래: 기록 시각을 그날 첫 잔액 입력보다 앞으로 둠 */
   if(!$("preSnapRow").hidden && $("iPreSnap").checked){ /* 그날 이 거래가 닿는 계좌의 '마지막' 잔액 입력 바로 앞으로 */
