@@ -315,6 +315,9 @@ table.dt tfoot td{font-weight:600;border-top:1px solid var(--ink)}
 .brow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .fxs{display:block;font-size:11px;font-weight:400;color:var(--muted)}
 .todo{display:grid;gap:6px}
+.t2grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.t2c{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface)} .t2l{font-size:12.5px;color:var(--muted)}
+.t2v{font-size:20px;font-weight:700;margin:2px 0;cursor:pointer} .t2s{display:flex;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)} .t2s span{cursor:pointer} .t2n{font-size:11.5px;color:var(--muted);margin-top:2px}
 .mv{display:inline-flex;align-items:center;gap:2px;white-space:nowrap} .mv .drag{cursor:grab;color:var(--muted);padding:0 4px;font-size:15px;user-select:none;touch-action:none}
 .mv button{border:1px solid var(--line);background:var(--surface);border-radius:6px;width:24px;height:24px;padding:0;font-size:12px;cursor:pointer;color:var(--ink)} .mv button:disabled{opacity:.3;cursor:default}
 .dragover{outline:2px dashed var(--ink);outline-offset:-2px} .dragging{opacity:.5}
@@ -473,6 +476,10 @@ tr.mgrp-h td{background:var(--soft,#f1f1ee);font-weight:700;font-size:12.5px;pad
         <div id="dueBar" class="notice due" hidden></div>
         <div id="tbuBar" class="notice due" hidden></div>
         <div id="todoList" class="todo"></div>
+      </section>
+      <section id="t2Sec" hidden>
+        <h2>십2조 <span class="aside">거래 입력에서 ‘십2조’를 체크한 지출 · 법인+개인</span></h2>
+        <div class="t2grid" id="t2Grid"></div>
       </section>
       <section>
         <h2>월 요약 <span class="aside" id="sumNote"></span></h2>
@@ -766,6 +773,7 @@ tr.mgrp-h td{background:var(--soft,#f1f1ee);font-weight:700;font-size:12.5px;pad
           <div class="hint" id="fxHint" style="flex-basis:100%;margin:0"></div>
         </div></div>
       <div class="f"><label for="iDesc">적요</label><input id="iDesc" placeholder="예: 코스트코, SALT 점심, 오태호회계사"></div>
+      <div class="f" id="t2Row" hidden><label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="iT2" style="width:auto"> <span><b>십2조</b> <small style="color:var(--muted)">홈의 ‘십2조’ 칸에 따로 모아 이번 달·분기·올해 합계로 보여 줍니다 (법인·개인 모두)</small></span></label></div>
       <div class="f" id="spRow" hidden><label class="chk" style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="iXavg" style="width:auto"> <span><b>평균에서 빼기</b> (특별 지출) <small style="color:var(--muted)">합계·계정·예산에는 그대로 잡히고, 생활비 평균·예상 지출·순흐름에서만 빠집니다</small></span></label>
         <div style="font-size:12.5px;color:var(--muted);margin-top:4px" id="spCatTxt"></div></div>
       <div class="f" id="entRow"><span class="lbl">귀속 <small style="font-weight:400;color:var(--muted)">고른 쪽 계정이 목록 위에 옵니다</small></span><span class="seg" id="entInSeg"><button type="button" data-v="corp" aria-pressed="false">법인</button><button type="button" data-v="me" aria-pressed="true">개인</button></span></div>
@@ -1481,7 +1489,7 @@ function aiTx(t, o){
     entity:ent, paymentMethod:m?{code:m.code, name:m.name||"", kind:kindOf(m)}:(t.m?{code:t.m,name:"",kind:null}:null),
     ...(partsOf(t).length?{paymentSplit:[...partsOf(t).map(p=>({method:p.m, kind:kindOf(methodOf(p.m)), amount:+p.a})),{method:t.m, kind:m?kindOf(m):null, amount:mainAmt(t), main:true}]}:{}),
     ...(rebOf(t)?{rewardEarned:{amount:rebOf(t), to:t.reb.to, effectivePrice:(+t.amt||0)-rebOf(t), note:"설명용. 적립 금액은 별도 수입 거래(rebateOf)로 이미 기록되어 있으니 합계에는 그 거래만 셀 것"}}:{}),
-    ...(t.rebOf?{rebateOf:t.rebOf}:{}), ...(isSpecial(t)?{excludeFromAverage:true}:{}),
+    ...(t.rebOf?{rebateOf:t.rebOf}:{}), ...(isSpecial(t)?{excludeFromAverage:true}:{}), ...(t.t2?{secondTithe:true}:{}),
     ...(t.cardFrom?{cardFrom:t.cardFrom}:{}), ...(+t.chg?{cashChange:{amount:+t.chg, to:t.chgTo}}:{}),
     payVia:t.via||null, account:t.t==="move"||NOT_ACCT(txAcct(t))?null:(txAcct(t)||null), from:t.t==="move"?(effects(t).find(e=>e.v<0)||{}).acct||null:null, to:t.t==="move"?(effects(t).find(e=>e.v>0)||{}).acct||null:null,
     projectId:t.ws||null, projectName:W?W.name:null, beneficiary:t.ws?(t.bf||null):null, purpose:t.ws?(t.pur||null):null, taxTreatment:t.ws?(t.tax||"REVIEW"):null,
@@ -1612,6 +1620,13 @@ function renderTodo(){ const sec=$("todoSec"); if(!sec) return; const today=toda
   $("todoList").querySelectorAll("[data-td]").forEach(b=>b.onclick=()=>rows[+b.dataset.td].f()); $("todoList").querySelectorAll("[data-td2]").forEach(b=>b.onclick=()=>rows[+b.dataset.td2].f2());
   const n=rows.length+($("dueBar").hidden?0:1)+($("tbuBar").hidden?0:1);
   sec.hidden=!n; $("todoN").textContent=n?`${n}가지`:""; $("todoBadge").hidden=!n; $("todoBadge").textContent=n; }
+/* 홈 '십2조': 체크한 지출을 이번 달·이번 분기·올해로, 법인·개인 나눠 합계 (누르면 그 기간 내역) */
+function renderT2(){ const sec=$("t2Sec"); if(!sec) return; const any=allTx().some(t=>t.t2); sec.hidden=!any; if(!any) return;
+  const y=+CUR_YM.slice(0,4), m=+CUR_YM.slice(5,7), q0=Math.floor((m-1)/3)*3+1, ym=k=>`${y}-${pad(k)}`;
+  const P=[["이번 달",[CUR_YM]],[`${Math.floor((m-1)/3)+1}분기 (${q0}~${q0+2}월)`,[0,1,2].map(i=>ym(q0+i)).filter(k=>k<=CUR_YM)],[`${y}년`,Array.from({length:m},(_,i)=>ym(i+1))]];
+  $("t2Grid").innerHTML=P.map(([lbl,ks])=>{ const L=ks.flatMap(k=>monthTx(k).filter(t=>t.t==="out"&&t.t2)), c=sumOf(L.filter(t=>t.ent==="corp")), me=sumOf(L.filter(t=>t.ent!=="corp"));
+    const sp=(ent,l)=>dtAttr({k:"t2",v:"1",t:"out",ym:ks,ent,lbl:`십2조 · ${lbl}${l?" · "+l:""}`});
+    return `<div class="t2c"><div class="t2l">${esc(lbl)}</div><div class="t2v num"${sp("all","")}>${won(c+me)}</div><div class="t2s"><span${sp("corp","법인")}>법인 <b class="num">${won(c)}</b></span><span${sp("me","개인")}>개인 <b class="num">${won(me)}</b></span></div><div class="t2n">${L.length}건</div></div>`; }).join(""); }
 function ymdAdd(d,n){ const x=new Date(d+"T00:00"); x.setDate(x.getDate()+n); return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate()); }
 /* ---------- 예산 탭: 월·연 예산 | 프로젝트·행사 ---------- */
 let budMode=(()=>{ try{ return localStorage.getItem("budMode")||"month"; }catch(_){ return "month"; } })();
@@ -1727,7 +1742,7 @@ function allPending(){ const out=[]; Object.keys(months).forEach(ym=>monthTx(ym)
 function sumOf(list){ return list.reduce((a,t)=>a+(+t.amt||0),0); }
 
 function render(){
-  SL=computeSchLinks(); setTimeout(checkDue,0); setTimeout(buildJump,0); setTimeout(renderTbuBar,0); setTimeout(renderTodo,0);
+  SL=computeSchLinks(); setTimeout(checkDue,0); setTimeout(buildJump,0); setTimeout(renderTbuBar,0); setTimeout(renderTodo,0); setTimeout(renderT2,0);
   const [y,m] = curYM.split("-");
   $("mYear").textContent = y; $("mLabel").textContent = (+m)+"월";
   const tx = vis(monthTx(curYM));
@@ -1859,7 +1874,8 @@ function renderLedger(tx){
     const m=methodOf(t.m), acct=txAcct(t);
     const schChip = t.src==="sched" ? `<span class="chip plain">예약 집행</span>` : isRecon(t) ? `<span class="chip plain">잔액 맞춤 · ${t.lock?"수동":"자동"}</span>` : "";
     const entChip = schChip + (t.t==="move" ? `<span class="chip plain">이체·정산 (합계 제외)</span>` : t.ent==="corp" ? `<span class="chip corp">법인</span>` : `<span class="chip me">개인</span>`);
-    const spChip = isSpecial(t) ? `<span class="chip plain" title="합계에는 들어가고 평균에서만 빠짐">평균 제외</span>` : "";
+    const t2Chip = t.t2 ? `<span class="chip plain" style="border-color:var(--ink)">십2조</span>` : "";
+    const spChip = t2Chip + (isSpecial(t) ? `<span class="chip plain" title="합계에는 들어가고 평균에서만 빠짐">평균 제외</span>` : "");
     const splitChip = spChip + ((partsOf(t).length||rebOf(t)) ? `<span class="chip plain" title="${esc([...partsOf(t).map(p=>`${p.m} ${won(+p.a)}`), `${t.m} ${won(mainAmt(t))}`].join(" · "))}">${partsOf(t).length?`${partsOf(t).length+1}가지로 나눠 냄`:""}${partsOf(t).length&&rebOf(t)?" · ":""}${rebOf(t)?`실질 ${won(+t.amt-rebOf(t))}`:""}</span>` : t.rebOf ? `<span class="chip plain">구매 적립 · 그 거래에서 고침</span>` : "");
     const instChip = splitChip + (+t.inst>1 ? (()=>{ const sh=instShares(t); if(sh.length<2) return `<span class="chip plain">${t.inst}개월 할부</span>`; const f=x=>`${+x.d.slice(5,7)}/${+x.d.slice(8)}`;
       return `<span class="chip plain" title="${esc(sh.map(x=>`${x.i}회 ${f(x)} ${won(x.amt)}`).join(" · "))}">${t.inst}개월 할부 · ${f(sh[0])}~${f(sh[sh.length-1])} 매달 ${won(sh[sh.length-1].amt)}</span>`; })() : "");
@@ -3162,7 +3178,7 @@ $("saveAcc").onclick=async()=>{
    누를 수 있는 곳에는 data-dt="{조건}"을 붙입니다.
    조건: k(cat 계정 | grp 그룹 | acct 계좌 | meth 결제수단), v(값 또는 값 목록), t(out|in), ym(달 목록), ent(all|corp|me), lbl(제목) */
 function methLabel(t){ if(t.m==="기타") return "기타 수단 (알리페이 등)"; if(!t.m) return "미지정"; const base=t.m+" · "+((methodOf(t.m)||{}).name||""); const v=effVia(t); return v ? `${base} → ${v}` : base; }
-function dtKey(k,t){ return k==="all" ? "*" : k==="ws" ? (t.ws||"") : k==="cat" ? (t.cat||"미분류") : k==="grp" ? groupKey(t.cat) : k==="acct" ? txAcct(t) : methLabel(t); }
+function dtKey(k,t){ return k==="t2" ? (t.t2?"1":"") : k==="all" ? "*" : k==="ws" ? (t.ws||"") : k==="cat" ? (t.cat||"미분류") : k==="grp" ? groupKey(t.cat) : k==="acct" ? txAcct(t) : methLabel(t); }
 function dtAttr(spec){ return ` data-dt="${esc(JSON.stringify(spec))}" role="button" tabindex="0"`; }
 let dtl=null;
 function dtMatch(spec){
@@ -3912,7 +3928,7 @@ $("iCat").addEventListener("change",spUpd);
 let fxCalcBusy=false;
 function updateHint(autoSettle){
   if(!fxCalcBusy && $("iFxOn").checked && !$("fxBox").hidden && form._fxM!==form.m){ form._fxM=form.m; fxCalcBusy=true; try{ fxCalc(); } finally{ fxCalcBusy=false; } }
-  budHintUpd(); $("spRow").hidden = form.t!=="out"; if(form.t==="out") spUpd();
+  budHintUpd(); $("spRow").hidden = form.t!=="out"; $("t2Row").hidden = form.t!=="out"; if(form.t==="out") spUpd();
   $("splitBox").hidden = form.t!=="out"; if(form.t==="out") splitInfo();
   $("multiL").hidden = form.t!=="out"; if(form.t!=="out" && form.multi){ form.multi=null; $("iMulti").checked=false; partsDraft=[]; renderMulti(); }
   const t=form.t, m=methodOf(form.m);
@@ -4085,7 +4101,7 @@ function openTx(ym, id, force){
   $("iDesc").value = t ? (t.desc||"") : "";
   fxFormSet(t&&t.fx?t.fx:null, !!(t&&t.fx));
   segSet("typeSeg", form.t); fillCatSelect(form.t, t ? t.cat : ""); segSet("entInSeg", form.ent);
-  { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; form.baseTs=t?+t.ts||0:0; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iXavg").dataset.auto="";
+  { const ef = t && t.t==="move" ? effects(t) : []; form.preSnap0=undefined; form.isEdit=!!t; form.baseTs=t?+t.ts||0:0; $("iPreSnap").checked=false; $("preSnapRow").hidden=true; form.xavg0=!!(t&&t.xavg); $("iXavg").checked=form.xavg0; $("iT2").checked=!!(t&&t.t2); $("iXavg").dataset.auto="";
     partsDraft=t&&Array.isArray(t.parts)?t.parts.map(p=>({...p})):[]; $("iReb").value=t&&t.reb&&+t.reb.a?(+t.reb.a).toLocaleString("ko-KR"):"";
     acctOptions($("iRebTo"), (t&&t.reb&&t.reb.to) || (accounts.list.find(a=>a.kind==="point")||{}).name || "", true); renderParts(); $("splitBox").open=!!(t&&t.reb);
     form.useBack={}; if(t&&t.t==="out"){ partsOf(t).forEach(p=>form.useBack[p.m]=(form.useBack[p.m]||0)+(+p.a)); if(isGiftM(t.m)) form.useBack[t.m]=(form.useBack[t.m]||0)+mainAmt(t)+(+t.chg||0); }
@@ -4138,6 +4154,7 @@ $("txForm").onsubmit=async e=>{
     if(P.length) tx.parts=P; else delete tx.parts;
     const rb=form.t==="out"?(+($("iReb").value.replace(/[^\d]/g,""))||0):0; if(rb>0 && $("iRebTo").value) tx.reb={a:rb, to:$("iRebTo").value}; else delete tx.reb; }
   if(form.t==="out" && $("iXavg").checked && !noAvgCat(tx.cat)) tx.xavg=true; else delete tx.xavg;
+  if(form.t==="out" && $("iT2").checked) tx.t2=true; else delete tx.t2;
   if(!base && form.causeSnap && tx.d===form.causeSnap.d && !(+tx.ts < +form.causeSnap.ts)) tx.ts=(+form.causeSnap.ts||1)-1;
   /* 같은 날 잔액에 이미 반영된 거래: 기록 시각을 그날 첫 잔액 입력보다 앞으로 둠 */
   if(!$("preSnapRow").hidden && $("iPreSnap").checked){ /* 그날 이 거래가 닿는 계좌의 '마지막' 잔액 입력 바로 앞으로 */
